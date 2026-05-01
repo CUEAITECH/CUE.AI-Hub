@@ -47,6 +47,12 @@ function migrateStore(store) {
   }
 
   next.activities = (next.activities || []).map(({ diff, ...activity }) => activity);
+  next.tasks = (next.tasks || []).map((task) => ({
+    ...task,
+    acceptance: task.acceptance === 'PR diff 可输出 Pass、Warning、Block、Escalate 四级结论。'
+      ? 'PR diff 可输出通过、提醒、阻断、升级四级结论。'
+      : task.acceptance
+  }));
 
   return next;
 }

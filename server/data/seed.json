@@ -23,7 +23,7 @@
       "risk": "中",
       "progress": 28,
       "signal": "缺少测试覆盖规则，需要补验收标准",
-      "acceptance": "PR diff 可输出 Pass、Warning、Block、Escalate 四级结论。",
+      "acceptance": "PR diff 可输出通过、提醒、阻断、升级四级结论。",
       "createdAt": "2026-05-01T09:00:00.000Z",
       "updatedAt": "2026-05-01T09:30:00.000Z",
       "linkedRefs": []

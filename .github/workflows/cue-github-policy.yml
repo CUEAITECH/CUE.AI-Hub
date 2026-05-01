@@ -1,0 +1,41 @@
+name: Cue.AI GitHub 规则检查
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  commit-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查 commit 标题
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const allowed = /^(feat|fix|docs|refactor|test|chore|perf|ci|build|merge|revert)(\([^)]+\))?: .{8,}$/;
+            const banned = /^(update|updates|change|changes|fix bug|bugfix|tmp|temp|wip|test|改一下|临时提交)$/i;
+            const commits = context.payload.commits || [];
+            const title = context.payload.pull_request?.title;
+
+            const messages = commits.length
+              ? commits.map((commit) => commit.message.split('\n')[0])
+              : title
+                ? [title]
+                : [];
+
+            const failures = messages.filter((message) => {
+              if (message.startsWith('Merge ')) return false;
+              return !allowed.test(message) || banned.test(message.trim());
+            });
+
+            if (failures.length) {
+              core.setFailed([
+                '以下 commit/PR 标题不符合 Cue.AI 规则：',
+                ...failures.map((item) => `- ${item}`),
+                '',
+                '格式示例：feat: add Cue.AI local Git sync panel',
+                '详见 .github/CUE_AI_GITHUB_RULES.md'
+              ].join('\n'));
+            }

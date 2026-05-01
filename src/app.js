@@ -12,8 +12,8 @@ const state = {
 const fallbackRules = [
   '任务临近截止但 12 小时无 commit 或 PR，先私聊负责人提醒。',
   'PR 超过 12 小时无人 review，自动指派 reviewer 并提醒技术负责人。',
-  '提交内容和任务描述不匹配，标记为 Warning 并要求补充说明。',
-  '核心模块变更且测试缺失，AI Review 标记 Block，禁止合并。',
+  '提交内容和任务描述不匹配，标记为“提醒”并要求补充说明。',
+  '核心模块变更且测试缺失，AI Review 标记为“阻断”，禁止合并。',
   '阶段目标落后时，自动建议降级、拆分或转派任务。',
   '站会未回复、请假未交接时，先提醒本人，再升级到管理者日报。'
 ];
@@ -43,6 +43,14 @@ async function api(path, options = {}) {
 function setText(selector, value) {
   const element = document.querySelector(selector);
   if (element) element.textContent = value;
+}
+
+function getReviewLevelLabel(level) {
+  if (level === 'Pass') return '通过';
+  if (level === 'Warning') return '提醒';
+  if (level === 'Block') return '阻断';
+  if (level === 'Escalate') return '升级';
+  return level || '未知';
 }
 
 function renderMetrics() {
@@ -175,7 +183,7 @@ function renderReviews() {
         <span>${escapeHtml(review.repo)} · ${escapeHtml(review.owner)} · ${escapeHtml((review.findings || []).join('；'))}</span>
       </div>
       <b>${Number(review.score) || 0}</b>
-      <em>${escapeHtml(review.level)}</em>
+      <em>${escapeHtml(getReviewLevelLabel(review.level))}</em>
     </div>
   `).join('');
 }
@@ -197,7 +205,7 @@ function renderPlan() {
       <span>${String(index + 1).padStart(2, '0')}</span>
       <h3>${escapeHtml(task.title)}</h3>
       <p>${escapeHtml(task.acceptance)}</p>
-      <small>Owner ${escapeHtml(task.owner)} · Due ${escapeHtml(task.due)} · ${escapeHtml(task.priority)}</small>
+      <small>负责人 ${escapeHtml(task.owner)} · 截止 ${escapeHtml(task.due)} · ${escapeHtml(task.priority)}</small>
     </article>
   `).join('');
 }

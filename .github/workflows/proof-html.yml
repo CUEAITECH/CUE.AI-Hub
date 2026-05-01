@@ -1,4 +1,4 @@
-name: Proof HTML
+name: HTML 校验
 on:
   push:
   workflow_dispatch:
