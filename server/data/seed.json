@@ -1,0 +1,145 @@
+{
+  "tasks": [
+    {
+      "id": "task_git_webhook",
+      "title": "GitHub commit / push 抓取",
+      "owner": "胡佳涛",
+      "status": "进行中",
+      "due": "2026-05-03",
+      "risk": "低",
+      "progress": 72,
+      "signal": "今日 3 次 commit，PR 已创建",
+      "acceptance": "能够接收 push、pull_request、review 事件并写入活动日志。",
+      "createdAt": "2026-05-01T09:00:00.000Z",
+      "updatedAt": "2026-05-01T10:20:00.000Z",
+      "linkedRefs": ["cue-project-hub#12"]
+    },
+    {
+      "id": "task_ai_review",
+      "title": "AI Review 规则与阻断等级",
+      "owner": "罗子宽",
+      "status": "待拆分",
+      "due": "2026-05-04",
+      "risk": "中",
+      "progress": 28,
+      "signal": "缺少测试覆盖规则，需要补验收标准",
+      "acceptance": "PR diff 可输出 Pass、Warning、Block、Escalate 四级结论。",
+      "createdAt": "2026-05-01T09:00:00.000Z",
+      "updatedAt": "2026-05-01T09:30:00.000Z",
+      "linkedRefs": []
+    },
+    {
+      "id": "task_standup",
+      "title": "异步站会与请假登记",
+      "owner": "林世棋",
+      "status": "高风险",
+      "due": "2026-05-01",
+      "risk": "高",
+      "progress": 12,
+      "signal": "24 小时未更新，无关联提交",
+      "acceptance": "每天自动收集昨日完成、今日计划、阻塞项和请假交接。",
+      "createdAt": "2026-04-30T09:00:00.000Z",
+      "updatedAt": "2026-04-30T09:20:00.000Z",
+      "linkedRefs": []
+    },
+    {
+      "id": "task_auto_planning",
+      "title": "阶段目标自动派单",
+      "owner": "田家铭",
+      "status": "待确认",
+      "due": "2026-05-05",
+      "risk": "中",
+      "progress": 44,
+      "signal": "已生成 7 个候选任务，等待负责人确认",
+      "acceptance": "输入阶段目标后生成任务、负责人建议、验收标准和依赖关系。",
+      "createdAt": "2026-05-01T09:00:00.000Z",
+      "updatedAt": "2026-05-01T10:00:00.000Z",
+      "linkedRefs": []
+    }
+  ],
+  "members": [
+    {
+      "id": "member_lsq",
+      "name": "林世棋",
+      "role": "项目推进",
+      "load": 86,
+      "response": "6.2h",
+      "risk": "高",
+      "focus": "排期、验收、资源协调"
+    },
+    {
+      "id": "member_hjt",
+      "name": "胡佳涛",
+      "role": "技术架构",
+      "load": 74,
+      "response": "1.4h",
+      "risk": "中",
+      "focus": "后端架构、AI 链路"
+    },
+    {
+      "id": "member_lzk",
+      "name": "罗子宽",
+      "role": "工程实现",
+      "load": 68,
+      "response": "2.1h",
+      "risk": "中",
+      "focus": "前端联调、性能优化"
+    },
+    {
+      "id": "member_tjm",
+      "name": "田家铭",
+      "role": "产品负责人",
+      "load": 61,
+      "response": "1.8h",
+      "risk": "低",
+      "focus": "目标确认、客户验证"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "review_001",
+      "repo": "cue-project-hub",
+      "title": "feat: add delivery dashboard shell",
+      "score": 82,
+      "level": "Warning",
+      "owner": "罗子宽",
+      "findings": ["缺少空状态处理", "建议补充任务创建后的校验"],
+      "createdAt": "2026-05-01T10:00:00.000Z"
+    },
+    {
+      "id": "review_002",
+      "repo": "cue-project-hub-api",
+      "title": "fix: verify GitHub webhook signature",
+      "score": 91,
+      "level": "Pass",
+      "owner": "胡佳涛",
+      "findings": ["签名校验路径清晰"],
+      "createdAt": "2026-05-01T10:10:00.000Z"
+    },
+    {
+      "id": "review_003",
+      "repo": "cue-project-hub",
+      "title": "chore: update auth flow styles",
+      "score": 64,
+      "level": "Block",
+      "owner": "林世棋",
+      "findings": ["任务关联不明确", "修改范围包含无关认证逻辑", "缺少回归测试说明"],
+      "createdAt": "2026-05-01T10:15:00.000Z"
+    }
+  ],
+  "projects": [
+    {
+      "id": "cue_ai_classroom",
+      "name": "Cue.AI Classroom",
+      "repository": "OmniNexus-Edu-copilot",
+      "localPath": "/Users/dirtortian/Documents/GitHub/OmniNexus-Edu-copilot",
+      "branch": "",
+      "status": "待同步",
+      "lastSyncAt": "",
+      "summary": "CUE 课堂产品主仓库，先作为项目中枢的内部试点项目接入。"
+    }
+  ],
+  "activities": [],
+  "standups": [],
+  "alerts": []
+}

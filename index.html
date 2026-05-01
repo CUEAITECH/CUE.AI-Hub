@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CUE 项目中枢</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <button class="brand" type="button" data-route="overview">
+          <span>CUE</span>
+          <small>项目中枢</small>
+        </button>
+        <nav class="nav" aria-label="主导航">
+          <button class="nav-item active" type="button" data-route="overview">总览</button>
+          <button class="nav-item" type="button" data-route="planning">AI 排期</button>
+          <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
+          <button class="nav-item" type="button" data-route="automation">自动提醒</button>
+        </nav>
+        <div class="topbar-actions">
+          <span class="status-pill" id="syncStatus">本地 API 未连接</span>
+          <button class="primary-action" type="button" data-action="sync">同步信号</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div>
+            <span class="eyebrow">AI Project Command Center</span>
+            <h1>CUE 项目中枢</h1>
+            <p>独立的新产品线，用 AI 把阶段目标、任务分工、Git 提交、代码审阅、站会和风险提醒串成研发交付闭环。</p>
+          </div>
+          <div class="health-card">
+            <span>团队交付健康度</span>
+            <strong id="healthScore">72</strong>
+            <small id="healthSummary">高风险任务 1 个 · 待审阅提交 3 个 · PR 卡点 1 个</small>
+          </div>
+        </section>
+
+        <section class="view active" id="overview">
+          <section class="panel cue-ai-panel">
+            <div class="panel-head">
+              <div>
+                <span>Internal Pilot</span>
+                <h2>Cue.AI 内部项目接入</h2>
+              </div>
+              <button type="button" data-action="sync-cue-ai">同步 Cue.AI Git</button>
+            </div>
+            <div class="cue-ai-project" id="cueAiProject"></div>
+            <div class="activity-list" id="activityList"></div>
+          </section>
+
+          <div class="metric-grid">
+            <article class="metric-card">
+              <span>今日风险任务</span>
+              <strong id="metricHighRisk">0</strong>
+              <small id="metricUrgentAlerts">0 个需要管理者处理</small>
+            </article>
+            <article class="metric-card">
+              <span>今日 Commit</span>
+              <strong id="metricCommits">0</strong>
+              <small>来自 GitHub webhook / 同步信号</small>
+            </article>
+            <article class="metric-card">
+              <span>待审阅 PR</span>
+              <strong id="metricReviews">0</strong>
+              <small>AI 自动审阅队列</small>
+            </article>
+            <article class="metric-card">
+              <span>站会响应率</span>
+              <strong id="metricStandup">0%</strong>
+              <small>异步站会机器人</small>
+            </article>
+          </div>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <span>Delivery Board</span>
+                <h2>任务、负责人和 Git 信号</h2>
+              </div>
+              <button type="button" data-action="add-task">新增任务</button>
+            </div>
+            <div class="task-table" id="taskTable"></div>
+          </section>
+
+          <section class="split-grid">
+            <article class="panel">
+              <div class="panel-head">
+                <div>
+                  <span>Risk Queue</span>
+                  <h2>今日必须处理</h2>
+                </div>
+                <button type="button" data-action="scan-risks">扫描风险</button>
+              </div>
+              <div class="risk-list" id="riskList"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <div>
+                  <span>Team Pulse</span>
+                  <h2>成员负载</h2>
+                </div>
+              </div>
+              <div class="member-list" id="memberList"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" id="planning">
+          <section class="panel planner-panel">
+            <div class="panel-head">
+              <div>
+                <span>AI Planning</span>
+                <h2>根据阶段目标自动布置任务</h2>
+              </div>
+              <div class="panel-actions">
+                <button type="button" data-action="generate-plan">生成任务</button>
+                <button type="button" data-action="apply-plan">应用到任务板</button>
+              </div>
+            </div>
+            <textarea id="stageGoal" aria-label="阶段目标">5 月 15 日前完成 CUE 项目中枢 MVP：任务管理、Git 活动追踪、AI Review、异步站会、风险日报。</textarea>
+            <div class="plan-grid" id="planGrid"></div>
+          </section>
+        </section>
+
+        <section class="view" id="reviews">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <span>AI Code Review</span>
+                <h2>每次提交和 PR 的自动审阅</h2>
+              </div>
+              <button type="button" data-action="run-review">运行审阅</button>
+            </div>
+            <div class="review-form">
+              <input id="reviewTitle" type="text" value="feat: task_123 add webhook signature check" aria-label="审阅标题" />
+              <textarea id="reviewDiff" aria-label="审阅 diff">+ const token = process.env.GITHUB_TOKEN;
++ console.log(token);
++ // TODO: add tests
+</textarea>
+            </div>
+            <div class="review-list" id="reviewList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="automation">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <span>Automation</span>
+                <h2>自动检测与提醒规则</h2>
+              </div>
+              <button type="button" data-action="test-alert">测试提醒</button>
+            </div>
+            <ul class="rule-list" id="ruleList"></ul>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./src/app.js" type="module"></script>
+  </body>
+</html>
