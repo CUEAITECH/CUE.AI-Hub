@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "node server/index.js",
     "start": "node server/index.js",
-    "check": "node --check server/index.js && node --check server/services/planner.js && node --check server/services/reviewer.js && node --check server/services/riskEngine.js && node --check server/services/githubWebhook.js && node --check src/app.js"
+    "check": "node --check server/index.js && node --check server/services/planner.js && node --check server/services/reviewer.js && node --check server/services/riskEngine.js && node --check server/services/githubWebhook.js && node --check server/services/claude.js && node --check src/app.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
   }
 }

@@ -1,8 +1,26 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, access } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
+
+// 从 .env 文件加载环境变量（不覆盖已有的系统环境变量）
+{
+  const envPath = join(dirname(dirname(fileURLToPath(import.meta.url))), '.env');
+  try {
+    await access(envPath);
+    const content = await readFile(envPath, 'utf8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx < 1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const value = trimmed.slice(eqIdx + 1).trim();
+      if (key) process.env[key] = value;
+    }
+  } catch { /* .env 文件不存在时静默跳过 */ }
+}
 import { createId, loadStore, saveStore, updateStore } from './store.js';
 import { generatePlan } from './services/planner.js';
 import { reviewChange } from './services/reviewer.js';
@@ -113,20 +131,22 @@ async function handleApi(req, res, url) {
       limit: Number(url.searchParams.get('limit') || 12)
     });
 
-    const commitReviews = scan.activities
-      .filter((activity) => activity.type === 'commit')
-      .map((activity) => ({
-        id: `review_${activity.sha}`,
-        projectId: project.id,
-        activityId: activity.id,
-        ...reviewChange({
-          repo: project.repository,
-          title: activity.title,
-          owner: activity.owner,
-          diff: activity.diff || activity.files.join('\n'),
-          files: activity.files
-        })
-      }));
+    const commitReviews = await Promise.all(
+      scan.activities
+        .filter((activity) => activity.type === 'commit')
+        .map(async (activity) => ({
+          id: `review_${activity.sha}`,
+          projectId: project.id,
+          activityId: activity.id,
+          ...await reviewChange({
+            repo: project.repository,
+            title: activity.title,
+            owner: activity.owner,
+            diff: activity.diff || activity.files.join('\n'),
+            files: activity.files
+          })
+        }))
+    );
     const lightweightActivities = scan.activities.map(({ diff, ...activity }) => activity);
     let addedActivityCount = 0;
     let addedReviewCount = 0;
@@ -209,7 +229,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/plans') {
     const { json } = await readBody(req);
     const store = await loadStore();
-    const tasks = generatePlan(json?.goal || '', store.members);
+    const tasks = await generatePlan(json?.goal || '', store.members);
     sendJson(res, 200, {
       goal: json?.goal || '',
       tasks
@@ -233,7 +253,7 @@ async function handleApi(req, res, url) {
     const { json } = await readBody(req);
     const review = {
       id: createId('review'),
-      ...reviewChange(json || {})
+      ...await reviewChange(json || {})
     };
     const nextStore = await updateStore((store) => {
       store.reviews.unshift(review);
@@ -272,7 +292,7 @@ async function handleApi(req, res, url) {
       if (activity.type === 'pull_request') {
         reviews.push({
           id: createId('review'),
-          ...reviewChange({
+          ...await reviewChange({
             repo: activity.repo,
             title: activity.title,
             owner: activity.actor,

@@ -181,6 +181,7 @@ function renderReviews() {
       <div>
         <strong>${escapeHtml(review.title)}</strong>
         <span>${escapeHtml(review.repo)} · ${escapeHtml(review.owner)} · ${escapeHtml((review.findings || []).join('；'))}</span>
+        ${review.suggestion ? `<p class="review-suggestion">${escapeHtml(review.suggestion)}</p>` : ''}
       </div>
       <b>${Number(review.score) || 0}</b>
       <em>${escapeHtml(getReviewLevelLabel(review.level))}</em>
