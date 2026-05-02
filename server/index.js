@@ -9,6 +9,13 @@ import { reviewChange } from './services/reviewer.js';
 import { buildMetrics, scanRisks } from './services/riskEngine.js';
 import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhook.js';
 import { scanLocalGitProject } from './services/localGit.js';
+import {
+  applyEveningReportProgress,
+  buildEveningReport,
+  normalizeAssignment,
+  normalizeStandup,
+  todayText
+} from './services/dailyBrief.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -68,6 +75,10 @@ function normalizeTask(input) {
   };
 }
 
+function getDateParam(url) {
+  return url.searchParams.get('date') || todayText();
+}
+
 async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/health') {
     sendJson(res, 200, { ok: true, name: 'CUE Project Hub', time: new Date().toISOString() });
@@ -88,6 +99,101 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/tasks') {
     const store = await loadStore();
     sendJson(res, 200, { tasks: store.tasks });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/assignments') {
+    const store = await loadStore();
+    const date = getDateParam(url);
+    sendJson(res, 200, {
+      date,
+      assignments: (store.assignments || []).filter((assignment) => assignment.date === date)
+    });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/assignments') {
+    const { json } = await readBody(req);
+    const store = await loadStore();
+    const assignment = normalizeAssignment(json || {}, store);
+    if (!assignment.owner || !assignment.taskTitle) {
+      sendError(res, 400, 'owner and task are required');
+      return true;
+    }
+
+    const nextStore = await updateStore((draft) => {
+      draft.assignments = [assignment, ...(draft.assignments || [])].slice(0, 500);
+      return draft;
+    });
+    sendJson(res, 201, {
+      assignment,
+      assignments: (nextStore.assignments || []).filter((item) => item.date === assignment.date)
+    });
+    return true;
+  }
+
+  if (req.method === 'PATCH' && url.pathname.startsWith('/api/assignments/')) {
+    const id = decodeURIComponent(url.pathname.split('/').pop());
+    const { json } = await readBody(req);
+    let updated = null;
+    const nextStore = await updateStore((draft) => {
+      const index = (draft.assignments || []).findIndex((assignment) => assignment.id === id);
+      if (index === -1) return draft;
+      updated = normalizeAssignment({
+        ...draft.assignments[index],
+        ...(json || {}),
+        id,
+        createdAt: draft.assignments[index].createdAt
+      }, draft);
+      draft.assignments[index] = updated;
+      return draft;
+    });
+    if (!updated) sendError(res, 404, 'assignment not found');
+    else sendJson(res, 200, {
+      assignment: updated,
+      assignments: (nextStore.assignments || []).filter((item) => item.date === updated.date)
+    });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/standups') {
+    const store = await loadStore();
+    const date = getDateParam(url);
+    sendJson(res, 200, {
+      date,
+      standups: (store.standups || []).filter((standup) => standup.date === date)
+    });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/standups') {
+    const { json } = await readBody(req);
+    const standup = normalizeStandup(json || {});
+    if (!standup.owner) {
+      sendError(res, 400, 'owner is required');
+      return true;
+    }
+
+    const nextStore = await updateStore((draft) => {
+      const existingIndex = (draft.standups || []).findIndex((item) => (
+        item.date === standup.date && item.owner === standup.owner
+      ));
+      if (existingIndex >= 0) {
+        draft.standups[existingIndex] = {
+          ...draft.standups[existingIndex],
+          ...standup,
+          id: draft.standups[existingIndex].id,
+          createdAt: draft.standups[existingIndex].createdAt
+        };
+      } else {
+        draft.standups = [standup, ...(draft.standups || [])].slice(0, 500);
+      }
+      return draft;
+    });
+    sendJson(res, 201, {
+      standup,
+      standups: (nextStore.standups || []).filter((item) => item.date === standup.date)
+    });
     return true;
   }
 
@@ -248,6 +354,41 @@ async function handleApi(req, res, url) {
     const alerts = scanRisks(store);
     const nextStore = await saveStore({ ...store, alerts });
     sendJson(res, 200, { alerts, metrics: buildMetrics(nextStore, alerts) });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/reports/evening') {
+    const store = await loadStore();
+    const date = getDateParam(url);
+    sendJson(res, 200, {
+      date,
+      report: store.eveningReports?.[date] || null
+    });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/reports/evening') {
+    const { json } = await readBody(req);
+    const date = json?.date || todayText();
+    const baseStore = await loadStore();
+    const eveningReport = buildEveningReport(baseStore, date);
+    const progressedStore = applyEveningReportProgress(baseStore, eveningReport);
+    const alerts = scanRisks(progressedStore);
+    const nextStore = await saveStore({
+      ...progressedStore,
+      eveningReports: {
+        ...(progressedStore.eveningReports || {}),
+        [date]: eveningReport
+      },
+      alerts
+    });
+    sendJson(res, 201, {
+      report: eveningReport,
+      tasks: nextStore.tasks,
+      currentStage: nextStore.currentStage,
+      alerts,
+      metrics: buildMetrics(nextStore, alerts)
+    });
     return true;
   }
 

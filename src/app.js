@@ -5,6 +5,10 @@ const state = {
   alerts: [],
   projects: [],
   activities: [],
+  assignments: [],
+  standups: [],
+  eveningReports: {},
+  currentStage: {},
   metrics: {},
   plannedTasks: []
 };
@@ -45,6 +49,28 @@ function setText(selector, value) {
   if (element) element.textContent = value;
 }
 
+function getTodayText() {
+  const local = new Date();
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+  return local.toISOString().slice(0, 10);
+}
+
+function getMeetingDate() {
+  return document.querySelector('#meetingDate')?.value || getTodayText();
+}
+
+function setOptions(selector, options, getValue, getLabel) {
+  const element = document.querySelector(selector);
+  if (!element) return;
+  const current = element.value;
+  element.innerHTML = options.map((option) => (
+    `<option value="${escapeHtml(getValue(option))}">${escapeHtml(getLabel(option))}</option>`
+  )).join('');
+  if (options.some((option) => getValue(option) === current)) {
+    element.value = current;
+  }
+}
+
 function getReviewLevelLabel(level) {
   if (level === 'Pass') return '通过';
   if (level === 'Warning') return '提醒';
@@ -62,6 +88,17 @@ function renderMetrics() {
   setText('#metricCommits', metrics.commitsToday ?? 0);
   setText('#metricReviews', metrics.pendingReviews ?? 0);
   setText('#metricStandup', metrics.standupResponseRate || '0%');
+}
+
+function renderStage() {
+  const stage = state.currentStage || {};
+  const progress = Math.max(0, Math.min(100, Number(stage.progress) || 0));
+  setText('#stageName', stage.name || 'CUE 项目中枢 MVP');
+  setText('#stageProgressText', `${progress}%`);
+  setText('#meetingStageProgress', `阶段进度 ${progress}%`);
+  setText('#stageSummary', `${stage.status || '进行中'} · 目标日期 ${stage.targetDate || '待确认'} · ${stage.updatedAt ? `更新于 ${new Date(stage.updatedAt).toLocaleString('zh-CN', { hour12: false })}` : '等待晚会报告更新'}`);
+  const bar = document.querySelector('#stageProgressBar');
+  if (bar) bar.style.width = `${progress}%`;
 }
 
 function renderTasks() {
@@ -210,8 +247,87 @@ function renderPlan() {
   `).join('');
 }
 
+function renderMeetingForms() {
+  const meetingDate = document.querySelector('#meetingDate');
+  if (meetingDate && !meetingDate.value) meetingDate.value = getTodayText();
+  setOptions('#assignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
+  setOptions('#standupOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
+  setOptions('#assignmentTask', state.tasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
+}
+
+function renderAssignments() {
+  const list = document.querySelector('#assignmentList');
+  if (!list) return;
+  const date = getMeetingDate();
+  const assignments = state.assignments.filter((assignment) => assignment.date === date);
+  if (!assignments.length) {
+    list.innerHTML = '<div class="empty-state">晚会确认后，在这里记录成员领取的下一步任务。</div>';
+    return;
+  }
+
+  list.innerHTML = assignments.map((assignment) => `
+    <div class="assignment-item">
+      <strong>${escapeHtml(assignment.owner)} · ${escapeHtml(assignment.taskTitle)}</strong>
+      <span>${escapeHtml(assignment.note)} · ${escapeHtml(assignment.wecomStatus || '待企业微信确认')}</span>
+      <small>${escapeHtml(assignment.status)} · ${assignment.updatedAt ? new Date(assignment.updatedAt).toLocaleString('zh-CN', { hour12: false }) : ''}</small>
+    </div>
+  `).join('');
+}
+
+function renderStandups() {
+  const list = document.querySelector('#standupList');
+  if (!list) return;
+  const date = getMeetingDate();
+  const standups = state.standups.filter((standup) => standup.date === date);
+  if (!standups.length) {
+    list.innerHTML = '<div class="empty-state">还没有成员提交今日站会。</div>';
+    return;
+  }
+
+  list.innerHTML = standups.map((standup) => `
+    <div class="standup-item">
+      <strong>${escapeHtml(standup.owner)}${standup.isLeave ? ' · 请假' : ''}</strong>
+      <span>昨日：${escapeHtml(standup.yesterday || '未填')}</span>
+      <span>今日：${escapeHtml(standup.today || '未填')}</span>
+      <small>阻塞：${escapeHtml(standup.blockers || '无')}</small>
+    </div>
+  `).join('');
+}
+
+function renderEveningReport() {
+  const reportBox = document.querySelector('#eveningReport');
+  const summary = document.querySelector('#reportSummary');
+  if (!reportBox || !summary) return;
+  const report = state.eveningReports?.[getMeetingDate()];
+
+  if (!report) {
+    summary.innerHTML = '<div><span>状态</span><b>待生成</b></div>';
+    reportBox.textContent = '点击“生成晚会报告”后，这里会输出前一天任务领取、今日提交、AI Review 风险和下一步细化目标。';
+    return;
+  }
+
+  const item = report.summary || {};
+  summary.innerHTML = `
+    <div><span>领取任务</span><b>${Number(item.assignmentCount) || 0}</b></div>
+    <div><span>Git 提交</span><b>${Number(item.commitCount) || 0}</b></div>
+    <div><span>Block Review</span><b>${Number(item.blockReviewCount) || 0}</b></div>
+    <div><span>无提交支撑</span><b>${Number(item.noCommitAssignmentCount) || 0}</b></div>
+    <div><span>阶段进度</span><b>${Number(item.stageProgress) || 0}%</b></div>
+  `;
+  reportBox.textContent = report.report || '';
+}
+
+function renderMeeting() {
+  renderMeetingForms();
+  renderStage();
+  renderAssignments();
+  renderStandups();
+  renderEveningReport();
+}
+
 function renderAll() {
   renderMetrics();
+  renderStage();
   renderCueAiProject();
   renderActivities();
   renderTasks();
@@ -220,6 +336,7 @@ function renderAll() {
   renderReviews();
   renderRules();
   renderPlan();
+  renderMeeting();
 }
 
 async function loadState() {
@@ -230,6 +347,10 @@ async function loadState() {
   state.alerts = payload.alerts || [];
   state.projects = payload.projects || [];
   state.activities = payload.activities || [];
+  state.assignments = payload.assignments || [];
+  state.standups = payload.standups || [];
+  state.eveningReports = payload.eveningReports || {};
+  state.currentStage = payload.currentStage || {};
   state.metrics = payload.metrics || {};
   setText('#syncStatus', '本地 API 已连接');
   renderAll();
@@ -320,8 +441,8 @@ async function syncSignals() {
   toast('已同步本地任务、审阅和风险信号');
 }
 
-async function syncCueAiGit() {
-  setText('#syncStatus', '正在同步 Cue.AI Git...');
+async function syncCueAiGit(options = {}) {
+  if (!options.silent) setText('#syncStatus', '正在同步 Cue.AI Git...');
   const payload = await api('/api/projects/cue_ai_classroom/sync-local-git', {
     method: 'POST',
     body: '{}'
@@ -333,10 +454,85 @@ async function syncCueAiGit() {
   state.alerts = payload.alerts || nextState.alerts || [];
   state.projects = nextState.projects || [];
   state.activities = nextState.activities || [];
+  state.assignments = nextState.assignments || [];
+  state.standups = nextState.standups || [];
+  state.eveningReports = nextState.eveningReports || {};
+  state.currentStage = nextState.currentStage || {};
   state.metrics = payload.metrics || nextState.metrics || {};
   renderAll();
   setText('#syncStatus', `Cue.AI 已同步 · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`);
-  toast(`Cue.AI 同步完成：${payload.addedActivities || 0} 条活动，${payload.addedReviews || 0} 条 AI Review`);
+  if (!options.silent) toast(`Cue.AI 同步完成：${payload.addedActivities || 0} 条活动，${payload.addedReviews || 0} 条 AI Review`);
+}
+
+async function createAssignment() {
+  const taskId = document.querySelector('#assignmentTask').value;
+  const task = state.tasks.find((item) => item.id === taskId);
+  const payload = await api('/api/assignments', {
+    method: 'POST',
+    body: JSON.stringify({
+      date: getMeetingDate(),
+      owner: document.querySelector('#assignmentOwner').value,
+      taskId,
+      taskTitle: task?.title || taskId,
+      note: document.querySelector('#assignmentNote').value,
+      status: '进行中',
+      wecomStatus: '待企业微信确认'
+    })
+  });
+  state.assignments = [
+    ...(payload.assignments || []),
+    ...state.assignments.filter((assignment) => assignment.date !== getMeetingDate())
+  ];
+  renderMeeting();
+  toast('任务领取已记录，晚会后可同步到企业微信');
+}
+
+async function submitStandup() {
+  const payload = await api('/api/standups', {
+    method: 'POST',
+    body: JSON.stringify({
+      date: getMeetingDate(),
+      owner: document.querySelector('#standupOwner').value,
+      yesterday: document.querySelector('#standupYesterday').value,
+      today: document.querySelector('#standupToday').value,
+      blockers: document.querySelector('#standupBlockers').value
+    })
+  });
+  state.standups = [
+    ...(payload.standups || []),
+    ...state.standups.filter((standup) => standup.date !== getMeetingDate())
+  ];
+  renderMeeting();
+  toast('站会记录已提交');
+}
+
+async function generateEveningReport() {
+  await syncCueAiGit({ silent: true });
+  const payload = await api('/api/reports/evening', {
+    method: 'POST',
+    body: JSON.stringify({ date: getMeetingDate() })
+  });
+  state.tasks = payload.tasks || state.tasks;
+  state.currentStage = payload.currentStage || state.currentStage;
+  state.alerts = payload.alerts || state.alerts;
+  state.metrics = payload.metrics || state.metrics;
+  state.eveningReports = {
+    ...state.eveningReports,
+    [getMeetingDate()]: payload.report
+  };
+  renderAll();
+  setRoute('meeting');
+  toast('晚会作战包已生成，阶段进度已更新');
+}
+
+async function copyEveningReport() {
+  const report = state.eveningReports?.[getMeetingDate()]?.report || '';
+  if (!report) {
+    toast('还没有可复制的晚会报告');
+    return;
+  }
+  await navigator.clipboard.writeText(report);
+  toast('晚会报告已复制，可粘贴到企业微信');
 }
 
 function setRoute(route) {
@@ -358,6 +554,10 @@ function toast(message) {
 function bindEvents() {
   document.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => setRoute(button.dataset.route));
+  });
+
+  document.querySelector('#meetingDate')?.addEventListener('change', () => {
+    renderMeeting();
   });
 
   document.querySelector('[data-action="generate-plan"]').addEventListener('click', () => {
@@ -388,6 +588,22 @@ function bindEvents() {
     createTaskFromPrompt().catch((error) => toast(error.message));
   });
 
+  document.querySelector('[data-action="create-assignment"]').addEventListener('click', () => {
+    createAssignment().catch((error) => toast(error.message));
+  });
+
+  document.querySelector('[data-action="submit-standup"]').addEventListener('click', () => {
+    submitStandup().catch((error) => toast(error.message));
+  });
+
+  document.querySelector('[data-action="generate-evening-report"]').addEventListener('click', () => {
+    generateEveningReport().catch((error) => toast(error.message));
+  });
+
+  document.querySelector('[data-action="copy-evening-report"]').addEventListener('click', () => {
+    copyEveningReport().catch((error) => toast(error.message));
+  });
+
   document.querySelector('[data-action="test-alert"]').addEventListener('click', () => {
     syncSignals().then(() => toast('已测试提醒规则，风险队列已刷新')).catch((error) => toast(error.message));
   });
@@ -399,3 +615,9 @@ loadState().catch((error) => {
   setText('#syncStatus', '本地 API 未启动');
   toast(`请先运行 npm run dev：${error.message}`);
 });
+
+window.setInterval(() => {
+  syncCueAiGit({ silent: true }).catch(() => {
+    setText('#syncStatus', '自动抓取暂不可用，等待下次重试');
+  });
+}, 300000);

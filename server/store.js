@@ -28,8 +28,20 @@ function migrateStore(store) {
     reviews: [],
     activities: [],
     standups: [],
+    assignments: [],
     alerts: [],
     projects: [],
+    eveningReports: {},
+    reports: {},
+    planAdjustments: [],
+    currentStage: {
+      id: 'stage_mvp',
+      name: 'CUE 项目中枢 MVP',
+      targetDate: '2026-05-15',
+      progress: 0,
+      status: '进行中',
+      updatedAt: ''
+    },
     ...store
   };
 
@@ -47,6 +59,20 @@ function migrateStore(store) {
   }
 
   next.activities = (next.activities || []).map(({ diff, ...activity }) => activity);
+  next.assignments = next.assignments || [];
+  next.standups = next.standups || [];
+  next.eveningReports = next.eveningReports || {};
+  next.reports = next.reports || {};
+  next.planAdjustments = next.planAdjustments || [];
+  next.currentStage = {
+    id: 'stage_mvp',
+    name: 'CUE 项目中枢 MVP',
+    targetDate: '2026-05-15',
+    progress: 0,
+    status: '进行中',
+    updatedAt: '',
+    ...(next.currentStage || {})
+  };
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
     acceptance: task.acceptance === 'PR diff 可输出 Pass、Warning、Block、Escalate 四级结论。'

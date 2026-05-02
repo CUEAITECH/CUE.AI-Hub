@@ -31,7 +31,9 @@ body {
 }
 
 button,
-textarea {
+textarea,
+select,
+input {
   font: inherit;
 }
 
@@ -273,7 +275,9 @@ h1 {
 .member-list,
 .review-list,
 .plan-grid,
-.activity-list {
+.activity-list,
+.assignment-list,
+.standup-list {
   display: grid;
   gap: 10px;
 }
@@ -338,7 +342,10 @@ h1 {
 .review-item,
 .plan-card,
 .activity-item,
-.project-card {
+.project-card,
+.assignment-item,
+.standup-item,
+.report-summary {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.028);
@@ -467,7 +474,8 @@ textarea {
   line-height: 1.7;
 }
 
-input {
+input,
+select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -478,8 +486,112 @@ input {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   border-color: rgba(77, 163, 255, 0.55);
+}
+
+.stage-panel .panel-head {
+  margin-bottom: 12px;
+}
+
+.stage-panel b,
+.meeting-toolbar strong {
+  color: var(--green);
+  font-size: 22px;
+}
+
+.stage-progress {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+
+.stage-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--cyan));
+}
+
+.meeting-toolbar {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  align-items: end;
+}
+
+.meeting-toolbar label,
+.form-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.meeting-toolbar label span,
+.meeting-toolbar small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.form-grid {
+  margin-bottom: 14px;
+}
+
+.form-grid textarea {
+  min-height: 86px;
+}
+
+.assignment-item,
+.standup-item {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+}
+
+.assignment-item strong,
+.standup-item strong {
+  font-size: 15px;
+}
+
+.assignment-item span,
+.standup-item span,
+.report-summary span {
+  color: var(--muted);
+}
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.report-summary div {
+  display: grid;
+  gap: 4px;
+}
+
+.report-summary b {
+  font-size: 24px;
+}
+
+.report-box {
+  min-height: 420px;
+  max-height: 720px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0c131c;
+  color: var(--text);
+  padding: 16px;
+  white-space: pre-wrap;
+  line-height: 1.65;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
 }
 
 .plan-grid {
@@ -653,7 +765,9 @@ textarea:focus {
   }
 
   .project-card,
-  .activity-item {
+  .activity-item,
+  .meeting-toolbar,
+  .report-summary {
     grid-template-columns: 1fr;
   }
 
