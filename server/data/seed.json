@@ -131,7 +131,9 @@
     {
       "id": "cue_ai_classroom",
       "name": "Cue.AI Classroom",
+      "githubOwner": "dirtortian",
       "repository": "OmniNexus-Edu-copilot",
+      "githubFullRepo": "dirtortian/OmniNexus-Edu-copilot",
       "localPath": "/Users/dirtortian/Documents/GitHub/OmniNexus-Edu-copilot",
       "branch": "",
       "status": "待同步",

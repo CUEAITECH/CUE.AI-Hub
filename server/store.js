@@ -40,7 +40,9 @@ function migrateStore(store) {
     next.projects.unshift({
       id: 'cue_ai_classroom',
       name: 'Cue.AI Classroom',
+      githubOwner: 'dirtortian',
       repository: 'OmniNexus-Edu-copilot',
+      githubFullRepo: 'dirtortian/OmniNexus-Edu-copilot',
       localPath: cueAiRepoPath,
       branch: '',
       status: '待同步',
@@ -48,6 +50,18 @@ function migrateStore(store) {
       summary: 'CUE 课堂产品主仓库，先作为项目中枢的内部试点项目接入。'
     });
   }
+
+  // 迁移：为已有项目补充 githubOwner / githubFullRepo 字段
+  next.projects = next.projects.map((p) => {
+    if (p.id === 'cue_ai_classroom' && !p.githubOwner) {
+      return { ...p, githubOwner: 'dirtortian', githubFullRepo: 'dirtortian/OmniNexus-Edu-copilot' };
+    }
+    // 如果有 githubOwner 但缺 githubFullRepo，自动补全
+    if (p.githubOwner && p.repository && !p.githubFullRepo) {
+      return { ...p, githubFullRepo: `${p.githubOwner}/${p.repository}` };
+    }
+    return p;
+  });
 
   next.activities = (next.activities || []).map(({ diff, ...activity }) => activity);
   next.tasks = (next.tasks || []).map((task) => ({

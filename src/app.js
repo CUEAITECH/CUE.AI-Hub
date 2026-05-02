@@ -122,6 +122,11 @@ function renderCueAiProject() {
     return;
   }
 
+  const githubUrl = project.githubFullRepo
+    ? `https://github.com/${project.githubFullRepo}`
+    : null;
+  const sourceLabel = project.githubOwner ? '🔗 GitHub 远端' : '💾 本地 Git';
+
   panel.innerHTML = `
     <div class="project-card">
       <div>
@@ -129,12 +134,15 @@ function renderCueAiProject() {
         <span>${escapeHtml(project.summary)}</span>
       </div>
       <dl>
-        <div><dt>仓库</dt><dd>${escapeHtml(project.repository)}</dd></div>
+        <div><dt>来源</dt><dd>${sourceLabel}</dd></div>
+        <div><dt>仓库</dt><dd>${githubUrl
+          ? `<a href="${escapeHtml(githubUrl)}" target="_blank" rel="noopener" class="repo-link">${escapeHtml(project.githubFullRepo)}</a>`
+          : escapeHtml(project.repository)}</dd></div>
         <div><dt>分支</dt><dd>${escapeHtml(project.branch || '待同步')}</dd></div>
         <div><dt>状态</dt><dd>${escapeHtml(project.status || '待同步')}</dd></div>
-        <div><dt>未提交文件</dt><dd>${Number(project.dirtyFileCount) || 0}</dd></div>
+        <div><dt>近期 commits</dt><dd>${Number(project.commitCount) || 0}</dd></div>
       </dl>
-      <small>${project.lastSyncAt ? `上次同步 ${new Date(project.lastSyncAt).toLocaleString('zh-CN', { hour12: false })}` : '还没有同步过本地 Git'}</small>
+      <small>${project.lastSyncAt ? `上次同步 ${new Date(project.lastSyncAt).toLocaleString('zh-CN', { hour12: false })}` : '还没有同步过，点击"同步 Cue.AI Git"拉取远端数据'}</small>
     </div>
   `;
 }
@@ -750,11 +758,14 @@ async function syncSignals() {
 }
 
 async function syncCueAiGit() {
-  setText('#syncStatus', '正在同步 Cue.AI Git...');
-  const payload = await api('/api/projects/cue_ai_classroom/sync-local-git', {
-    method: 'POST',
-    body: '{}'
-  });
+  const project = state.projects.find((p) => p.id === 'cue_ai_classroom');
+  const useGitHub = project?.githubOwner;
+  const endpoint = useGitHub
+    ? '/api/projects/cue_ai_classroom/sync-github'
+    : '/api/projects/cue_ai_classroom/sync-local-git';
+
+  setText('#syncStatus', useGitHub ? '正在同步 GitHub 远端...' : '正在同步本地 Git...');
+  const payload = await api(endpoint, { method: 'POST', body: '{}' });
   const nextState = await api('/api/state');
   state.tasks = nextState.tasks || [];
   state.members = nextState.members || [];
@@ -764,8 +775,9 @@ async function syncCueAiGit() {
   state.activities = nextState.activities || [];
   state.metrics = payload.metrics || nextState.metrics || {};
   renderAll();
-  setText('#syncStatus', `Cue.AI 已同步 · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`);
-  toast(`Cue.AI 同步完成：${payload.addedActivities || 0} 条活动，${payload.addedReviews || 0} 条 AI Review`);
+  const srcLabel = payload.source === 'github-api' ? 'GitHub 远端' : '本地 Git';
+  setText('#syncStatus', `已同步 (${srcLabel}) · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`);
+  toast(`同步完成（${srcLabel}）：${payload.addedActivities || 0} 条 commit，${payload.addedReviews || 0} 条 AI Review`);
 }
 
 function setRoute(route) {

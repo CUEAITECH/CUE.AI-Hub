@@ -27,6 +27,7 @@ import { reviewChange } from './services/reviewer.js';
 import { buildMetrics, scanRisks } from './services/riskEngine.js';
 import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhook.js';
 import { scanLocalGitProject } from './services/localGit.js';
+import { scanGitHubProject, hasGitHubConfig } from './services/githubApi.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
 import { isWeComAvailable, pushRiskAlerts, pushReport, sendWeComMarkdown } from './services/wecom.js';
 import { buildOpenApiSpec } from './data/openapi.js';
@@ -226,6 +227,120 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  // 共用同步逻辑：有 githubOwner → GitHub API；否则 → 本地 git（仅作为降级）
+  async function runProjectSync(project, scanOptions) {
+    if (hasGitHubConfig(project)) {
+      return scanGitHubProject(project, scanOptions);
+    }
+    if (project.localPath) {
+      console.warn(`[Sync] 项目 ${project.id} 未配置 githubOwner，降级到本地 git（建议配置远端）`);
+      return scanLocalGitProject(project, scanOptions);
+    }
+    throw new Error(`项目 "${project.name || project.id}" 既未配置 githubOwner，也没有 localPath，无法同步`);
+  }
+
+  // PATCH /api/projects/:id — 更新项目配置（githubOwner、githubFullRepo 等）
+  if (req.method === 'PATCH' && url.pathname.startsWith('/api/projects/') &&
+      !url.pathname.includes('/sync')) {
+    const projectId = decodeURIComponent(url.pathname.split('/')[3] || '');
+    const { json } = await readBody(req);
+    if (!json) { sendError(res, 400, 'invalid json'); return true; }
+    const nextStore = await updateStore((draft) => {
+      const idx = (draft.projects || []).findIndex((p) => p.id === projectId);
+      if (idx === -1) return draft;
+      // 只允许更新安全字段，不允许覆盖 id
+      const allowed = ['name', 'repository', 'githubOwner', 'githubFullRepo', 'summary'];
+      const patch = Object.fromEntries(Object.entries(json).filter(([k]) => allowed.includes(k)));
+      draft.projects[idx] = { ...draft.projects[idx], ...patch };
+      return draft;
+    });
+    const project = (nextStore.projects || []).find((p) => p.id === projectId);
+    if (!project) { sendError(res, 404, 'project not found'); return true; }
+    sendJson(res, 200, { project });
+    return true;
+  }
+
+  // POST /api/projects/:id/sync-github — 明确走 GitHub API（忽略 localPath）
+  if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/sync-github')) {
+    const parts = url.pathname.split('/');
+    const projectId = decodeURIComponent(parts[3] || '');
+    const store = await loadStore();
+    const project = (store.projects || []).find((item) => item.id === projectId);
+    if (!project) { sendError(res, 404, 'project not found'); return true; }
+    if (!hasGitHubConfig(project)) {
+      sendError(res, 400, `项目未配置 githubOwner，请先 PATCH /api/projects/${projectId} 设置 githubOwner 和 repository`);
+      return true;
+    }
+
+    let scan;
+    try {
+      scan = await scanGitHubProject(project, {
+        since: url.searchParams.get('since') || '14 days ago',
+        limit: Number(url.searchParams.get('limit') || 15)
+      });
+    } catch (err) {
+      const msg = err.message || '';
+      const is404 = msg.includes('404');
+      const is403 = msg.includes('403') || msg.includes('速率限制');
+      const hint = is404
+        ? `仓库 "${project.githubFullRepo}" 不存在或为私有仓库。私有仓库需要在 .env 中配置 GITHUB_TOKEN（Personal Access Token，权限 repo）。`
+        : is403
+        ? '已触发 GitHub API 速率限制（匿名 60 次/小时）。配置 GITHUB_TOKEN 可提升至 5000 次/小时。'
+        : msg;
+      sendError(res, 422, 'GitHub 同步失败', hint);
+      return true;
+    }
+
+    const commitReviews = await Promise.all(
+      scan.activities.filter((a) => a.type === 'commit').map(async (activity) => ({
+        id: `review_${activity.sha}`,
+        projectId: project.id,
+        activityId: activity.id,
+        ...await reviewChange({
+          repo: activity.repo,
+          title: activity.title,
+          owner: activity.owner,
+          diff: activity.diff || activity.files.join('\n'),
+          files: activity.files
+        })
+      }))
+    );
+    const lightweightActivities = scan.activities.map(({ diff, ...a }) => a);
+    let addedActivityCount = 0;
+    let addedReviewCount = 0;
+
+    const nextStore = await updateStore((draft) => {
+      draft.projects = (draft.projects || []).map((item) =>
+        item.id === project.id
+          ? { ...item, branch: scan.branch, status: '已同步 (GitHub)', lastSyncAt: new Date().toISOString(), commitCount: scan.commitCount, dirtyFileCount: 0 }
+          : item
+      );
+      const existingActivityIds = new Set((draft.activities || []).map((a) => a.id));
+      const existingReviewIds = new Set((draft.reviews || []).map((r) => r.id));
+      const retainedActivities = (draft.activities || []).filter((a) => a.projectId !== project.id);
+      const newActivities = lightweightActivities.filter((a) => !existingActivityIds.has(a.id));
+      const newReviews = commitReviews.filter((r) => !existingReviewIds.has(r.id));
+      addedActivityCount = newActivities.length;
+      addedReviewCount = newReviews.length;
+      draft.activities = [...newActivities, ...retainedActivities].slice(0, 700);
+      draft.reviews = [...newReviews, ...(draft.reviews || [])].slice(0, 300);
+      return draft;
+    });
+
+    const alerts = scanRisks(nextStore);
+    sendJson(res, 200, {
+      project: nextStore.projects.find((item) => item.id === project.id),
+      source: 'github-api',
+      addedActivities: addedActivityCount,
+      addedReviews: addedReviewCount,
+      activities: lightweightActivities,
+      reviews: commitReviews,
+      metrics: buildMetrics(nextStore, alerts),
+      alerts
+    });
+    return true;
+  }
+
   if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/sync-local-git')) {
     const parts = url.pathname.split('/');
     const projectId = decodeURIComponent(parts[3] || '');
@@ -237,10 +352,12 @@ async function handleApi(req, res, url) {
       return true;
     }
 
-    const scan = await scanLocalGitProject(project, {
+    const scanOptions = {
       since: url.searchParams.get('since') || '14 days ago',
       limit: Number(url.searchParams.get('limit') || 12)
-    });
+    };
+    // 自动升级：有 githubOwner 则走 GitHub API
+    const scan = await runProjectSync(project, scanOptions);
 
     const commitReviews = await Promise.all(
       scan.activities

@@ -1093,3 +1093,12 @@ textarea:focus {
 @media (max-width: 960px) {
   .assignment-layout { grid-template-columns: 1fr; }
 }
+
+/* ── GitHub 链接 ── */
+.repo-link {
+  color: var(--blue);
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 13px;
+}
+.repo-link:hover { text-decoration: underline; }
