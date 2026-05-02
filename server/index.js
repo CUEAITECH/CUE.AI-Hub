@@ -29,6 +29,7 @@ import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhoo
 import { scanLocalGitProject } from './services/localGit.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
 import { isWeComAvailable, pushRiskAlerts, pushReport, sendWeComMarkdown } from './services/wecom.js';
+import { buildOpenApiSpec } from './data/openapi.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -88,6 +89,8 @@ function normalizeTask(input) {
   };
 }
 
+
+
 async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/health') {
     sendJson(res, 200, { ok: true, name: 'CUE Project Hub', time: new Date().toISOString() });
@@ -107,7 +110,23 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'GET' && url.pathname === '/api/tasks') {
     const store = await loadStore();
-    sendJson(res, 200, { tasks: store.tasks });
+    const status = url.searchParams.get('status');
+    const tasks = status ? store.tasks.filter((t) => t.status === status) : store.tasks;
+    sendJson(res, 200, { tasks });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/members') {
+    const store = await loadStore();
+    sendJson(res, 200, { members: store.members });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/openapi.json') {
+    const proto = req.headers['x-forwarded-proto'] || 'http';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${port}`;
+    const serverUrl = `${proto}://${host}`;
+    sendJson(res, 200, buildOpenApiSpec(serverUrl));
     return true;
   }
 
