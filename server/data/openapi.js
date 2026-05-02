@@ -252,6 +252,58 @@ export function buildOpenApiSpec(serverUrl) {
             }}}}
           }
         }
+      },
+
+      '/api/assignments': {
+        get: {
+          operationId: 'getAssignments',
+          summary: '获取今日分工领取情况',
+          description: '查看今天谁领取了哪些任务，包含进度状态。用于"今天大家分别在做什么"、"我今天领了哪些任务"。',
+          parameters: [{ name: 'date', in: 'query', required: false, schema: { type: 'string', format: 'date' } }],
+          responses: { '200': { description: '分工列表' } }
+        },
+        post: {
+          operationId: 'claimTask',
+          summary: '领取今日分工任务',
+          description: '成员领取一个任务作为今日分工。用于"我今天认领XX任务"、"我负责YY"。',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['owner', 'taskId'], properties: { owner: { type: 'string' }, taskId: { type: 'string' }, note: { type: 'string' } } } } } },
+          responses: { '201': { description: '领取成功' } }
+        }
+      },
+
+      '/api/reports/evening': {
+        post: {
+          operationId: 'generateEveningReport',
+          summary: '生成今日晚报（含 commit 汇总）',
+          description: '汇总今日 GitHub 提交、任务分工完成情况，生成结构化晚报。用于"生成今天的晚报"、"帮我总结一下今天的工作"。',
+          responses: { '200': { description: '晚报内容' } }
+        },
+        get: {
+          operationId: 'getEveningReport',
+          summary: '获取指定日期晚报',
+          description: '查看已生成的晚报内容。用于"看一下昨天的晚报"。',
+          parameters: [{ name: 'date', in: 'query', required: false, schema: { type: 'string', format: 'date' } }],
+          responses: { '200': { description: '晚报' } }
+        }
+      },
+
+      '/api/reports/compare': {
+        get: {
+          operationId: 'compareReport',
+          summary: '对照总结：晚报分工 vs 实际 commits',
+          description: '将昨日晚报中的任务分工与实际 commit 记录进行对照，生成完成/遗漏分析。用于"对比一下昨天的计划和实际完成"、"谁的任务有遗漏"。',
+          parameters: [{ name: 'date', in: 'query', required: false, schema: { type: 'string', format: 'date' } }],
+          responses: { '200': { description: '对照分析' } }
+        }
+      },
+
+      '/api/plan-adjustments': {
+        get: {
+          operationId: 'getPlanAdjustments',
+          summary: '获取 AI 计划调整建议',
+          description: '查看根据最新 GitHub 提交自动生成的计划调整建议。用于"最新的计划调整建议是什么"。',
+          responses: { '200': { description: '调整建议列表' } }
+        }
       }
     },
 

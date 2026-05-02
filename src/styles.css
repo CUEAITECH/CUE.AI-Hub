@@ -951,3 +951,145 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── 日报 Tab 切换 ── */
+.report-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 0 4px;
+  margin-top: 16px;
+}
+.report-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 8px 16px;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.report-tab:hover { color: var(--text); }
+.report-tab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
+
+.report-pane { display: none; }
+.report-pane.active { display: block; }
+
+/* ── 分工认领视图 ── */
+.assignment-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  margin-top: 20px;
+  align-items: start;
+}
+.assignment-tasks h3,
+.assignment-sidebar h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.assignment-tasks h3 small { font-size: 11px; color: var(--dim); font-weight: 400; text-transform: none; }
+.assignment-sidebar { display: flex; flex-direction: column; gap: 20px; }
+
+/* 可认领任务行 */
+.assignable-list { display: flex; flex-direction: column; gap: 8px; }
+.assignable-task-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  transition: border-color 0.15s;
+}
+.assignable-task-row:hover { border-color: var(--blue); }
+.assignable-task-info { flex: 1; min-width: 0; }
+.assignable-task-title { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.assignable-task-title strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.assignable-task-meta { font-size: 12px; color: var(--dim); }
+.assignable-claimants { margin-top: 6px; font-size: 12px; color: var(--cyan); }
+.assignable-claimants span { background: rgba(53, 211, 199, 0.1); border-radius: 4px; padding: 1px 6px; margin-right: 4px; }
+.claim-btn {
+  flex-shrink: 0;
+  background: rgba(77, 163, 255, 0.15);
+  border: 1px solid rgba(77, 163, 255, 0.4);
+  border-radius: 6px;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 16px;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.claim-btn:hover { background: rgba(77, 163, 255, 0.28); }
+
+/* 认领情况 */
+.assignment-summary-wrap,
+.plan-adjust-wrap {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+.assign-group { margin-bottom: 12px; }
+.assign-owner { display: block; font-size: 13px; color: var(--cyan); margin-bottom: 6px; }
+.assign-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  margin-bottom: 4px;
+}
+.assign-item.assign-已完成 { opacity: 0.55; }
+.assign-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assign-status-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: rgba(77, 163, 255, 0.12);
+  color: var(--blue);
+}
+.assign-item.assign-已完成 .assign-status-badge { background: rgba(61, 220, 151, 0.12); color: var(--green); }
+.assign-item.assign-未完成 .assign-status-badge { background: rgba(255, 92, 122, 0.12); color: var(--red); }
+.assign-note { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+.assign-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.assign-done-btn, .assign-cancel-btn {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 6px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.assign-done-btn:hover { color: var(--green); border-color: var(--green); }
+.assign-cancel-btn:hover { color: var(--red); border-color: var(--red); }
+
+/* AI 计划调整建议 */
+.plan-adjust-list { display: flex; flex-direction: column; gap: 10px; }
+.plan-adjust-item {
+  border-left: 2px solid var(--amber);
+  padding-left: 12px;
+}
+.plan-adjust-head { margin-bottom: 4px; }
+.plan-adjust-head small { font-size: 11px; color: var(--dim); }
+.plan-adjust-body { font-size: 13px; color: var(--text); line-height: 1.6; }
+
+.review-suggestion { font-size: 12px; color: #8899aa; margin: 4px 0 0; font-style: italic; }
+
+@media (max-width: 960px) {
+  .assignment-layout { grid-template-columns: 1fr; }
+}

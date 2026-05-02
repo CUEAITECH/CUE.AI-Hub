@@ -91,6 +91,96 @@ function normalizeTask(input) {
 
 
 
+// ─── 晚报生成（供 API 端点和调度器共用）───────────────────────────────────────
+async function generateEveningReport(date) {
+  const store = await loadStore();
+  const todayCommits = (store.activities || []).filter(
+    (a) => a.type === 'commit' && (a.date || '').slice(0, 10) === date
+  );
+  const todayAssignments = (store.assignments || []).filter((a) => a.date === date);
+  const todayReviews = (store.reviews || []).filter(
+    (r) => (r.createdAt || '').slice(0, 10) === date
+  );
+
+  const EVENING_SYSTEM = `你是 CUE Project Hub 的晚报 AI，专为技术负责人生成每日研发晚报。
+晚报结构（Markdown 格式）：
+1. **今日 GitHub 提交汇总**：列出所有提交者和提交标题，统计提交总数
+2. **分工 vs 提交对照**：逐条列出今日领取的分工任务，对应是否有 commit 支撑（有 ✅/无 ⚠️）
+3. **AI Review 结论汇总**：今日所有 Review 的级别和评分
+4. **未完成领取项 Warning**：状态为"进行中"或"未完成"的领取项，用 ⚠️ 标注
+5. **明日建议**：基于今日遗留任务和风险，给出 2-3 条具体建议
+要求：语言专业、简洁，用中文，总长不超过 800 字。`;
+
+  const commitLines = todayCommits.length
+    ? todayCommits.map((c) => `- ${c.owner || c.actor || '未知'}: ${c.title} (${c.repo || ''})`).join('\n')
+    : '今日暂无 commit 记录';
+
+  const assignmentLines = todayAssignments.length
+    ? todayAssignments.map((a) => {
+        const hasCommit = todayCommits.some((c) =>
+          (c.owner || c.actor || '') === a.owner
+        );
+        return `- [${a.status}] ${a.owner} 领取「${a.taskTitle}」${a.note ? '（' + a.note + '）' : ''} → ${hasCommit ? '✅ 有提交记录' : '⚠️ 无提交记录'}`;
+      }).join('\n')
+    : '今日暂无分工领取记录';
+
+  const reviewLines = todayReviews.length
+    ? todayReviews.map((r) => `- [${r.level}] ${r.title}（${r.owner}）评分: ${r.score}`).join('\n')
+    : '今日暂无 Review 记录';
+
+  const unfinishedLines = todayAssignments
+    .filter((a) => a.status !== '已完成')
+    .map((a) => `- ⚠️ ${a.owner}：「${a.taskTitle}」状态: ${a.status}`)
+    .join('\n') || '无未完成领取项';
+
+  const userPrompt = `请生成 ${date} 的研发晚报。
+
+今日 GitHub 提交（共 ${todayCommits.length} 条）：
+${commitLines}
+
+今日分工领取 vs 提交对照（共 ${todayAssignments.length} 条领取）：
+${assignmentLines}
+
+今日 AI Review（共 ${todayReviews.length} 条）：
+${reviewLines}
+
+未完成领取项：
+${unfinishedLines}`;
+
+  const report = await callClaude(EVENING_SYSTEM, userPrompt) ||
+    `# ${date} 研发晚报\n\n今日提交：${todayCommits.length} 条\n分工领取：${todayAssignments.length} 条\n\n（LLM 生成失败，显示基础数据）`;
+
+  const eveningEntry = {
+    report,
+    generatedAt: new Date().toISOString(),
+    commits: todayCommits,
+    assignments: todayAssignments
+  };
+
+  await updateStore((draft) => {
+    draft.eveningReports = draft.eveningReports || {};
+    draft.eveningReports[date] = eveningEntry;
+    return draft;
+  });
+
+  if (isWeComAvailable()) {
+    await sendWeComMarkdown(`# 🌆 ${date} 研发晚报\n\n${report}`);
+  }
+
+  return eveningEntry;
+}
+
+// ─── Commit 触发计划调整建议 ──────────────────────────────────────────────────
+async function generatePlanAdjustment(activities, store) {
+  const SYSTEM = `你是 CUE Project Hub 的计划调整 AI。根据最新的 GitHub 提交记录，结合当前任务状态，判断是否需要调整任务计划，并输出简短的调整建议（Markdown，不超过 200 字）。如果不需要调整，输出"无需调整"。`;
+  const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成').slice(0, 10);
+  const commitSummary = activities.map((a) => `- ${a.owner}: ${a.title} (${a.repo || ''})`).join('\n');
+  const taskSummary = activeTasks.map((t) => `- [${t.status}] ${t.title}（${t.owner}）进度${t.progress}%`).join('\n');
+  const text = await callClaude(SYSTEM, `最新提交：\n${commitSummary}\n\n当前任务：\n${taskSummary}`);
+  if (!text || text.includes('无需调整')) return null;
+  return text;
+}
+
 async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/health') {
     sendJson(res, 200, { ok: true, name: 'CUE Project Hub', time: new Date().toISOString() });
@@ -330,6 +420,26 @@ async function handleApi(req, res, url) {
       return store;
     });
 
+    // 异步生成计划调整建议（不阻塞响应）
+    if (activities.length > 0) {
+      generatePlanAdjustment(activities, nextStore).then((suggestion) => {
+        if (suggestion) {
+          updateStore((draft) => {
+            draft.planAdjustments = draft.planAdjustments || [];
+            draft.planAdjustments.unshift({
+              id: createId('adjust'),
+              date: new Date().toISOString().slice(0, 10),
+              trigger: activities.map((a) => a.title).join('; '),
+              suggestion,
+              createdAt: new Date().toISOString()
+            });
+            draft.planAdjustments = draft.planAdjustments.slice(0, 50);
+            return draft;
+          });
+        }
+      }).catch((err) => console.error('[PlanAdjust]', err.message));
+    }
+
     sendJson(res, 202, {
       received: true,
       event: eventName,
@@ -514,6 +624,157 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     return true;
   }
 
+  // ─── 任务领取/分工系统 ────────────────────────────────────────────────────────
+
+  // GET /api/assignments?date=YYYY-MM-DD
+  if (req.method === 'GET' && url.pathname === '/api/assignments') {
+    const store = await loadStore();
+    const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    const assignments = (store.assignments || []).filter((a) => a.date === date);
+    sendJson(res, 200, { date, assignments });
+    return true;
+  }
+
+  // POST /api/assignments — 领取任务
+  if (req.method === 'POST' && url.pathname === '/api/assignments') {
+    const { json } = await readBody(req);
+    if (!json?.owner || !json?.taskId) {
+      sendError(res, 400, '缺少 owner 或 taskId 字段');
+      return true;
+    }
+    const store = await loadStore();
+    const task = (store.tasks || []).find((t) => t.id === json.taskId);
+    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+    const assignment = {
+      id: createId('assign'),
+      date: today,
+      owner: String(json.owner).trim(),
+      taskId: json.taskId,
+      taskTitle: task ? task.title : String(json.taskTitle || json.taskId),
+      note: String(json.note || '').trim(),
+      status: '进行中',
+      createdAt: now,
+      updatedAt: now
+    };
+    const nextStore = await updateStore((draft) => {
+      // 同一人同一任务同一天只保留最新一条
+      draft.assignments = (draft.assignments || []).filter(
+        (a) => !(a.owner === assignment.owner && a.taskId === assignment.taskId && a.date === today)
+      );
+      draft.assignments.unshift(assignment);
+      return draft;
+    });
+    sendJson(res, 201, { assignment, assignments: (nextStore.assignments || []).filter((a) => a.date === today) });
+    return true;
+  }
+
+  // PATCH /api/assignments/:id — 更新领取状态
+  if (req.method === 'PATCH' && url.pathname.startsWith('/api/assignments/')) {
+    const id = decodeURIComponent(url.pathname.split('/').pop());
+    const { json } = await readBody(req);
+    const now = new Date().toISOString();
+    const nextStore = await updateStore((draft) => {
+      const index = (draft.assignments || []).findIndex((a) => a.id === id);
+      if (index === -1) return draft;
+      draft.assignments[index] = {
+        ...draft.assignments[index],
+        ...(json.status !== undefined ? { status: json.status } : {}),
+        ...(json.note !== undefined ? { note: json.note } : {}),
+        updatedAt: now
+      };
+      return draft;
+    });
+    const assignment = (nextStore.assignments || []).find((a) => a.id === id);
+    if (!assignment) { sendError(res, 404, 'assignment not found'); return true; }
+    sendJson(res, 200, { assignment });
+    return true;
+  }
+
+  // DELETE /api/assignments/:id — 取消领取
+  if (req.method === 'DELETE' && url.pathname.startsWith('/api/assignments/')) {
+    const id = decodeURIComponent(url.pathname.split('/').pop());
+    const nextStore = await updateStore((draft) => {
+      draft.assignments = (draft.assignments || []).filter((a) => a.id !== id);
+      return draft;
+    });
+    sendJson(res, 200, { deleted: id, assignments: nextStore.assignments || [] });
+    return true;
+  }
+
+  // ─── 晚报 ─────────────────────────────────────────────────────────────────────
+
+  // POST /api/reports/evening — 手动触发生成晚报
+  if (req.method === 'POST' && url.pathname === '/api/reports/evening') {
+    const today = new Date().toISOString().slice(0, 10);
+    const eveningEntry = await generateEveningReport(today);
+    sendJson(res, 200, { date: today, ...eveningEntry });
+    return true;
+  }
+
+  // GET /api/reports/evening?date=YYYY-MM-DD — 获取指定日期晚报
+  if (req.method === 'GET' && url.pathname === '/api/reports/evening') {
+    const store = await loadStore();
+    const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    const entry = (store.eveningReports || {})[date];
+    if (!entry) {
+      sendJson(res, 200, { date, report: null, error: '该日暂无晚报记录' });
+    } else {
+      sendJson(res, 200, { date, ...entry });
+    }
+    return true;
+  }
+
+  // ─── 晚报分工 vs commits 对照总结 ─────────────────────────────────────────────
+
+  // GET /api/reports/compare?date=YYYY-MM-DD
+  if (req.method === 'GET' && url.pathname === '/api/reports/compare') {
+    const store = await loadStore();
+    const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    const eveningEntry = (store.eveningReports || {})[date];
+    if (!eveningEntry) {
+      sendJson(res, 200, { error: '该日无晚报记录' });
+      return true;
+    }
+
+    const snapshotAssignments = eveningEntry.assignments || [];
+    const dateCommits = (store.activities || []).filter(
+      (a) => a.type === 'commit' && (a.date || '').slice(0, 10) === date
+    );
+
+    const COMPARE_SYSTEM = `你是 CUE Project Hub 的对照分析 AI。根据当日晚报中记录的任务分工快照和实际 GitHub commit 记录，生成对照分析报告（Markdown）。
+对每个分工领取：判断是否有对应的 commit（通过提交者姓名匹配）。
+输出格式：
+1. **完成情况总览**：X 人领取，Y 人有 commit 支撑，Z 人无 commit 记录
+2. **逐条对照**：每个分工 → 完成 ✅ / 遗漏 ⚠️
+3. **结论**：需要跟进的成员和任务`;
+
+    const assignmentLines = snapshotAssignments.length
+      ? snapshotAssignments.map((a) => `- ${a.owner} 领取「${a.taskTitle}」状态:${a.status}`).join('\n')
+      : '无分工记录';
+    const commitLines = dateCommits.length
+      ? dateCommits.map((c) => `- ${c.owner || c.actor || '未知'}: ${c.title}`).join('\n')
+      : '无 commit 记录';
+
+    const comparison = await callClaude(
+      COMPARE_SYSTEM,
+      `${date} 晚报分工快照：\n${assignmentLines}\n\n当日实际 commits：\n${commitLines}`
+    ) || `# ${date} 对照分析\n\n分工：${snapshotAssignments.length} 条，提交：${dateCommits.length} 条\n\n（LLM 生成失败）`;
+
+    sendJson(res, 200, { date, comparison, assignments: snapshotAssignments, commits: dateCommits });
+    return true;
+  }
+
+  // ─── 计划调整建议 ─────────────────────────────────────────────────────────────
+
+  // GET /api/plan-adjustments — 获取最近计划调整建议列表（最多20条）
+  if (req.method === 'GET' && url.pathname === '/api/plan-adjustments') {
+    const store = await loadStore();
+    const adjustments = (store.planAdjustments || []).slice(0, 20);
+    sendJson(res, 200, { adjustments });
+    return true;
+  }
+
   return false;
 }
 
@@ -553,6 +814,22 @@ const server = createServer(async (req, res) => {
     sendError(res, 500, 'internal server error', error.message);
   }
 });
+
+// ─── 每日 18:00 自动生成晚报并推送企业微信 ───────────────────────────────────
+function startScheduler() {
+  let lastEveningReportDate = '';
+  setInterval(async () => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    if (now.getHours() === 18 && now.getMinutes() === 0 && lastEveningReportDate !== today) {
+      lastEveningReportDate = today;
+      console.log('[Scheduler] 触发 18:00 晚报生成...');
+      await generateEveningReport(today);
+    }
+  }, 60_000);
+}
+
+startScheduler();
 
 server.listen(port, host, () => {
   console.log(`CUE Project Hub running at http://${host}:${port}`);

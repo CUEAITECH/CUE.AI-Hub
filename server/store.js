@@ -30,6 +30,9 @@ function migrateStore(store) {
     standups: [],
     alerts: [],
     projects: [],
+    assignments: [],
+    eveningReports: {},
+    planAdjustments: [],
     ...store
   };
 

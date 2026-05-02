@@ -10,6 +10,10 @@ const state = {
   standups: [],
   standupSummary: '',
   report: '',
+  eveningReport: '',
+  compareReport: '',
+  assignments: [],
+  planAdjustments: [],
   config: { wecomEnabled: false, llmEnabled: false }
 };
 
@@ -281,6 +285,121 @@ function renderReport() {
   }
 }
 
+function renderEveningReport() {
+  const el = document.querySelector('#reportEveningContent');
+  if (!el) return;
+  if (state.eveningReport) {
+    el.innerHTML = `<div class="report-body">${mdToHtml(state.eveningReport)}</div>`;
+  }
+}
+
+function renderCompareReport() {
+  const el = document.querySelector('#reportCompareContent');
+  if (!el) return;
+  if (state.compareReport) {
+    el.innerHTML = `<div class="report-body">${mdToHtml(state.compareReport)}</div>`;
+  }
+}
+
+// ── 分工渲染 ────────────────────────────────────────────────────
+
+function renderAssignments() {
+  const today = new Date().toISOString().slice(0, 10);
+  const dateEl = document.querySelector('#assignmentDate');
+  if (dateEl) dateEl.textContent = today;
+
+  // 今日认领情况（按成员分组）
+  const summaryEl = document.querySelector('#assignmentSummary');
+  if (summaryEl) {
+    if (!state.assignments.length) {
+      summaryEl.innerHTML = '<div class="empty-state">今日暂无认领记录。</div>';
+    } else {
+      // 按 owner 分组
+      const byOwner = {};
+      for (const a of state.assignments) {
+        if (!byOwner[a.owner]) byOwner[a.owner] = [];
+        byOwner[a.owner].push(a);
+      }
+      summaryEl.innerHTML = Object.entries(byOwner).map(([owner, items]) => `
+        <div class="assign-group">
+          <strong class="assign-owner">${escapeHtml(owner)}</strong>
+          ${items.map((a) => `
+            <div class="assign-item assign-${escapeHtml(a.status || '进行中')}">
+              <span class="assign-title">${escapeHtml(a.taskTitle || '未知任务')}</span>
+              <span class="assign-status-badge">${escapeHtml(a.status || '进行中')}</span>
+              ${a.note ? `<small class="assign-note">${escapeHtml(a.note)}</small>` : ''}
+              <div class="assign-actions">
+                ${a.status !== '已完成' ? `<button class="assign-done-btn" data-assign-id="${escapeHtml(a.id)}" title="标记完成">✓</button>` : ''}
+                <button class="assign-cancel-btn" data-assign-id="${escapeHtml(a.id)}" title="取消认领">✕</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+
+      // 绑定按钮
+      summaryEl.querySelectorAll('.assign-done-btn').forEach((btn) => {
+        btn.addEventListener('click', () => markAssignmentDone(btn.dataset.assignId).catch((e) => toast(e.message)));
+      });
+      summaryEl.querySelectorAll('.assign-cancel-btn').forEach((btn) => {
+        btn.addEventListener('click', () => cancelAssignment(btn.dataset.assignId).catch((e) => toast(e.message)));
+      });
+    }
+  }
+
+  // 可认领任务列表
+  const assignableEl = document.querySelector('#assignableList');
+  if (assignableEl) {
+    const activeTasks = state.tasks.filter((t) => t.status !== '已完成');
+    if (!activeTasks.length) {
+      assignableEl.innerHTML = '<div class="empty-state">暂无进行中的任务。</div>';
+    } else {
+      // 统计每个任务已有哪些人认领
+      assignableEl.innerHTML = activeTasks.map((task) => {
+        const claimants = state.assignments.filter((a) => a.taskId === task.id);
+        return `
+          <div class="assignable-task-row">
+            <div class="assignable-task-info">
+              <div class="assignable-task-title">
+                <strong>${escapeHtml(task.title)}</strong>
+                <span class="risk-badge risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
+              </div>
+              <div class="assignable-task-meta">
+                ${escapeHtml(task.owner)} · 进度 ${Number(task.progress) || 0}% · 截止 ${escapeHtml(task.due || '未设置')}
+              </div>
+              ${claimants.length ? `<div class="assignable-claimants">已认领：${claimants.map((a) => `<span>${escapeHtml(a.owner)}</span>`).join('')}</div>` : ''}
+            </div>
+            <button class="claim-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">认领</button>
+          </div>
+        `;
+      }).join('');
+
+      assignableEl.querySelectorAll('.claim-btn').forEach((btn) => {
+        btn.addEventListener('click', () =>
+          claimTask(btn.dataset.taskId, btn.dataset.taskTitle).catch((e) => toast(e.message))
+        );
+      });
+    }
+  }
+}
+
+function renderPlanAdjustments() {
+  const el = document.querySelector('#planAdjustList');
+  if (!el) return;
+  if (!state.planAdjustments.length) {
+    el.innerHTML = '<div class="empty-state">暂无计划调整建议。GitHub 提交接入后将自动生成。</div>';
+    return;
+  }
+  el.innerHTML = state.planAdjustments.slice(0, 5).map((adj) => `
+    <div class="plan-adjust-item">
+      <div class="plan-adjust-head">
+        <small>${adj.date || ''} · 触发：${escapeHtml((adj.trigger || '').slice(0, 60))}${(adj.trigger || '').length > 60 ? '…' : ''}</small>
+      </div>
+      <div class="plan-adjust-body">${mdToHtml(adj.suggestion || '')}</div>
+    </div>
+  `).join('');
+}
+
 function renderConfig() {
   const wecomStatus = document.querySelector('#wecomStatus');
   const btnPushRisks = document.querySelector('#btnPushRisks');
@@ -304,6 +423,10 @@ function renderAll() {
   renderPlan();
   renderStandup();
   renderReport();
+  renderEveningReport();
+  renderCompareReport();
+  renderAssignments();
+  renderPlanAdjustments();
 }
 
 // ── 业务逻辑 ─────────────────────────────────────────────────
@@ -319,13 +442,20 @@ async function loadState() {
   state.metrics = payload.metrics || {};
   setText('#syncStatus', '本地 API 已连接');
 
-  // 加载今日站会
-  const standupPayload = await api('/api/standups').catch(() => ({ standups: [] }));
-  state.standups = standupPayload.standups || [];
+  // 并行加载站会、配置、今日分工、计划调整建议
+  const [standupPayload, config, assignPayload, adjustPayload, eveningPayload] = await Promise.all([
+    api('/api/standups').catch(() => ({ standups: [] })),
+    api('/api/config').catch(() => ({})),
+    api('/api/assignments').catch(() => ({ assignments: [] })),
+    api('/api/plan-adjustments').catch(() => ({ adjustments: [] })),
+    api('/api/reports/evening').catch(() => ({ report: null }))
+  ]);
 
-  // 加载配置
-  const config = await api('/api/config').catch(() => ({}));
+  state.standups = standupPayload.standups || [];
   state.config = config;
+  state.assignments = assignPayload.assignments || [];
+  state.planAdjustments = adjustPayload.adjustments || [];
+  if (eveningPayload.report) state.eveningReport = eveningPayload.report;
 
   renderAll();
   renderConfig();
@@ -477,6 +607,82 @@ async function summarizeStandup() {
   toast('站会汇总完成' + (state.config.wecomEnabled ? '，已推送至企业微信' : ''));
 }
 
+// ── 分工认领 ────────────────────────────────────────────────────
+
+async function claimTask(taskId, taskTitle) {
+  const memberNames = state.members.map((m) => m.name);
+  const ownerPrompt = memberNames.length
+    ? `认领人（${memberNames.join(' / ')}）：`
+    : '认领人姓名：';
+  const owner = window.prompt(ownerPrompt, memberNames[0] || '');
+  if (!owner) return;
+  const note = window.prompt('今日具体计划说明（可留空）：', '') || '';
+
+  const payload = await api('/api/assignments', {
+    method: 'POST',
+    body: JSON.stringify({ owner: owner.trim(), taskId, note })
+  });
+  state.assignments = payload.assignments || state.assignments;
+  renderAssignments();
+  toast(`${owner} 已认领「${taskTitle}」`);
+}
+
+async function markAssignmentDone(id) {
+  const payload = await api(`/api/assignments/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: '已完成' })
+  });
+  state.assignments = payload.assignments || state.assignments;
+  renderAssignments();
+  toast('已标记完成');
+}
+
+async function cancelAssignment(id) {
+  if (!window.confirm('确认取消认领？')) return;
+  const payload = await api(`/api/assignments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  state.assignments = (payload.assignments || []).filter((a) => a.date === new Date().toISOString().slice(0, 10));
+  renderAssignments();
+  toast('已取消认领');
+}
+
+async function refreshAssignments() {
+  const [assignPayload, adjustPayload] = await Promise.all([
+    api('/api/assignments'),
+    api('/api/plan-adjustments').catch(() => ({ adjustments: [] }))
+  ]);
+  state.assignments = assignPayload.assignments || [];
+  state.planAdjustments = adjustPayload.adjustments || [];
+  renderAssignments();
+  renderPlanAdjustments();
+  toast('分工数据已刷新');
+}
+
+// ── 晚报 ─────────────────────────────────────────────────────────
+
+async function generateEveningReport() {
+  toast('AI 正在生成晚报（含 commit 汇总）...');
+  const payload = await api('/api/reports/evening', { method: 'POST', body: '{}' });
+  state.eveningReport = payload.report || '';
+  renderEveningReport();
+  // 切换到晚报 tab
+  setReportTab('evening');
+  toast('晚报生成完成' + (payload.wecomSent ? '，已推送至企业微信' : ''));
+}
+
+async function doCompareReport() {
+  toast('AI 正在生成对照分析...');
+  const today = new Date().toISOString().slice(0, 10);
+  const payload = await api(`/api/reports/compare?date=${today}`);
+  if (payload.error) {
+    state.compareReport = `> ⚠️ ${payload.error}`;
+  } else {
+    state.compareReport = payload.comparison || '';
+  }
+  renderCompareReport();
+  setReportTab('compare');
+  toast('对照分析完成');
+}
+
 // ── 日报 ──────────────────────────────────────────────────────
 
 async function generateReport() {
@@ -571,6 +777,15 @@ function setRoute(route) {
   });
 }
 
+function setReportTab(tab) {
+  document.querySelectorAll('.report-tab').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.reportTab === tab);
+  });
+  document.querySelectorAll('.report-pane').forEach((pane) => {
+    pane.classList.toggle('active', pane.id === `report${tab.charAt(0).toUpperCase() + tab.slice(1)}Pane`);
+  });
+}
+
 function toast(message) {
   const element = document.querySelector('#toast');
   element.textContent = message;
@@ -645,6 +860,27 @@ function bindEvents() {
   });
   document.querySelector('[data-action="push-risks"]').addEventListener('click', () => {
     pushRisksManual().catch((e) => toast(e.message));
+  });
+
+  // 晚报 & 对照（日报页按钮）
+  document.querySelector('[data-action="gen-evening-report2"]').addEventListener('click', () => {
+    generateEveningReport().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="compare-report"]').addEventListener('click', () => {
+    doCompareReport().catch((e) => toast(e.message));
+  });
+
+  // 报告 tab 切换
+  document.querySelectorAll('.report-tab').forEach((btn) => {
+    btn.addEventListener('click', () => setReportTab(btn.dataset.reportTab));
+  });
+
+  // 分工页
+  document.querySelector('[data-action="refresh-assignments"]').addEventListener('click', () => {
+    refreshAssignments().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="gen-evening-report"]').addEventListener('click', () => {
+    generateEveningReport().then(() => setRoute('report')).catch((e) => toast(e.message));
   });
 
   // ESC 关闭 modal

@@ -18,7 +18,8 @@
           <button class="nav-item" type="button" data-route="planning">AI 排期</button>
           <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
           <button class="nav-item" type="button" data-route="standup">异步站会</button>
-          <button class="nav-item" type="button" data-route="report">日报</button>
+          <button class="nav-item" type="button" data-route="assignment">分工领取</button>
+          <button class="nav-item" type="button" data-route="report">日报&amp;晚报</button>
           <button class="nav-item" type="button" data-route="automation">自动提醒</button>
         </nav>
         <div class="topbar-actions">
@@ -219,21 +220,78 @@
           </section>
         </section>
 
-        <!-- 日报 -->
+        <!-- 分工领取 -->
+        <section class="view" id="assignment">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <span>今日分工</span>
+                <h2>任务认领与执行追踪</h2>
+              </div>
+              <div class="panel-actions">
+                <button type="button" data-action="refresh-assignments">刷新分工</button>
+                <button type="button" data-action="gen-evening-report">生成晚报</button>
+              </div>
+            </div>
+
+            <div class="assignment-layout">
+              <!-- 左：可认领任务列表 -->
+              <div class="assignment-tasks">
+                <h3>任务看板 <small>点击"认领"按钮领取今日分工</small></h3>
+                <div id="assignableList" class="assignable-list"></div>
+              </div>
+
+              <!-- 右：今日认领情况 + 计划调整 -->
+              <div class="assignment-sidebar">
+                <div class="assignment-summary-wrap">
+                  <h3>今日认领情况 <span id="assignmentDate"></span></h3>
+                  <div id="assignmentSummary" class="assignment-summary"></div>
+                </div>
+                <div class="plan-adjust-wrap">
+                  <h3>AI 计划调整建议</h3>
+                  <div id="planAdjustList" class="plan-adjust-list"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <!-- 日报 & 晚报 -->
         <section class="view" id="report">
           <section class="panel">
             <div class="panel-head">
               <div>
-                <span>AI 日报</span>
-                <h2>研发交付日报 / 周报</h2>
+                <span>AI 日报 / 晚报</span>
+                <h2>研发交付报告与对照分析</h2>
               </div>
               <div class="panel-actions">
                 <button type="button" data-action="gen-report">生成日报</button>
+                <button type="button" data-action="gen-evening-report2">生成晚报</button>
+                <button type="button" data-action="compare-report">对照分析</button>
                 <button type="button" data-action="push-report" id="btnPushReport" style="display:none">推送企微</button>
               </div>
             </div>
-            <div id="reportContent" class="report-content">
-              <div class="empty-state">点击"生成日报"，AI 将根据今日任务、审阅和站会数据生成研发日报。</div>
+
+            <div class="report-tabs" role="tablist">
+              <button class="report-tab active" type="button" data-report-tab="daily" role="tab">📋 日报</button>
+              <button class="report-tab" type="button" data-report-tab="evening" role="tab">🌙 晚报</button>
+              <button class="report-tab" type="button" data-report-tab="compare" role="tab">🔍 昨日对照</button>
+            </div>
+
+            <div id="reportDailyPane" class="report-pane active">
+              <div id="reportContent" class="report-content">
+                <div class="empty-state">点击"生成日报"，AI 将根据今日任务、审阅和站会数据生成研发日报。</div>
+              </div>
+            </div>
+            <div id="reportEveningPane" class="report-pane">
+              <div id="reportEveningContent" class="report-content">
+                <div class="empty-state">点击"生成晚报"，AI 将汇总今日 GitHub 提交、分工完成情况生成晚报（每日 18:00 自动生成）。</div>
+              </div>
+            </div>
+            <div id="reportComparePane" class="report-pane">
+              <div id="reportCompareContent" class="report-content">
+                <div class="empty-state">点击"对照分析"，AI 将对比昨日晚报中的任务分工与实际 commit 记录，找出完成和遗漏项。</div>
+              </div>
             </div>
           </section>
         </section>
