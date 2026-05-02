@@ -3,3 +3,4 @@ node_modules/
 server/data/db.json
 *.log
 .env
+.claude/

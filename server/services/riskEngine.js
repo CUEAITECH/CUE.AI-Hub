@@ -15,6 +15,22 @@ function hoursSince(value) {
   return Math.floor((Date.now() - date.getTime()) / 3600000);
 }
 
+function dateText(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+}
+
+function addDays(value, days) {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 export function scanRisks(store) {
   const alerts = [];
 
@@ -79,6 +95,26 @@ export function scanRisks(store) {
     }
   }
 
+  const today = dateText();
+  const yesterday = addDays(today, -1);
+  const commitsTodayByOwner = (store.activities || [])
+    .filter((activity) => activity.type === 'commit' && String(activity.createdAt || '').startsWith(today))
+    .reduce((owners, activity) => owners.add(activity.owner || activity.actor || '未识别'), new Set());
+
+  for (const assignment of (store.assignments || []).filter((item) => item.date === yesterday)) {
+    if (assignment.status === '已完成') continue;
+    if (!commitsTodayByOwner.has(assignment.owner)) {
+      alerts.push({
+        id: `alert_assignment_${assignment.id}`,
+        severity: 'P2',
+        target: assignment.owner,
+        title: `昨日领取任务「${assignment.taskTitle}」今日无提交支撑`,
+        detail: '晚会前需要确认是否阻塞、拆分、转派或改为企业微信重新领取。',
+        source: assignment.id
+      });
+    }
+  }
+
   return alerts;
 }
 
@@ -90,6 +126,10 @@ export function buildMetrics(store, alerts = []) {
   const workingTreeFiles = (store.activities || []).filter((activity) => activity.type === 'working_tree').length;
   const blockingReviews = (store.reviews || []).filter((review) => review.level === 'Block').length;
   const highRiskTasks = (store.tasks || []).filter((task) => task.risk === '高').length;
+  const memberCount = Math.max((store.members || []).length, 1);
+  const standupCount = new Set((store.standups || [])
+    .filter((standup) => standup.date === today)
+    .map((standup) => standup.owner)).size;
   const score = Math.max(0, 100 - highRiskTasks * 12 - blockingReviews * 8 - workingTreeFiles * 2 - alerts.filter((alert) => alert.severity === 'P1').length * 6);
 
   return {
@@ -98,7 +138,7 @@ export function buildMetrics(store, alerts = []) {
     commitsToday,
     workingTreeFiles,
     pendingReviews: (store.reviews || []).length,
-    standupResponseRate: '75%',
+    standupResponseRate: `${Math.round((standupCount / memberCount) * 100)}%`,
     urgentAlerts: alerts.filter((alert) => alert.severity === 'P1').length
   };
 }
