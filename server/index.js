@@ -4,7 +4,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 
-// 从 .env 文件加载环境变量（不覆盖已有的系统环境变量）
+// 从 .env 文件加载环境变量（不覆盖已由部署环境注入的变量）
 {
   const envPath = join(dirname(dirname(fileURLToPath(import.meta.url))), '.env');
   try {
@@ -17,7 +17,8 @@ import { dirname } from 'node:path';
       if (eqIdx < 1) continue;
       const key = trimmed.slice(0, eqIdx).trim();
       const value = trimmed.slice(eqIdx + 1).trim();
-      if (key) process.env[key] = value;
+      // 仅在系统环境中尚未注入该变量时才设置，防止覆盖 ops 注入的凭据
+      if (key && !process.env[key]) process.env[key] = value;
     }
   } catch { /* .env 文件不存在时静默跳过 */ }
 }

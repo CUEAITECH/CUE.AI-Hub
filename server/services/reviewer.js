@@ -10,6 +10,26 @@ const riskyPatterns = [
 
 const MAX_DIFF_LEN = 4000;
 
+const VALID_LEVELS = ['Pass', 'Warning', 'Block', 'Escalate'];
+
+/** 将 LLM 输出的 level（可能是中文/小写/带空格）规范化为枚举值，无法识别时从 score 推断 */
+function normalizeLevel(raw, score) {
+  if (raw) {
+    const exact = VALID_LEVELS.find((l) => l === raw);
+    if (exact) return exact;
+    const s = String(raw).toLowerCase().trim();
+    if (s === 'pass' || s === '通过') return 'Pass';
+    if (s === 'warning' || s === 'warn' || s === '提醒' || s === '警告') return 'Warning';
+    if (s === 'block' || s === 'blocked' || s === '阻断' || s === '阻止') return 'Block';
+    if (s === 'escalate' || s === 'escalated' || s === '升级') return 'Escalate';
+  }
+  // 无法识别时从 score 推断，与规则引擎保持一致
+  if (score >= 80) return 'Pass';
+  if (score >= 60) return 'Warning';
+  if (score >= 40) return 'Block';
+  return 'Escalate';
+}
+
 const REVIEWER_SYSTEM_PROMPT = `你是 CUE Project Hub 的代码审阅 AI。对提交的代码变更进行安全、质量和风险评估。
 
 评分标准（满分 100 分，按扣分规则计算）：
@@ -114,12 +134,13 @@ ${truncatedDiff}`.trim();
     const result = parseJsonOutput(raw);
 
     if (result && typeof result.score === 'number') {
+      const clampedScore = Math.max(0, Math.min(100, result.score));
       return {
         repo,
         title,
         owner,
-        score: Math.max(0, Math.min(100, result.score)),
-        level: result.level || 'Warning',
+        score: clampedScore,
+        level: normalizeLevel(result.level, clampedScore),
         findings: Array.isArray(result.findings) ? result.findings : [],
         suggestion: String(result.suggestion || ''),
         createdAt: new Date().toISOString()
