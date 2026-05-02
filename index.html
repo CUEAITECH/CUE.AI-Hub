@@ -17,10 +17,13 @@
           <button class="nav-item active" type="button" data-route="overview">总览</button>
           <button class="nav-item" type="button" data-route="planning">AI 排期</button>
           <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
+          <button class="nav-item" type="button" data-route="standup">异步站会</button>
+          <button class="nav-item" type="button" data-route="report">日报</button>
           <button class="nav-item" type="button" data-route="automation">自动提醒</button>
         </nav>
         <div class="topbar-actions">
           <span class="status-pill" id="syncStatus">本地 API 未连接</span>
+          <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
           <button class="primary-action" type="button" data-action="sync">同步信号</button>
         </div>
       </header>
@@ -39,6 +42,7 @@
           </div>
         </section>
 
+        <!-- 总览 -->
         <section class="view active" id="overview">
           <section class="panel cue-ai-panel">
             <div class="panel-head">
@@ -81,7 +85,9 @@
                 <span>交付看板</span>
                 <h2>任务、负责人和 Git 信号</h2>
               </div>
-              <button type="button" data-action="add-task">新增任务</button>
+              <div class="panel-actions">
+                <button type="button" data-action="add-task">新增任务</button>
+              </div>
             </div>
             <div class="task-table" id="taskTable"></div>
           </section>
@@ -93,7 +99,10 @@
                   <span>风险队列</span>
                   <h2>今日必须处理</h2>
                 </div>
-                <button type="button" data-action="scan-risks">扫描风险</button>
+                <div class="panel-actions">
+                  <button type="button" data-action="scan-risks">扫描风险</button>
+                  <button type="button" data-action="push-risks" id="btnPushRisks" style="display:none">推送企微</button>
+                </div>
               </div>
               <div class="risk-list" id="riskList"></div>
             </article>
@@ -110,6 +119,7 @@
           </section>
         </section>
 
+        <!-- AI 排期 -->
         <section class="view" id="planning">
           <section class="panel planner-panel">
             <div class="panel-head">
@@ -127,6 +137,7 @@
           </section>
         </section>
 
+        <!-- AI 审阅 -->
         <section class="view" id="reviews">
           <section class="panel">
             <div class="panel-head">
@@ -147,6 +158,87 @@
           </section>
         </section>
 
+        <!-- 异步站会 -->
+        <section class="view" id="standup">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <span>异步站会</span>
+                <h2>每日进度同步与自动汇总</h2>
+              </div>
+              <div class="panel-actions">
+                <button type="button" data-action="summarize-standup">AI 汇总站会</button>
+              </div>
+            </div>
+
+            <div class="standup-layout">
+              <div class="standup-form-wrap">
+                <h3>提交今日站会</h3>
+                <form class="standup-form" id="standupForm">
+                  <label>
+                    <span>成员</span>
+                    <select id="standupOwner" required>
+                      <option value="">选择成员</option>
+                    </select>
+                  </label>
+                  <label class="leave-label">
+                    <input type="checkbox" id="standupIsLeave" />
+                    <span>今日请假</span>
+                  </label>
+                  <label id="standupProxyWrap" style="display:none">
+                    <span>交接人</span>
+                    <input type="text" id="standupProxy" placeholder="请填写交接人姓名" />
+                  </label>
+                  <label>
+                    <span>昨日完成</span>
+                    <textarea id="standupYesterday" rows="2" placeholder="昨天完成了什么？"></textarea>
+                  </label>
+                  <label>
+                    <span>今日计划</span>
+                    <textarea id="standupToday" rows="2" placeholder="今天计划做什么？"></textarea>
+                  </label>
+                  <label>
+                    <span>阻塞项</span>
+                    <textarea id="standupBlockers" rows="2" placeholder="有什么阻塞？没有填"无""></textarea>
+                  </label>
+                  <button type="submit" class="submit-btn">提交站会</button>
+                </form>
+              </div>
+
+              <div class="standup-right">
+                <div class="standup-summary-wrap">
+                  <h3>今日汇总 <small id="standupDate"></small></h3>
+                  <div id="standupSummary" class="standup-summary">点击"AI 汇总站会"生成今日总结。</div>
+                </div>
+                <div class="standup-list-wrap">
+                  <h3>今日站会记录 <span id="standupCount">0 人</span></h3>
+                  <div id="standupList" class="standup-list"></div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <!-- 日报 -->
+        <section class="view" id="report">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <span>AI 日报</span>
+                <h2>研发交付日报 / 周报</h2>
+              </div>
+              <div class="panel-actions">
+                <button type="button" data-action="gen-report">生成日报</button>
+                <button type="button" data-action="push-report" id="btnPushReport" style="display:none">推送企微</button>
+              </div>
+            </div>
+            <div id="reportContent" class="report-content">
+              <div class="empty-state">点击"生成日报"，AI 将根据今日任务、审阅和站会数据生成研发日报。</div>
+            </div>
+          </section>
+        </section>
+
+        <!-- 自动提醒 -->
         <section class="view" id="automation">
           <section class="panel">
             <div class="panel-head">
@@ -160,6 +252,69 @@
           </section>
         </section>
       </main>
+    </div>
+
+    <!-- 任务编辑 Modal -->
+    <div class="modal-backdrop" id="taskModalBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
+      <div class="modal">
+        <div class="modal-head">
+          <h2 id="taskModalTitle">编辑任务</h2>
+          <button type="button" class="modal-close" data-action="close-task-modal" aria-label="关闭">✕</button>
+        </div>
+        <form class="modal-form" id="taskEditForm">
+          <input type="hidden" id="editTaskId" />
+          <label>
+            <span>标题</span>
+            <input type="text" id="editTitle" required />
+          </label>
+          <div class="modal-row">
+            <label>
+              <span>负责人</span>
+              <input type="text" id="editOwner" />
+            </label>
+            <label>
+              <span>截止日期</span>
+              <input type="date" id="editDue" />
+            </label>
+          </div>
+          <div class="modal-row">
+            <label>
+              <span>状态</span>
+              <select id="editStatus">
+                <option value="待确认">待确认</option>
+                <option value="进行中">进行中</option>
+                <option value="待拆分">待拆分</option>
+                <option value="高风险">高风险</option>
+                <option value="已完成">已完成</option>
+              </select>
+            </label>
+            <label>
+              <span>风险</span>
+              <select id="editRisk">
+                <option value="低">低</option>
+                <option value="中">中</option>
+                <option value="高">高</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            <span>进度 <span id="editProgressLabel">0</span>%</span>
+            <input type="range" id="editProgress" min="0" max="100" step="5" />
+          </label>
+          <label>
+            <span>验收标准</span>
+            <textarea id="editAcceptance" rows="2"></textarea>
+          </label>
+          <label>
+            <span>最新信号</span>
+            <input type="text" id="editSignal" />
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="danger-btn" data-action="delete-task">删除任务</button>
+            <button type="submit" class="submit-btn">保存</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

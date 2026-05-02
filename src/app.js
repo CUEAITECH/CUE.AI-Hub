@@ -6,14 +6,18 @@ const state = {
   projects: [],
   activities: [],
   metrics: {},
-  plannedTasks: []
+  plannedTasks: [],
+  standups: [],
+  standupSummary: '',
+  report: '',
+  config: { wecomEnabled: false, llmEnabled: false }
 };
 
 const fallbackRules = [
   '任务临近截止但 12 小时无 commit 或 PR，先私聊负责人提醒。',
   'PR 超过 12 小时无人 review，自动指派 reviewer 并提醒技术负责人。',
-  '提交内容和任务描述不匹配，标记为“提醒”并要求补充说明。',
-  '核心模块变更且测试缺失，AI Review 标记为“阻断”，禁止合并。',
+  '提交内容和任务描述不匹配，标记为"提醒"并要求补充说明。',
+  '核心模块变更且测试缺失，AI Review 标记为"阻断"，禁止合并。',
   '阶段目标落后时，自动建议降级、拆分或转派任务。',
   '站会未回复、请假未交接时，先提醒本人，再升级到管理者日报。'
 ];
@@ -25,6 +29,16 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+// 简单 Markdown → HTML 转换（粗体、标题、列表）
+function mdToHtml(text) {
+  if (!text) return '';
+  return escapeHtml(text)
+    .replace(/^#{1,3} (.+)$/gm, (_, t) => `<strong>${t}</strong>`)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^- (.+)$/gm, '• $1')
+    .replace(/\n/g, '<br>');
 }
 
 async function api(path, options = {}) {
@@ -52,6 +66,8 @@ function getReviewLevelLabel(level) {
   if (level === 'Escalate') return '升级';
   return level || '未知';
 }
+
+// ── 渲染函数 ─────────────────────────────────────────────────
 
 function renderMetrics() {
   const metrics = state.metrics || {};
@@ -83,8 +99,14 @@ function renderTasks() {
       <div class="progress" aria-label="${escapeHtml(task.title)} 进度 ${Number(task.progress) || 0}%">
         <i style="width: ${Number(task.progress) || 0}%"></i>
       </div>
+      <button class="icon-btn edit-btn" data-task-id="${escapeHtml(task.id)}" aria-label="编辑任务">✏️</button>
     </div>
   `).join('');
+
+  // 绑定编辑按钮
+  table.querySelectorAll('.edit-btn').forEach((btn) => {
+    btn.addEventListener('click', () => openTaskModal(btn.dataset.taskId));
+  });
 }
 
 function renderCueAiProject() {
@@ -120,7 +142,7 @@ function renderActivities() {
     .slice(0, 8);
 
   if (!projectActivities.length) {
-    list.innerHTML = '<div class="empty-state">点击“同步 Cue.AI Git”后，这里会展示最近 commit 和工作区改动。</div>';
+    list.innerHTML = '<div class="empty-state">点击"同步 Cue.AI Git"后，这里会展示最近 commit 和工作区改动。</div>';
     return;
   }
 
@@ -197,7 +219,7 @@ function renderRules() {
 function renderPlan() {
   const grid = document.querySelector('#planGrid');
   if (!state.plannedTasks.length) {
-    grid.innerHTML = '<div class="empty-state">输入阶段目标后点击“生成任务”。</div>';
+    grid.innerHTML = '<div class="empty-state">输入阶段目标后点击"生成任务"。</div>';
     return;
   }
 
@@ -211,6 +233,65 @@ function renderPlan() {
   `).join('');
 }
 
+function renderStandup() {
+  const today = new Date().toISOString().slice(0, 10);
+  setText('#standupDate', today);
+  setText('#standupCount', `${state.standups.length} 人`);
+
+  // 填充成员下拉框
+  const ownerSelect = document.querySelector('#standupOwner');
+  const currentOwner = ownerSelect.value;
+  ownerSelect.innerHTML = '<option value="">选择成员</option>' +
+    state.members.map((m) => `<option value="${escapeHtml(m.name)}" ${m.name === currentOwner ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
+
+  // 站会汇总
+  const summaryEl = document.querySelector('#standupSummary');
+  if (state.standupSummary) {
+    summaryEl.innerHTML = mdToHtml(state.standupSummary);
+  }
+
+  // 站会记录列表
+  const list = document.querySelector('#standupList');
+  if (!state.standups.length) {
+    list.innerHTML = '<div class="empty-state">今日暂无站会记录。</div>';
+    return;
+  }
+
+  list.innerHTML = state.standups.map((s) => `
+    <div class="standup-item${s.isLeave ? ' standup-leave' : ''}">
+      <div class="standup-item-head">
+        <strong>${escapeHtml(s.owner)}</strong>
+        ${s.isLeave ? `<span class="leave-badge">请假 · 交接人：${escapeHtml(s.proxy || '未指定')}</span>` : ''}
+        <small>${s.createdAt ? new Date(s.createdAt).toLocaleTimeString('zh-CN', { hour12: false }) : ''}</small>
+      </div>
+      ${!s.isLeave ? `
+      <div class="standup-item-body">
+        <div><b>昨日</b>${escapeHtml(s.yesterday || '—')}</div>
+        <div><b>今日</b>${escapeHtml(s.today || '—')}</div>
+        ${s.blockers ? `<div class="standup-blockers"><b>阻塞</b>${escapeHtml(s.blockers)}</div>` : ''}
+      </div>` : ''}
+    </div>
+  `).join('');
+}
+
+function renderReport() {
+  const el = document.querySelector('#reportContent');
+  if (state.report) {
+    el.innerHTML = `<div class="report-body">${mdToHtml(state.report)}</div>`;
+  }
+}
+
+function renderConfig() {
+  const wecomStatus = document.querySelector('#wecomStatus');
+  const btnPushRisks = document.querySelector('#btnPushRisks');
+  const btnPushReport = document.querySelector('#btnPushReport');
+  if (state.config.wecomEnabled) {
+    if (wecomStatus) wecomStatus.style.display = '';
+    if (btnPushRisks) btnPushRisks.style.display = '';
+    if (btnPushReport) btnPushReport.style.display = '';
+  }
+}
+
 function renderAll() {
   renderMetrics();
   renderCueAiProject();
@@ -221,7 +302,11 @@ function renderAll() {
   renderReviews();
   renderRules();
   renderPlan();
+  renderStandup();
+  renderReport();
 }
+
+// ── 业务逻辑 ─────────────────────────────────────────────────
 
 async function loadState() {
   const payload = await api('/api/state');
@@ -233,7 +318,17 @@ async function loadState() {
   state.activities = payload.activities || [];
   state.metrics = payload.metrics || {};
   setText('#syncStatus', '本地 API 已连接');
+
+  // 加载今日站会
+  const standupPayload = await api('/api/standups').catch(() => ({ standups: [] }));
+  state.standups = standupPayload.standups || [];
+
+  // 加载配置
+  const config = await api('/api/config').catch(() => ({}));
+  state.config = config;
+
   renderAll();
+  renderConfig();
 }
 
 async function generatePlan() {
@@ -273,12 +368,8 @@ async function createTaskFromPrompt() {
   const payload = await api('/api/tasks', {
     method: 'POST',
     body: JSON.stringify({
-      title,
-      owner,
-      due,
-      status: '待确认',
-      risk: '低',
-      progress: 0,
+      title, owner, due,
+      status: '待确认', risk: '低', progress: 0,
       signal: '手动创建，等待 Git 信号',
       acceptance: '待补充验收标准'
     })
@@ -288,6 +379,137 @@ async function createTaskFromPrompt() {
   renderAll();
   toast('任务已创建');
 }
+
+// ── 任务编辑 Modal ────────────────────────────────────────────
+
+function openTaskModal(taskId) {
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+
+  document.querySelector('#editTaskId').value = task.id;
+  document.querySelector('#editTitle').value = task.title;
+  document.querySelector('#editOwner').value = task.owner;
+  document.querySelector('#editDue').value = task.due || '';
+  document.querySelector('#editStatus').value = task.status || '待确认';
+  document.querySelector('#editRisk').value = task.risk || '低';
+  document.querySelector('#editProgress').value = task.progress ?? 0;
+  document.querySelector('#editProgressLabel').textContent = task.progress ?? 0;
+  document.querySelector('#editAcceptance').value = task.acceptance || '';
+  document.querySelector('#editSignal').value = task.signal || '';
+  document.querySelector('#taskModalBackdrop').style.display = 'flex';
+  document.querySelector('#editTitle').focus();
+}
+
+function closeTaskModal() {
+  document.querySelector('#taskModalBackdrop').style.display = 'none';
+}
+
+async function saveTaskEdit(event) {
+  event.preventDefault();
+  const id = document.querySelector('#editTaskId').value;
+  const payload = await api(`/api/tasks/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: document.querySelector('#editTitle').value,
+      owner: document.querySelector('#editOwner').value,
+      due: document.querySelector('#editDue').value,
+      status: document.querySelector('#editStatus').value,
+      risk: document.querySelector('#editRisk').value,
+      progress: Number(document.querySelector('#editProgress').value),
+      acceptance: document.querySelector('#editAcceptance').value,
+      signal: document.querySelector('#editSignal').value
+    })
+  });
+  state.tasks = payload.tasks || [];
+  closeTaskModal();
+  await refreshRisks();
+  renderAll();
+  toast('任务已保存');
+}
+
+async function deleteTask() {
+  const id = document.querySelector('#editTaskId').value;
+  const task = state.tasks.find((t) => t.id === id);
+  if (!task) return;
+  if (!window.confirm(`确认删除任务"${task.title}"？`)) return;
+  const payload = await api(`/api/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  state.tasks = payload.tasks || [];
+  closeTaskModal();
+  await refreshRisks();
+  renderAll();
+  toast('任务已删除');
+}
+
+// ── 站会 ──────────────────────────────────────────────────────
+
+async function submitStandup(event) {
+  event.preventDefault();
+  const owner = document.querySelector('#standupOwner').value;
+  if (!owner) { toast('请选择成员'); return; }
+
+  const isLeave = document.querySelector('#standupIsLeave').checked;
+  const payload = await api('/api/standups', {
+    method: 'POST',
+    body: JSON.stringify({
+      owner,
+      isLeave,
+      proxy: document.querySelector('#standupProxy').value,
+      yesterday: document.querySelector('#standupYesterday').value,
+      today: document.querySelector('#standupToday').value,
+      blockers: document.querySelector('#standupBlockers').value
+    })
+  });
+
+  // 刷新站会列表
+  const listPayload = await api('/api/standups');
+  state.standups = listPayload.standups || [];
+  document.querySelector('#standupForm').reset();
+  renderStandup();
+  toast(`${owner} 的站会已提交（今日共 ${payload.count} 人）`);
+}
+
+async function summarizeStandup() {
+  toast('AI 正在汇总站会...');
+  const payload = await api('/api/standups/summarize', { method: 'POST', body: '{}' });
+  state.standupSummary = payload.summary || '';
+  state.standups = payload.standups || state.standups;
+  renderStandup();
+  toast('站会汇总完成' + (state.config.wecomEnabled ? '，已推送至企业微信' : ''));
+}
+
+// ── 日报 ──────────────────────────────────────────────────────
+
+async function generateReport() {
+  toast('AI 正在生成日报...');
+  const payload = await api('/api/reports/daily', { method: 'POST', body: '{}' });
+  state.report = payload.report || '';
+  renderReport();
+  toast('日报生成完成' + (payload.wecomSent ? '，已推送至企业微信' : ''));
+}
+
+async function pushReportManual() {
+  const payload = await api('/api/wecom/push', {
+    method: 'POST',
+    body: JSON.stringify({ content: `# 📊 研发日报\n\n${state.report}` })
+  });
+  toast(payload.sent ? '日报已推送至企业微信' : '推送失败，请检查 WECOM_WEBHOOK_URL');
+}
+
+async function pushRisksManual() {
+  if (!state.alerts.length) { toast('当前无风险告警'); return; }
+  const payload = await api('/api/wecom/push', {
+    method: 'POST',
+    body: JSON.stringify({
+      content: '# 🚨 风险告警\n\n' +
+        state.alerts.filter((a) => a.severity === 'P1')
+          .map((a) => `**${a.severity}** ${a.title}\n> ${a.detail}`)
+          .join('\n\n') || '当前无 P1 告警'
+    })
+  });
+  toast(payload.sent ? '风险告警已推送至企业微信' : '推送失败');
+}
+
+// ── 通用 ──────────────────────────────────────────────────────
 
 async function runReview() {
   const title = document.querySelector('#reviewTitle').value;
@@ -353,8 +575,10 @@ function toast(message) {
   const element = document.querySelector('#toast');
   element.textContent = message;
   element.classList.add('show');
-  window.setTimeout(() => element.classList.remove('show'), 2200);
+  window.setTimeout(() => element.classList.remove('show'), 2800);
 }
+
+// ── 事件绑定 ─────────────────────────────────────────────────
 
 function bindEvents() {
   document.querySelectorAll('[data-route]').forEach((button) => {
@@ -362,35 +586,70 @@ function bindEvents() {
   });
 
   document.querySelector('[data-action="generate-plan"]').addEventListener('click', () => {
-    generatePlan().catch((error) => toast(error.message));
+    generatePlan().catch((e) => toast(e.message));
   });
-
   document.querySelector('[data-action="apply-plan"]').addEventListener('click', () => {
-    applyPlan().catch((error) => toast(error.message));
+    applyPlan().catch((e) => toast(e.message));
   });
-
   document.querySelector('[data-action="sync"]').addEventListener('click', () => {
-    syncCueAiGit().catch((error) => toast(error.message));
+    syncCueAiGit().catch((e) => toast(e.message));
   });
-
   document.querySelector('[data-action="sync-cue-ai"]').addEventListener('click', () => {
-    syncCueAiGit().catch((error) => toast(error.message));
+    syncCueAiGit().catch((e) => toast(e.message));
   });
-
   document.querySelector('[data-action="scan-risks"]').addEventListener('click', () => {
-    syncSignals().catch((error) => toast(error.message));
+    syncSignals().catch((e) => toast(e.message));
   });
-
   document.querySelector('[data-action="run-review"]').addEventListener('click', () => {
-    runReview().catch((error) => toast(error.message));
+    runReview().catch((e) => toast(e.message));
   });
-
   document.querySelector('[data-action="add-task"]').addEventListener('click', () => {
-    createTaskFromPrompt().catch((error) => toast(error.message));
+    createTaskFromPrompt().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="test-alert"]').addEventListener('click', () => {
+    syncSignals().then(() => toast('已测试提醒规则，风险队列已刷新')).catch((e) => toast(e.message));
   });
 
-  document.querySelector('[data-action="test-alert"]').addEventListener('click', () => {
-    syncSignals().then(() => toast('已测试提醒规则，风险队列已刷新')).catch((error) => toast(error.message));
+  // 任务 modal
+  document.querySelector('[data-action="close-task-modal"]').addEventListener('click', closeTaskModal);
+  document.querySelector('#taskModalBackdrop').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeTaskModal();
+  });
+  document.querySelector('#taskEditForm').addEventListener('submit', (e) => {
+    saveTaskEdit(e).catch((err) => toast(err.message));
+  });
+  document.querySelector('[data-action="delete-task"]').addEventListener('click', () => {
+    deleteTask().catch((e) => toast(e.message));
+  });
+  document.querySelector('#editProgress').addEventListener('input', (e) => {
+    document.querySelector('#editProgressLabel').textContent = e.target.value;
+  });
+
+  // 站会
+  document.querySelector('#standupIsLeave').addEventListener('change', (e) => {
+    document.querySelector('#standupProxyWrap').style.display = e.target.checked ? '' : 'none';
+  });
+  document.querySelector('#standupForm').addEventListener('submit', (e) => {
+    submitStandup(e).catch((err) => toast(err.message));
+  });
+  document.querySelector('[data-action="summarize-standup"]').addEventListener('click', () => {
+    summarizeStandup().catch((e) => toast(e.message));
+  });
+
+  // 日报
+  document.querySelector('[data-action="gen-report"]').addEventListener('click', () => {
+    generateReport().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="push-report"]').addEventListener('click', () => {
+    pushReportManual().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="push-risks"]').addEventListener('click', () => {
+    pushRisksManual().catch((e) => toast(e.message));
+  });
+
+  // ESC 关闭 modal
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeTaskModal();
   });
 }
 

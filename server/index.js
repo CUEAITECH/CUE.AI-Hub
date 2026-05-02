@@ -27,6 +27,8 @@ import { reviewChange } from './services/reviewer.js';
 import { buildMetrics, scanRisks } from './services/riskEngine.js';
 import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhook.js';
 import { scanLocalGitProject } from './services/localGit.js';
+import { callClaude, parseJsonOutput } from './services/claude.js';
+import { isWeComAvailable, pushRiskAlerts, pushReport, sendWeComMarkdown } from './services/wecom.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -315,6 +317,180 @@ async function handleApi(req, res, url) {
       activities,
       reviews,
       metrics: buildMetrics(nextStore, scanRisks(nextStore))
+    });
+    return true;
+  }
+
+  // DELETE /api/tasks/:id — 删除任务
+  if (req.method === 'DELETE' && url.pathname.startsWith('/api/tasks/')) {
+    const id = decodeURIComponent(url.pathname.split('/')[3] || '');
+    const nextStore = await updateStore((store) => {
+      store.tasks = store.tasks.filter((task) => task.id !== id);
+      return store;
+    });
+    sendJson(res, 200, { deleted: id, tasks: nextStore.tasks });
+    return true;
+  }
+
+  // GET /api/standups?date=YYYY-MM-DD — 获取某日站会记录
+  if (req.method === 'GET' && url.pathname === '/api/standups') {
+    const store = await loadStore();
+    const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    const standups = (store.standups || []).filter((s) => s.date === date);
+    sendJson(res, 200, { date, standups });
+    return true;
+  }
+
+  // POST /api/standups — 提交站会
+  if (req.method === 'POST' && url.pathname === '/api/standups') {
+    const { json } = await readBody(req);
+    if (!json?.owner) { sendError(res, 400, '缺少 owner 字段'); return true; }
+    const today = new Date().toISOString().slice(0, 10);
+    const standup = {
+      id: createId('standup'),
+      date: today,
+      owner: String(json.owner).trim(),
+      yesterday: String(json.yesterday || '').trim(),
+      today: String(json.today || '').trim(),
+      blockers: String(json.blockers || '').trim(),
+      isLeave: Boolean(json.isLeave),
+      proxy: String(json.proxy || '').trim(),
+      createdAt: new Date().toISOString()
+    };
+    const nextStore = await updateStore((store) => {
+      // 同一人同一天只保留最新一条
+      store.standups = (store.standups || []).filter(
+        (s) => !(s.owner === standup.owner && s.date === standup.date)
+      );
+      store.standups.unshift(standup);
+      store.standups = store.standups.slice(0, 500);
+      return store;
+    });
+    const todayStandups = (nextStore.standups || []).filter((s) => s.date === today);
+    sendJson(res, 201, { standup, count: todayStandups.length });
+    return true;
+  }
+
+  // POST /api/standups/summarize — LLM 汇总当日站会
+  if (req.method === 'POST' && url.pathname === '/api/standups/summarize') {
+    const store = await loadStore();
+    const today = new Date().toISOString().slice(0, 10);
+    const todayStandups = (store.standups || []).filter((s) => s.date === today);
+    if (!todayStandups.length) {
+      sendJson(res, 200, { date: today, summary: '今日暂无站会记录。', standups: [] });
+      return true;
+    }
+
+    const STANDUP_SYSTEM_PROMPT = `你是 CUE Project Hub 的异步站会 AI 主持人。
+根据团队成员提交的站会记录，生成一份简洁的中文日站总结，格式要求：
+1. 开头一句话概括整体状态（人数、阻塞数量）
+2. 按成员列出：昨日完成、今日计划、阻塞项（如有）
+3. 单独列出请假成员和交接人
+4. 末尾列出需要管理者关注的阻塞项（如有）
+输出纯文本 Markdown，不需要 JSON。`;
+
+    const userPrompt = `今天是 ${today}，以下是各成员的站会回复：\n\n${todayStandups.map((s) => `**${s.owner}**${s.isLeave ? '（请假，交接人：' + (s.proxy || '未指定') + '）' : ''}
+- 昨日：${s.yesterday || '未填写'}
+- 今日：${s.today || '未填写'}
+- 阻塞：${s.blockers || '无'}`).join('\n\n')}`;
+
+    const summary = await callClaude(STANDUP_SYSTEM_PROMPT, userPrompt) ||
+      todayStandups.map((s) => `${s.owner}：${s.today || '未填写今日计划'}`).join('；');
+
+    // 保存汇总到 store
+    await updateStore((draft) => {
+      draft.standupSummaries = draft.standupSummaries || {};
+      draft.standupSummaries[today] = { summary, generatedAt: new Date().toISOString() };
+      return draft;
+    });
+
+    // 推送到企业微信
+    if (isWeComAvailable()) {
+      await sendWeComMarkdown(`# 📋 ${today} 站会汇总\n\n${summary}`);
+    }
+
+    sendJson(res, 200, { date: today, summary, standups: todayStandups });
+    return true;
+  }
+
+  // POST /api/reports/daily — LLM 生成日报
+  if (req.method === 'POST' && url.pathname === '/api/reports/daily') {
+    const store = await loadStore();
+    const today = new Date().toISOString().slice(0, 10);
+    const alerts = scanRisks(store);
+    const metrics = buildMetrics(store, alerts);
+    const todayStandups = (store.standups || []).filter((s) => s.date === today);
+    const recentReviews = (store.reviews || []).slice(0, 10);
+    const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成');
+
+    const REPORT_SYSTEM_PROMPT = `你是 CUE Project Hub 的 AI 报告生成器，专为技术负责人和产品负责人生成简洁的研发日报。
+报告结构（Markdown 格式）：
+1. **今日交付概况**：健康度评分、核心指标（风险任务/待审阅/告警数）
+2. **任务进展**：列出进行中和高风险任务的状态
+3. **代码审阅摘要**：今日 Review 结论（阻断/警告数量）
+4. **站会要点**：团队动态、阻塞项（如有站会数据）
+5. **风险与行动项**：P1/P2 告警，建议行动
+报告要简洁专业，用中文，总长不超过 600 字。`;
+
+    const userPrompt = `生成 ${today} 的研发日报。
+
+数据如下：
+健康度：${metrics.healthScore ?? 0} 分
+高风险任务：${metrics.highRiskTasks ?? 0} 个
+待审阅：${metrics.pendingReviews ?? 0} 个
+紧急告警：${metrics.urgentAlerts ?? 0} 个
+
+进行中任务（前10条）：
+${activeTasks.slice(0, 10).map((t) => `- [${t.status}] ${t.title}（${t.owner}）进度 ${t.progress}% 风险:${t.risk}`).join('\n')}
+
+最近 AI Review：
+${recentReviews.map((r) => `- ${r.level} | ${r.title}（${r.owner}）分数:${r.score}`).join('\n')}
+
+今日站会（${todayStandups.length} 人回复）：
+${todayStandups.length ? todayStandups.map((s) => `- ${s.owner}：${s.blockers ? '⚠️ 阻塞：' + s.blockers : '无阻塞'}`).join('\n') : '暂无站会记录'}
+
+P1 告警：
+${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detail}`).join('\n') || '无'}`;
+
+    const report = await callClaude(REPORT_SYSTEM_PROMPT, userPrompt) ||
+      `# ${today} 研发日报\n\n健康度：${metrics.healthScore ?? 0} 分\n高风险任务：${metrics.highRiskTasks ?? 0} 个\n\n（LLM 生成失败，显示基础数据）`;
+
+    // 保存报告
+    await updateStore((draft) => {
+      draft.reports = draft.reports || {};
+      draft.reports[today] = { report, generatedAt: new Date().toISOString() };
+      return draft;
+    });
+
+    // 推送到企业微信
+    let wecomSent = false;
+    if (isWeComAvailable()) {
+      wecomSent = await pushReport(`# 📊 ${today} 研发日报\n\n${report}`);
+    }
+
+    sendJson(res, 200, { date: today, report, wecomSent });
+    return true;
+  }
+
+  // POST /api/wecom/push — 手动推送消息到企业微信
+  if (req.method === 'POST' && url.pathname === '/api/wecom/push') {
+    if (!isWeComAvailable()) {
+      sendError(res, 400, '未配置 WECOM_WEBHOOK_URL');
+      return true;
+    }
+    const { json } = await readBody(req);
+    const content = String(json?.content || '').trim();
+    if (!content) { sendError(res, 400, '缺少 content 字段'); return true; }
+    const ok = await sendWeComMarkdown(content);
+    sendJson(res, 200, { sent: ok });
+    return true;
+  }
+
+  // GET /api/config — 返回前端需要的功能开关（不含密钥）
+  if (req.method === 'GET' && url.pathname === '/api/config') {
+    sendJson(res, 200, {
+      wecomEnabled: isWeComAvailable(),
+      llmEnabled: Boolean(process.env.ANTHROPIC_API_KEY)
     });
     return true;
   }
