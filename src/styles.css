@@ -284,7 +284,7 @@ h1 {
 
 .task-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 90px 80px 86px 160px;
+  grid-template-columns: minmax(240px, 1fr) 92px minmax(150px, 0.65fr) 70px 86px 140px 42px;
   gap: 14px;
   align-items: center;
   min-height: 76px;
@@ -294,11 +294,67 @@ h1 {
   background: rgba(255, 255, 255, 0.028);
 }
 
+.task-row-head {
+  min-height: auto;
+  padding: 8px 14px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .task-row > div:first-child,
 .member-item > div:first-child,
 .review-item > div:first-child {
   display: grid;
   gap: 4px;
+}
+
+.task-claim-cell {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-claim-cell small {
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.task-claimants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.task-claimants span {
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(53, 211, 199, 0.1);
+  color: var(--cyan);
+  font-size: 11px;
+  padding: 3px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.claim-inline-btn {
+  width: fit-content;
+  border: 1px solid rgba(77, 163, 255, 0.36);
+  border-radius: 6px;
+  background: rgba(77, 163, 255, 0.12);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 9px;
+}
+
+.claim-inline-btn:hover {
+  background: rgba(77, 163, 255, 0.22);
 }
 
 .risk-badge {
@@ -1092,6 +1148,41 @@ select:focus {
 .report-pane.active { display: block; }
 
 /* ── 分工认领视图 ── */
+.assignment-claim-bar {
+  display: grid;
+  grid-template-columns: 180px minmax(220px, 1fr) minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid rgba(77, 163, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(77, 163, 255, 0.055);
+}
+
+.assignment-claim-bar label {
+  display: grid;
+  gap: 6px;
+}
+
+.assignment-claim-bar label span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.assignment-claim-bar button {
+  min-height: 46px;
+  border: 1px solid rgba(77, 163, 255, 0.4);
+  border-radius: 8px;
+  background: rgba(77, 163, 255, 0.18);
+  color: var(--blue);
+  font-weight: 800;
+  padding: 0 18px;
+}
+
+.assignment-claim-bar button:hover {
+  background: rgba(77, 163, 255, 0.28);
+}
+
 .assignment-layout {
   display: grid;
   grid-template-columns: 1fr 340px;
@@ -1206,6 +1297,7 @@ select:focus {
 
 @media (max-width: 960px) {
   .assignment-layout { grid-template-columns: 1fr; }
+  .assignment-claim-bar { grid-template-columns: 1fr; }
 }
 
 /* ── GitHub 链接 ── */
