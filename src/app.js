@@ -882,6 +882,31 @@ async function generateMeetingSummary() {
   await refreshAssignments().catch(() => {});
 }
 
+// ── AI 产品经理：从文档导入任务 ──────────────────────────────
+async function syncDocsToHub() {
+  toast('正在从目标仓库 docs/ 解析任务...');
+  const projectId = state.currentProject?.id || 'cue_ai_classroom';
+  const payload = await api(`/api/projects/${projectId}/sync-docs`, { method: 'POST', body: '{}' });
+  if (payload.imported === 0) {
+    toast(payload.message || '没有新任务导入（已全部存在或文档无可执行任务）');
+  } else {
+    toast(`成功导入 ${payload.imported} 条新任务（共解析 ${payload.total} 条）`);
+    await loadState().then(() => renderTasks()).catch(() => {});
+  }
+}
+
+// ── AI 产品经理：写回进度文档 ─────────────────────────────────
+async function updateDocsProgress() {
+  toast('正在生成阶段进度追踪并写回 GitHub...');
+  const projectId = state.currentProject?.id || 'cue_ai_classroom';
+  const payload = await api(`/api/projects/${projectId}/update-docs`, { method: 'POST', body: '{}' });
+  if (payload.written) {
+    toast(`docs/阶段进度追踪.md 已更新（${payload.date}）`);
+  } else {
+    toast('写回失败，请检查 GITHUB_TOKEN 是否有 repo 写权限');
+  }
+}
+
 // ── 日报 ──────────────────────────────────────────────────────
 
 async function generateReport() {
@@ -1181,6 +1206,14 @@ function bindEvents() {
     btn.addEventListener('click', () => {
       generateMeetingSummary().catch((e) => toast(e.message));
     });
+  });
+
+  // AI 产品经理：文档同步按钮
+  document.querySelector('[data-action="sync-docs"]')?.addEventListener('click', () => {
+    syncDocsToHub().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="update-docs"]')?.addEventListener('click', () => {
+    updateDocsProgress().catch((e) => toast(e.message));
   });
 
   // ESC 关闭 modal
