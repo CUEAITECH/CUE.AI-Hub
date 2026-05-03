@@ -1,122 +1,622 @@
 # CUE 项目中枢
 
-CUE 项目中枢是独立于 CUE 课堂产品的新产品线，用 AI 管理研发交付闭环：阶段目标拆解、任务分工、Git 活动追踪、AI 提交审阅、异步站会、风险检测与自动提醒。
+CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。它的目标不是再增加一个填表工具，而是把阶段目标、任务分工、GitHub 提交、AI Review、异步站会、晚会复盘、风险提醒和企业微信机器人串成一个可追踪的研发闭环。
 
-它不是再增加一个填表工具，而是尽量从 Git、PR、Review、CI 和站会回复中自动获取真实信号，让管理者看到项目风险，让成员少做重复汇报。
+当前公网部署地址：
 
-## 产品定位
+```text
+https://hub.cueai.top
+```
 
-CUE 项目中枢是 Cue.AI 团队内部先用起来的 AI 研发项目指挥系统。
+当前默认跟踪的真实产品仓库：
 
-核心目标：
+```text
+CUEAITECH/Cue.AI
+```
 
-- 把阶段目标自动拆成任务、负责人、截止时间和验收标准。
-- 自动抓取 commit、push、PR、review、CI 和工作区状态。
-- 对每次关键提交或 PR 进行 AI 审阅。
-- 自动发现延期、无进展、PR 卡住、无 Git 关联、提交不规范等风险。
-- 用私聊提醒、管理者日报和风险队列替代人工反复催进度。
+项目中枢自身代码仓库：
 
-## 开发阶段对照清单
+```text
+CUEAITECH/CUE-Project-Hub
+```
 
-项目中枢以 `GET /api/stage/checklist` 作为阶段目标对照入口。清单会把当前阶段拆成目标项，并自动对照：
+两个仓库的职责必须分开：`Cue.AI` 是被管理和跟踪的产品项目，`CUE-Project-Hub` 是项目中枢自身代码。项目中枢默认只跟踪 `CUEAITECH/Cue.AI`，自身仓库只用于开发和部署项目中枢。
 
-- 当前任务和负责人
-- 今日/昨日任务领取
-- Cue.AI 仓库 Git 提交证据
+## 已完成能力
+
+### 1. 真实 Cue.AI 仓库接入
+
+项目中枢已经从旧的本地演示仓库口径切换到真实 GitHub 远端：
+
+```text
+CUEAITECH/Cue.AI
+```
+
+已完成内容：
+
+- 默认项目配置指向 `CUEAITECH/Cue.AI`。
+- GitHub API 同步优先于本地 Git 扫描，无需在服务器 clone 目标产品仓库。
+- 已清理旧数据里残留的 `cue-project-hub`、`cue-project-hub-api`、`OmniNexus-Edu-copilot` review 口径。
+- 启动时 `server/store.js` 会自动迁移旧数据：
+  - 旧 OmniNexus 仓库别名归并到 `CUEAITECH/Cue.AI`
+  - 旧 demo review 被剔除
+  - 旧 `cue-project-hub#...` linkedRef 会改成 `CUEAITECH/Cue.AI#...`
+- `/api/state` 中的项目和 review repo 应统一显示为 `CUEAITECH/Cue.AI`。
+
+服务器验证命令：
+
+```bash
+curl -s https://hub.cueai.top/api/state | grep -E '"githubFullRepo"|"repo"|"cue-project-hub"|"OmniNexus"'
+```
+
+期望结果：只出现 `CUEAITECH/Cue.AI`，不再出现 `cue-project-hub` 或 `OmniNexus`。
+
+### 2. GitHub 自动同步
+
+项目中枢已经支持自动抓取 GitHub 远端数据。
+
+已完成内容：
+
+- 服务启动 15 秒后自动同步一次。
+- 默认每 10 分钟同步一次。
+- 每次同步从 `CUEAITECH/Cue.AI` 拉取最近 commit。
+- 只对新 commit 生成 AI Review，避免重复消耗 Claude。
+- 修复了重复同步时同项目旧提交可能被清空的问题。
+- 同步完成后会刷新：
+  - 项目状态
+  - activities
+  - reviews
+  - risks
+  - metrics
+  - 阶段目标对照清单
+
+相关环境变量：
+
+```env
+GITHUB_SYNC_INTERVAL_MINUTES=10
+GITHUB_SYNC_LIMIT=20
+GITHUB_SYNC_DIFF_LIMIT=5
+```
+
+含义：
+
+- `GITHUB_SYNC_INTERVAL_MINUTES`：自动同步间隔，单位分钟。设为 `0` 可关闭。
+- `GITHUB_SYNC_LIMIT`：每轮最多拉取多少条 commit。
+- `GITHUB_SYNC_DIFF_LIMIT`：每轮最多对多少条最新 commit 拉取 diff 并生成 AI Review。
+
+PM2 日志中看到以下内容表示自动同步已启用：
+
+```text
+GITHUB_AUTO_SYNC   ✅ 每 10 分钟同步一次
+[Scheduler] GitHub 已同步 CUEAITECH/Cue.AI：新增 X 条提交，新增 Y 条 Review
+```
+
+### 3. Claude AI Review 接入
+
+项目中枢已经接入 Claude API。当前 AI Review 不是纯模板。
+
+调用路径：
+
+- `server/services/claude.js` 统一封装 Claude 调用。
+- `server/services/reviewer.js` 优先调用 Claude，失败时降级到规则引擎。
+- `server/services/planner.js` 优先调用 Claude，失败时降级到规则引擎。
+- 日报、晚报、站会总结、计划调整也会优先调用 Claude。
+
+已验证行为：
+
+- 配置 `ANTHROPIC_API_KEY` 后，`/api/config` 中 `llmEnabled` 为 `true`。
+- `POST /api/reviews` 会生成更具体的审阅建议。
+- LLM 输出解析失败时，会记录日志并降级到规则引擎，不会中断服务。
+
+相关环境变量：
+
+```env
+ANTHROPIC_API_KEY=
+ANTHROPIC_BASE_URL=
+```
+
+### 4. 企业微信 API 插件接入
+
+企业微信 API 插件已经打通只读查询链路。
+
+插件基础 URL：
+
+```text
+https://hub.cueai.top
+```
+
+已完成两个企业微信友好接口：
+
+```text
+GET /api/wecom/summary
+GET /api/wecom/risks
+```
+
+这两个接口都返回一个简单的 `summary` 字符串，避免企业微信插件配置复杂的 array/object 输出参数。
+
+推荐配置工具：
+
+工具 1：
+
+- 工具名称：`getWeComProjectSummary`
+- 工具路径：`/api/wecom/summary`
+- 请求方法：`GET`
+- 输入参数：无
+- 输出参数：`summary`，类型 `String`
+
+工具 2：
+
+- 工具名称：`getWeComRiskSummary`
+- 工具路径：`/api/wecom/risks`
+- 请求方法：`GET`
+- 输入参数：无
+- 输出参数：`summary`，类型 `String`
+
+企业微信里已验证机器人可以回答：
+
+```text
+你现在有什么功能，项目进展如何？
+```
+
+当前只读查询链路已经可用。写入链路，例如提交站会、领取任务、更新进度，接口已有基础能力，但企业微信插件工具还需要继续配置和打磨。
+
+### 5. 任务分工领取栏
+
+原先分工领取能力主要藏在接口和独立页面里，不够明显。现在已经补到基础操作流里。
+
+已完成内容：
+
+- 总览任务表新增 `今日领取` 列。
+- 每个任务可以直接看到今天谁领取、领取状态是什么。
+- 总览任务表每行提供 `领取` 快捷按钮。
+- `分工领取` 页面顶部新增固定领取栏：
+  - 选择领取人
+  - 选择任务
+  - 填写今日计划说明
+  - 确认领取
+- 领取、完成、取消后会刷新总览任务表和分工页。
+
+相关接口：
+
+```text
+GET /api/assignments
+POST /api/assignments
+PATCH /api/assignments/:id
+DELETE /api/assignments/:id
+```
+
+分工领取的目标不是简单记录“谁拿了什么”，而是作为晚会对账的输入。晚会报告会对照昨日领取、今日 GitHub commit 和 AI Review 风险，判断任务是否真的推进。
+
+### 6. 开发阶段对照清单
+
+这是当前最关键的新增能力。此前任务分工主要依据任务列表和晚会规则，现在新增了一个阶段目标对照层，避免“任务在流动，但不知道是否对准当前阶段目标”。
+
+接口：
+
+```text
+GET /api/stage/checklist
+```
+
+当前默认阶段：
+
+```text
+CUE 项目中枢 MVP
+目标日期：2026-05-15
+```
+
+当前默认阶段清单包含 5 个目标项：
+
+1. 真实仓库信号接入
+2. AI Review 阻断规则闭环
+3. 站会与任务领取闭环
+4. 阶段目标拆解与调整
+5. 企业微信项目指挥入口
+
+每个目标项会自动对照：
+
+- 关联任务
+- 负责人
+- 任务状态和进度
+- Cue.AI Git commit 证据
 - AI Review 结论
-- 缺口项，例如缺少关联任务、缺少 Git 证据、晚会未领取、存在阻断 Review
+- 今日/昨日任务领取
+- 缺口项
 
-晚会分工应优先围绕这个清单里的 `阻塞`、`高风险`、`待补证据` 项展开，而不是只看当前任务列表。
+缺口项包括：
 
-## 当前 MVP 能力
+- 缺少关联任务
+- 缺少 Git 提交证据
+- 晚会未领取或未登记
+- 存在阻断 Review
 
-- AI 阶段目标拆解
-- 任务看板：负责人、截止时间、进度、Git 信号、风险等级
-- Cue.AI 内部项目接入
-- 本地 Git 仓库扫描
-- 最近 commit 和未提交文件追踪
-- AI 代码审阅队列
-- 团队负载与响应状态看板
-- 自动提醒规则
-- 本地 Node API
-- JSON 文件持久化
-- GitHub webhook 接收器
-- 规则型 AI Review 与风险引擎
+对照清单输出状态：
+
+- `已完成`
+- `推进中`
+- `高风险`
+- `阻塞`
+- `待补证据`
+
+前端总览页的“当前阶段”模块下已经展示这份清单。之后晚会分工应该优先围绕清单里的 `阻塞`、`高风险`、`待补证据` 项展开，而不是只看当前任务列表。
+
+### 7. 晚会闭环
+
+项目中枢已经具备晚会前后闭环的基础能力。
+
+会前：
+
+- 同步 Cue.AI GitHub commit
+- 扫描 AI Review 风险
+- 对照前一天任务领取和今日 commit
+- 生成会前报告
+- 生成下一步细化目标
+
+会中：
+
+- 成员领取任务
+- 登记今日计划
+- 登记阻塞项
+- 记录站会信息
+
+会后：
+
+- 生成会后总结
+- 更新任务进度
+- 更新阶段进度
+- 输出计划调整建议
+- 可推送企业微信
+
+核心入口：
+
+```text
+POST /api/reports/evening
+GET /api/reports/evening
+GET /api/reports/compare
+POST /api/meeting/summary
+GET /api/plan-adjustments
+```
+
+调度器会在晚会前自动生成作战包。默认晚会时间为 18:00，系统会在 17:45 自动触发。
+
+相关环境变量：
+
+```env
+MEETING_HOUR=18
+```
+
+### 8. 数据持久化和迁移
+
+项目中枢使用 JSON 文件持久化：
+
+```text
+server/data/db.json
+```
+
+该文件不提交到 Git，生产运行时会持续写入。初始数据来自：
+
+```text
+server/data/seed.json
+```
+
+`server/store.js` 负责：
+
+- 读取 seed/db
+- in-memory cache
+- 全量保存
+- 结构迁移
+- 旧数据修正
+
+目前已经加入的迁移包括：
+
+- 补齐 `projects`
+- 补齐 `assignments`
+- 补齐 `standups`
+- 补齐 `eveningReports`
+- 补齐 `reports`
+- 补齐 `planAdjustments`
+- 补齐 `currentStage`
+- 补齐 `currentStage.checklist`
+- 旧 repo 名统一归并到 `CUEAITECH/Cue.AI`
+- 删除旧 seed demo review
+- 删除 activity diff，避免 db.json 过大
+
+## 当前 MVP 能力总览
+
+当前已经具备的能力：
+
+- Cue.AI 真实仓库接入
+- GitHub 远端自动同步
+- GitHub 作者映射到中文成员
+- AI Review 队列
+- Claude 优先、规则引擎兜底
+- 风险扫描
+- 任务看板
+- 分工领取
+- 异步站会
+- 会前报告
+- 会后总结
+- 日报
+- 晚报
+- 昨日任务领取 vs 今日 commit 对照
+- 阶段开发目标对照清单
+- 企业微信只读查询插件
+- 企业微信 Markdown 推送基础能力
+- API Key 写接口鉴权
+- Nginx + HTTPS 部署
+- PM2 后台运行
+- JSON 持久化和自动迁移
+
+当前仍需继续完善的能力：
+
+- 企业微信写接口工具配置，例如领取任务、提交站会、更新进度。
+- 阶段清单从 Cue.AI 仓库文档自动提取，而不是只使用默认清单。
+- AI 自动把 commit 更准确地关联到阶段目标和任务。
+- 阶段目标清单可在前端编辑。
+- 风险项能一键转成晚会分工。
+- 企业微信用户 userid 与团队成员映射。
+- GitHub Webhook 签名生产化配置。
+- 更细粒度权限和审计日志。
 
 ## 本地运行
+
+要求：
+
+```text
+Node.js >= 18
+```
+
+安装依赖：
+
+```bash
+npm install
+```
+
+启动：
 
 ```bash
 npm run dev
 ```
 
-打开：
+默认访问：
 
 ```text
 http://127.0.0.1:4317
 ```
 
-当前版本不需要安装第三方依赖，只使用 Node.js 内置模块。
-
-## API
-
-- `GET /api/state`：读取完整项目中枢状态
-- `GET /api/projects`：读取已配置项目
-- `POST /api/projects/:id/sync-local-git`：同步本地 Git 仓库
-- `GET /api/tasks`：读取任务
-- `POST /api/tasks`：创建任务
-- `PATCH /api/tasks/:id`：更新任务
-- `POST /api/plans`：根据阶段目标生成任务
-- `POST /api/plans/apply`：把生成的任务应用到任务板
-- `POST /api/reviews`：对提交标题、diff、文件列表运行 AI Review
-- `POST /api/risks/scan`：扫描任务和审阅风险
-- `POST /api/webhooks/github`：接收 GitHub webhook 事件
-
-## Cue.AI 内部试点
-
-默认接入项目：
-
-```text
-Cue.AI -> CUEAITECH/Cue.AI
-```
-
-点击页面中的 `同步 GitHub 远端` 后，系统会：
-
-- 读取当前分支
-- 通过 GitHub API 读取最近 commit
-- 将已知 Git 作者映射到团队成员
-- 为同步到的 commit 生成 AI Review
-- 刷新项目健康度、风险队列和活动流
-
-## GitHub Webhook
-
-Webhook 地址：
-
-```text
-http://your-host/api/webhooks/github
-```
-
-建议启用事件：
-
-- `push`
-- `pull_request`
-- `pull_request_review`
-
-可选签名校验：
+语法检查：
 
 ```bash
-GITHUB_WEBHOOK_SECRET=your_secret npm run dev
+npm run check
 ```
 
-## AI 规则引擎
+## 生产部署
 
-当前版本先使用确定性规则，保证不依赖 API Key 也能运行：
+当前生产部署方式：
 
-- 排期引擎：根据阶段目标关键词生成任务、负责人、截止时间、依赖和验收标准。
-- 审阅引擎：检测 token、密钥、认证、支付、权限、调试语句、TODO、大 PR、缺少测试、缺少任务关联。
-- 风险引擎：检测任务延期、临近截止低进度、24 小时无更新、无 Git 关联、阻断级 AI Review。
-- Cue.AI 同步：通过 GitHub API 扫描 `CUEAITECH/Cue.AI` 仓库，导入最近 commit 和 AI Review 结果。
+- 阿里云 ECS
+- Node.js
+- PM2
+- Nginx
+- Let's Encrypt HTTPS
+- 域名：`hub.cueai.top`
 
-下一步会把真实 LLM Provider 接入这些引擎，同时保留规则引擎作为兜底。
+服务目录：
+
+```text
+/opt/CUE-Project-Hub
+```
+
+更新生产代码：
+
+```bash
+cd /opt/CUE-Project-Hub
+git pull --ff-only origin main
+npm run check
+pm2 restart cue-project-hub --update-env
+```
+
+检查服务：
+
+```bash
+pm2 status
+pm2 logs cue-project-hub --lines 120 --nostream
+curl -i http://127.0.0.1:3000/api/health
+curl -i https://hub.cueai.top/api/health
+```
+
+当前 Nginx 反代应指向：
+
+```text
+http://127.0.0.1:3000
+```
+
+PM2 启动后日志里应看到：
+
+```text
+地址：http://127.0.0.1:3000
+Hub：https://hub.cueai.top
+GITHUB_AUTO_SYNC   ✅ 每 10 分钟同步一次
+```
+
+## 环境变量
+
+参考 `.env.example`。
+
+核心配置：
+
+```env
+PORT=3000
+HOST=127.0.0.1
+
+ANTHROPIC_API_KEY=
+ANTHROPIC_BASE_URL=
+
+GITHUB_TOKEN=
+GITHUB_SYNC_INTERVAL_MINUTES=10
+GITHUB_SYNC_LIMIT=20
+GITHUB_SYNC_DIFF_LIMIT=5
+
+CUE_API_KEY=
+WECOM_WEBHOOK_URL=
+HUB_URL=https://hub.cueai.top
+MEETING_HOUR=18
+```
+
+说明：
+
+- `PORT` / `HOST`：生产环境应与 Nginx upstream 保持一致。
+- `ANTHROPIC_API_KEY`：启用 Claude。
+- `ANTHROPIC_BASE_URL`：第三方代理地址，可留空。
+- `GITHUB_TOKEN`：访问组织私有仓库或提升 GitHub API 限额。
+- `CUE_API_KEY`：写接口鉴权。配置后所有 `POST/PATCH/DELETE /api/*` 需要请求头 `X-CUE-API-Key`。
+- `WECOM_WEBHOOK_URL`：企业微信群机器人 Webhook。用于主动推送。
+- `HUB_URL`：企微消息中的链接地址。
+- `MEETING_HOUR`：晚会时间，默认 18。
+
+## API 总览
+
+### 状态查询
+
+```text
+GET /api/health
+GET /api/config
+GET /api/state
+GET /api/stage/checklist
+GET /api/openapi.json
+```
+
+### 项目和 GitHub 同步
+
+```text
+GET /api/projects
+PATCH /api/projects/:id
+POST /api/projects/:id/sync-github
+POST /api/projects/:id/sync-local-git
+```
+
+当前主项目 ID：
+
+```text
+cue_ai_classroom
+```
+
+虽然 ID 仍保留历史命名，但它现在代表的是：
+
+```text
+CUEAITECH/Cue.AI
+```
+
+### 任务
+
+```text
+GET /api/tasks
+POST /api/tasks
+PATCH /api/tasks/:id
+DELETE /api/tasks/:id
+```
+
+### AI 排期
+
+```text
+POST /api/plans
+POST /api/plans/apply
+GET /api/plan-adjustments
+```
+
+### AI Review
+
+```text
+POST /api/reviews
+```
+
+### 风险
+
+```text
+POST /api/risks/scan
+```
+
+### 站会
+
+```text
+GET /api/standups
+POST /api/standups
+POST /api/standups/summarize
+```
+
+### 分工领取
+
+```text
+GET /api/assignments
+POST /api/assignments
+PATCH /api/assignments/:id
+DELETE /api/assignments/:id
+```
+
+### 报告和晚会
+
+```text
+POST /api/reports/daily
+GET /api/reports/evening
+POST /api/reports/evening
+GET /api/reports/compare
+POST /api/meeting/summary
+```
+
+### 企业微信
+
+```text
+GET /api/wecom/summary
+GET /api/wecom/risks
+POST /api/wecom/push
+```
+
+### GitHub Webhook
+
+```text
+POST /api/webhooks/github
+```
+
+## 企业微信配置记录
+
+企业微信 API 插件配置：
+
+- 插件名称：`CUE 项目中枢`
+- 插件 URL：`https://hub.cueai.top`
+- 请求头：只读工具可留空
+- 授权方式：只读工具可不启用
+
+已建议配置的只读工具：
+
+```text
+getWeComProjectSummary -> GET /api/wecom/summary -> 输出 summary:String
+getWeComRiskSummary    -> GET /api/wecom/risks   -> 输出 summary:String
+```
+
+企业微信能返回的内容包括：
+
+- 当前项目状态
+- 当前健康度
+- 当前阶段进展
+- 当前重点任务
+- 今日风险
+- 晚会优先处理事项
+- 最近提交
+- AI Review 阻断信息
+
+后续要继续配置的写入工具：
+
+```text
+claimTask      -> POST /api/assignments
+submitStandup  -> POST /api/standups
+scanRisks      -> POST /api/risks/scan
+generateReport -> POST /api/reports/daily
+```
+
+写接口需要请求头：
+
+```text
+X-CUE-API-Key: <CUE_API_KEY>
+```
 
 ## Cue.AI GitHub 提交原则
 
@@ -135,11 +635,30 @@ GITHUB_WEBHOOK_SECRET=your_secret npm run dev
 
 更完整的仓库规则见：
 
-[.github/CUE_AI_GITHUB_RULES.md](./.github/CUE_AI_GITHUB_RULES.md)
+```text
+.github/CUE_AI_GITHUB_RULES.md
+```
 
-## 产品拆分原则
+## 当前开发判断
 
-- `CUEAITECH/Cue.AI`：当前项目中枢默认跟踪的真实产品仓库
-- `CUEAITECH/CUE-Project-Hub`：项目中枢自身代码仓库
+目前 MVP 的关键基础链路已经成立：
 
-两个项目保持独立仓库、独立路线图和独立部署。CUE 项目中枢默认只跟踪 `Cue.AI` 产品仓库；自身仓库仅用于开发和部署项目中枢。
+```text
+Cue.AI GitHub 仓库
+  -> 自动同步
+  -> AI Review
+  -> 风险扫描
+  -> 阶段目标对照清单
+  -> 任务领取
+  -> 晚会报告
+  -> 企业微信查询
+```
+
+下一阶段开发不应该继续堆普通看板功能，而应该围绕“闭环是否真实”推进：
+
+1. 让阶段清单可配置、可编辑、可从 Cue.AI 文档自动提取。
+2. 让企业微信能直接完成领取任务、提交站会、更新进度。
+3. 让 AI 根据阶段清单自动建议今晚该分配什么任务。
+4. 让 commit/PR 更准确地关联任务和阶段目标。
+5. 让风险项一键转成晚会行动项。
+6. 加强权限、审计和数据备份。
