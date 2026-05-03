@@ -137,6 +137,34 @@ export async function parseDocsForTasks(docs) {
   }
 }
 
+function priorityRank(task) {
+  if (task.priority === 'P0') return 0;
+  if (task.priority === 'P1') return 1;
+  return 2;
+}
+
+/**
+ * 从 LLM 解析出的完整候选任务中，选出本轮适合导入任务板的少量任务。
+ * 目标是支撑每日晚会分工，而不是一次性把整个阶段 backlog 灌进 Hub。
+ * @param {Array} tasks
+ * @param {number} limit
+ * @returns {Array}
+ */
+export function selectDailyDocTasks(tasks, limit = 8) {
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 20) : 8;
+  return [...(tasks || [])]
+    .filter((task) => task.status !== 'completed')
+    .sort((a, b) => {
+      const rank = priorityRank(a) - priorityRank(b);
+      if (rank !== 0) return rank;
+      if (a.dueDate && b.dueDate) return String(a.dueDate).localeCompare(String(b.dueDate));
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return String(a.sourceDoc || '').localeCompare(String(b.sourceDoc || ''));
+    })
+    .slice(0, safeLimit);
+}
+
 /**
  * 生成阶段进度追踪 Markdown
  * @param {object} project - 项目信息

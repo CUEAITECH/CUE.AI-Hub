@@ -262,6 +262,7 @@ server/services/docsManager.js
   - 截止时间
   - 状态
 - 按 `title + sourceDoc` 去重后导入项目中枢任务板。
+- 默认只从候选任务中选择少量 P0/P1 近期可领取任务导入，避免一次性把整阶段 backlog 全部塞进任务板。
 - 将解析快照缓存到 `store.docTasks[projectId]`，用于后续进度对照。
 - 基于当前任务真实状态、今日分工领取情况和文档解析任务，生成 `docs/阶段进度追踪.md`。
 - 通过 GitHub Contents API 将 `docs/阶段进度追踪.md` 写回 `CUEAITECH/Cue.AI` 仓库。
@@ -283,9 +284,22 @@ POST /api/projects/:id/daily-scan
 
 接口含义：
 
-- `sync-docs`：读取目标仓库 `docs/`，用 Claude 解析任务，并导入 Hub 任务板。
+- `sync-docs`：读取目标仓库 `docs/`，用 Claude 解析候选任务，并默认导入少量近期可领取任务。
 - `update-docs`：把 Hub 内的任务状态、今日领取情况写回 `docs/阶段进度追踪.md`。
 - `daily-scan`：串联 GitHub commit 同步、文档任务导入、阶段进度写回，适合后续做每日自动任务。
+
+默认导入数量由环境变量控制：
+
+```env
+DOC_TASK_IMPORT_LIMIT=8
+```
+
+也可以临时通过 query 参数覆盖：
+
+```text
+POST /api/projects/cue_ai_classroom/sync-docs?limit=5
+POST /api/projects/cue_ai_classroom/daily-scan?limit=5
+```
 
 这部分解决了一个关键问题：任务分工不再只依赖 Hub 里的默认 seed 数据，而是可以从 `Cue.AI` 当前阶段文档里提取。后续晚会分工应该以“目标仓库 docs 计划 -> AI 解析任务 -> Hub 任务板 -> 成员领取 -> GitHub 证据 -> 进度写回”作为主链路。
 
@@ -518,6 +532,7 @@ GITHUB_TOKEN=
 GITHUB_SYNC_INTERVAL_MINUTES=10
 GITHUB_SYNC_LIMIT=20
 GITHUB_SYNC_DIFF_LIMIT=5
+DOC_TASK_IMPORT_LIMIT=8
 
 CUE_API_KEY=
 WECOM_WEBHOOK_URL=
@@ -531,6 +546,7 @@ MEETING_HOUR=18
 - `ANTHROPIC_API_KEY`：启用 Claude。
 - `ANTHROPIC_BASE_URL`：第三方代理地址，可留空。
 - `GITHUB_TOKEN`：访问组织私有仓库或提升 GitHub API 限额。
+- `DOC_TASK_IMPORT_LIMIT`：从 Cue.AI docs 解析出的候选任务中，每轮最多导入多少个到 Hub 任务板，默认 8，最大 20。
 - `CUE_API_KEY`：写接口鉴权。配置后所有 `POST/PATCH/DELETE /api/*` 需要请求头 `X-CUE-API-Key`。
 - `WECOM_WEBHOOK_URL`：企业微信群机器人 Webhook。用于主动推送。
 - `HUB_URL`：企微消息中的链接地址。
@@ -574,7 +590,7 @@ CUEAITECH/Cue.AI
 
 其中 `sync-docs`、`update-docs`、`daily-scan` 是 AI 产品经理链路：
 
-- `sync-docs` 从 `CUEAITECH/Cue.AI/docs` 解析任务并导入 Hub。
+- `sync-docs` 从 `CUEAITECH/Cue.AI/docs` 解析候选任务，并按优先级选取少量任务导入 Hub。
 - `update-docs` 写回 `CUEAITECH/Cue.AI/docs/阶段进度追踪.md`。
 - `daily-scan` 将 commit 同步、docs 解析、进度写回串成一次完整扫描。
 

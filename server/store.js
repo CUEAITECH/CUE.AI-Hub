@@ -109,6 +109,9 @@ function migrateStore(store) {
     });
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
+    id: String(task.id || '').startsWith('undefined_')
+      ? String(task.id).replace(/^undefined_/, 'task_')
+      : task.id,
     linkedRefs: (task.linkedRefs || []).map((ref) => (
       String(ref).startsWith('cue-project-hub#') ? String(ref).replace('cue-project-hub#', `${cueAiRepo}#`) : ref
     ))

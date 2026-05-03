@@ -43,6 +43,7 @@ import { buildOpenApiSpec } from './data/openapi.js';
 import {
   fetchProjectDocs,
   parseDocsForTasks,
+  selectDailyDocTasks,
   buildProgressMarkdown,
   writeProgressToGitHub
 } from './services/docsManager.js';
@@ -763,12 +764,14 @@ async function handleApi(req, res, url) {
 
     const parsedTasks = await parseDocsForTasks(docs);
     if (!parsedTasks.length) { sendJson(res, 200, { imported: 0, message: 'LLM 未解析出任务（无 API key 或文档无可执行任务）' }); return true; }
+    const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
+    const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
 
-    // 去重：同 title + sourceDoc 不重复导入
+    // 去重：同 title + sourceDoc 不重复导入。默认只导入少量今日可领取任务，其余作为候选保留。
     let imported = 0;
     const nextStore = await updateStore((draft) => {
       const existing = draft.tasks || [];
-      for (const t of parsedTasks) {
+      for (const t of importCandidates) {
         const dup = existing.find(
           (e) => e.title === t.title && e.sourceDoc === t.sourceDoc
         );
@@ -795,7 +798,17 @@ async function handleApi(req, res, url) {
       draft.docTasks[projectId] = parsedTasks;
       return draft;
     });
-    sendJson(res, 200, { imported, total: parsedTasks.length, tasks: nextStore.tasks.filter((t) => t.projectId === projectId) });
+    sendJson(res, 200, {
+      imported,
+      selected: importCandidates.length,
+      totalCandidates: parsedTasks.length,
+      importLimit: Math.min(Math.max(Number.isFinite(importLimit) ? Math.floor(importLimit) : 8, 1), 20),
+      message: `已从 ${parsedTasks.length} 个候选任务中选择 ${importCandidates.length} 个适合近期领取的任务导入。`,
+      importedTasks: nextStore.tasks.filter((t) => (
+        t.projectId === projectId && importCandidates.some((candidate) => candidate.title === t.title && candidate.sourceDoc === t.sourceDoc)
+      )),
+      candidates: parsedTasks
+    });
     return true;
   }
 
@@ -863,11 +876,13 @@ async function handleApi(req, res, url) {
         : { owner: project.githubOwner || '', repo: project.repository || '' };
       const docs = await fetchProjectDocs(owner, repo);
       const parsedTasks = await parseDocsForTasks(docs);
+      const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
+      const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
       let imported = 0;
-      if (parsedTasks.length) {
+      if (importCandidates.length) {
         await updateStore((draft) => {
           const existing = draft.tasks || [];
-          for (const t of parsedTasks) {
+          for (const t of importCandidates) {
             if (!existing.find((e) => e.title === t.title && e.sourceDoc === t.sourceDoc)) {
               existing.unshift({ id: createId('task'), title: t.title, owner: t.owner || '', priority: t.priority || 'P1', status: t.status || 'pending', description: t.description || '', dueDate: t.dueDate || '', sourceDoc: t.sourceDoc || '', projectId, acceptance: '', createdAt: new Date().toISOString() });
               imported++;
@@ -879,7 +894,7 @@ async function handleApi(req, res, url) {
           return draft;
         });
       }
-      result.steps.syncDocs = { ok: true, imported, total: parsedTasks.length };
+      result.steps.syncDocs = { ok: true, imported, selected: importCandidates.length, totalCandidates: parsedTasks.length };
     } catch (err) {
       result.steps.syncDocs = { ok: false, error: err.message };
     }

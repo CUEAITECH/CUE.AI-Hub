@@ -70,12 +70,13 @@ index.html              ← 8 个 section.view 对应 8 个导航页
 `server/services/docsManager.js` 实现从目标仓库 docs/ 抓取计划 → LLM 解析任务 → 写回进度文档的完整流程。
 
 三个 API 端点（均在 `/api/projects/:id/` 下）：
-- **`POST /sync-docs`** — 列举 docs/*.md（跳过：商业计划、用户场景、核心指标、技术选型、功能优先级、阶段进度追踪），LLM 解析结构化任务，去重（title+sourceDoc）后导入 hub 任务板，并将解析快照存入 `store.docTasks[projectId]`。
+- **`POST /sync-docs`** — 列举 docs/*.md（跳过：商业计划、用户场景、核心指标、技术选型、功能优先级、阶段进度追踪），LLM 解析结构化候选任务，按优先级默认选择少量近期可领取任务导入 hub 任务板，并将完整解析快照存入 `store.docTasks[projectId]`。
 - **`POST /update-docs`** — 基于 `store.docTasks[projectId]`（快照）+ hub 任务真实状态 + 今日分工，生成 `docs/阶段进度追踪.md` 并通过 GitHub PUT API 写回目标仓库。
 - **`POST /daily-scan`** — 全流程串联：sync-commits（复用 scanGitHubProject）→ sync-docs → update-docs，每步独立 try/catch 并在响应 `steps` 字段中报告各步结果。
 
 注意事项：
 - `store.docTasks` 是 `{ [projectId]: parsedTask[] }` 字典，在 `migrateStore()` 中默认为 `{}`。
+- `DOC_TASK_IMPORT_LIMIT` 控制每次从候选任务中自动导入多少个到任务板，默认 8，接口可用 `?limit=` 临时覆盖，最大 20。
 - `buildProgressMarkdown` 生成的 ✅/🔶/⬜ 状态以 hub 任务状态为准，hub 无记录时才用文档原始状态。
 - 写回 GitHub 需要 `GITHUB_TOKEN` 有 repo 写权限（classic token 选 `repo`，fine-grained 选 `Contents: write`）。
 - `PROGRESS_DOC_PATH` = `docs/阶段进度追踪.md`，固定路径。
@@ -91,6 +92,7 @@ index.html              ← 8 个 section.view 对应 8 个导航页
 | `ANTHROPIC_API_KEY` | Claude API Key，缺失时 LLM 功能降级为规则引擎 |
 | `ANTHROPIC_BASE_URL` | 第三方代理地址（可选） |
 | `GITHUB_TOKEN` | GitHub PAT，缺失时匿名限速 60次/小时 |
+| `DOC_TASK_IMPORT_LIMIT` | docs 候选任务每轮自动导入上限，默认 8，最大 20 |
 | `WECOM_WEBHOOK_URL` | 企微群机器人 Webhook URL |
 | `CUE_API_KEY` | 写接口鉴权（配置后所有 POST/PATCH/DELETE 需要请求头 `X-CUE-API-Key`） |
 | `HUB_URL` | 对外访问地址，默认 `https://hub.cueai.top`，用于企微消息中的链接 |
