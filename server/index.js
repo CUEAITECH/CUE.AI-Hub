@@ -30,6 +30,7 @@ import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhoo
 import { scanLocalGitProject } from './services/localGit.js';
 import { scanGitHubProject, hasGitHubConfig } from './services/githubApi.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
+import { buildStageChecklist } from './services/stageChecklist.js';
 import {
   isWeComAvailable,
   pushRiskAlerts,
@@ -447,8 +448,15 @@ async function handleApi(req, res, url) {
     sendJson(res, 200, {
       ...store,
       alerts,
-      metrics: buildMetrics(store, alerts)
+      metrics: buildMetrics(store, alerts),
+      stageChecklist: buildStageChecklist(store)
     });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/stage/checklist') {
+    const store = await loadStore();
+    sendJson(res, 200, buildStageChecklist(store));
     return true;
   }
 

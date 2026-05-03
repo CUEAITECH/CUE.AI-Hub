@@ -18,6 +18,7 @@ const state = {
   compareReport: '',
   assignments: [],
   planAdjustments: [],
+  stageChecklist: null,
   config: { githubEnabled: false, apiKeyRequiredForWrites: false, wecomEnabled: false, llmEnabled: false }
 };
 
@@ -141,13 +142,43 @@ function renderMetrics() {
 
 function renderStage() {
   const stage = state.currentStage || {};
-  const progress = Math.max(0, Math.min(100, Number(stage.progress) || 0));
+  const checklistStage = state.stageChecklist?.stage || {};
+  const progress = Math.max(0, Math.min(100, Number(checklistStage.progress ?? stage.progress) || 0));
   setText('#stageName', stage.name || 'CUE 项目中枢 MVP');
   setText('#stageProgressText', `${progress}%`);
   setText('#meetingStageProgress', `阶段进度 ${progress}%`);
   setText('#stageSummary', `${stage.status || '进行中'} · 目标日期 ${stage.targetDate || '待确认'} · ${stage.updatedAt ? `更新于 ${new Date(stage.updatedAt).toLocaleString('zh-CN', { hour12: false })}` : '等待晚会报告更新'}`);
   const bar = document.querySelector('#stageProgressBar');
   if (bar) bar.style.width = `${progress}%`;
+
+  const checklistEl = document.querySelector('#stageChecklist');
+  if (!checklistEl) return;
+  const checklist = state.stageChecklist?.checklist || [];
+  const metrics = state.stageChecklist?.metrics || {};
+  if (!checklist.length) {
+    checklistEl.innerHTML = '<div class="empty-state">暂无阶段对照清单。</div>';
+    return;
+  }
+  checklistEl.innerHTML = `
+    <div class="stage-checklist-head">
+      <strong>开发阶段对照清单</strong>
+      <span>${metrics.done || 0}/${metrics.total || checklist.length} 完成 · ${metrics.missingEvidence || 0} 项缺证据</span>
+    </div>
+    <div class="stage-checklist-grid">
+      ${checklist.map((item) => `
+        <article class="stage-check-item stage-check-${escapeHtml(item.status)}">
+          <div class="stage-check-top">
+            <b>${escapeHtml(item.title)}</b>
+            <span>${escapeHtml(item.status)}</span>
+          </div>
+          <p>${escapeHtml(item.acceptance)}</p>
+          <div class="stage-check-progress"><i style="width:${Number(item.progress) || 0}%"></i></div>
+          <small>负责人：${escapeHtml(item.owner || '未指定')} · 任务 ${item.linkedTasks?.length || 0} · 提交 ${item.evidence?.commits?.length || 0} · Review ${item.evidence?.reviews?.length || 0}</small>
+          ${item.gaps?.length ? `<em>${item.gaps.map(escapeHtml).join(' / ')}</em>` : '<em>证据链完整</em>'}
+        </article>
+      `).join('')}
+    </div>
+  `;
 }
 
 function renderTasks() {
@@ -636,21 +667,24 @@ async function loadState() {
   state.eveningReports = payload.eveningReports || {};
   state.currentStage = payload.currentStage || {};
   state.metrics = payload.metrics || {};
+  state.stageChecklist = payload.stageChecklist || null;
   setText('#syncStatus', '本地 API 已连接');
 
   // 并行加载站会、配置、今日分工、计划调整建议
-  const [standupPayload, config, assignPayload, adjustPayload, eveningPayload] = await Promise.all([
+  const [standupPayload, config, assignPayload, adjustPayload, eveningPayload, checklistPayload] = await Promise.all([
     api('/api/standups').catch(() => ({ standups: [] })),
     api('/api/config').catch(() => ({})),
     api('/api/assignments').catch(() => ({ assignments: [] })),
     api('/api/plan-adjustments').catch(() => ({ adjustments: [] })),
-    api('/api/reports/evening').catch(() => ({ report: null }))
+    api('/api/reports/evening').catch(() => ({ report: null })),
+    api('/api/stage/checklist').catch(() => null)
   ]);
 
   state.standups = standupPayload.standups || [];
   state.config = config;
   state.assignments = assignPayload.assignments || [];
   state.planAdjustments = adjustPayload.adjustments || [];
+  state.stageChecklist = checklistPayload || state.stageChecklist;
   if (eveningPayload.report) {
     state.eveningReports = {
       ...state.eveningReports,
@@ -1024,6 +1058,7 @@ async function syncCueAiGit(options = {}) {
   state.eveningReports = nextState.eveningReports || {};
   state.currentStage = nextState.currentStage || {};
   state.metrics = payload.metrics || nextState.metrics || {};
+  state.stageChecklist = nextState.stageChecklist || state.stageChecklist;
   renderAll();
   const srcLabel = payload.source === 'github-api' ? 'GitHub 远端' : '本地 Git';
   setText('#syncStatus', `已同步 (${srcLabel}) · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`);

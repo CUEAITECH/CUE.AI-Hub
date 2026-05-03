@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { defaultStageChecklist } from './services/stageChecklist.js';
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
@@ -122,9 +123,13 @@ function migrateStore(store) {
     targetDate: '2026-05-15',
     progress: 0,
     status: '进行中',
+    checklist: defaultStageChecklist,
     updatedAt: '',
     ...(next.currentStage || {})
   };
+  next.currentStage.checklist = Array.isArray(next.currentStage.checklist) && next.currentStage.checklist.length
+    ? next.currentStage.checklist
+    : defaultStageChecklist;
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
     acceptance: task.acceptance === 'PR diff 可输出 Pass、Warning、Block、Escalate 四级结论。'

@@ -572,6 +572,110 @@ select:focus {
   background: linear-gradient(90deg, var(--green), var(--cyan));
 }
 
+.stage-checklist {
+  margin-top: 18px;
+}
+
+.stage-checklist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.stage-checklist-head strong {
+  font-size: 14px;
+}
+
+.stage-checklist-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stage-checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stage-check-item {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.028);
+  padding: 12px;
+}
+
+.stage-check-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.stage-check-top b {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.stage-check-top span {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(77, 163, 255, 0.12);
+  color: var(--blue);
+  font-size: 11px;
+  padding: 3px 7px;
+}
+
+.stage-check-阻塞 .stage-check-top span,
+.stage-check-高风险 .stage-check-top span {
+  background: rgba(255, 92, 122, 0.12);
+  color: var(--red);
+}
+
+.stage-check-已完成 .stage-check-top span {
+  background: rgba(61, 220, 151, 0.12);
+  color: var(--green);
+}
+
+.stage-check-item p {
+  min-height: 56px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.stage-check-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 10px 0 8px;
+}
+
+.stage-check-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+}
+
+.stage-check-item small,
+.stage-check-item em {
+  display: block;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.stage-check-item em {
+  margin-top: 6px;
+  color: var(--amber);
+  font-style: normal;
+}
+
 .meeting-toolbar {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
@@ -1298,6 +1402,7 @@ select:focus {
 @media (max-width: 960px) {
   .assignment-layout { grid-template-columns: 1fr; }
   .assignment-claim-bar { grid-template-columns: 1fr; }
+  .stage-checklist-grid { grid-template-columns: 1fr; }
 }
 
 /* ── GitHub 链接 ── */

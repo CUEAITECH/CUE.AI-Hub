@@ -57,6 +57,24 @@ export function buildOpenApiSpec(serverUrl) {
         }
       },
 
+      '/api/stage/checklist': {
+        get: {
+          operationId: 'getStageChecklist',
+          summary: '获取开发阶段对照清单',
+          description: '返回当前阶段目标清单，以及每一项与任务、Git 提交、AI Review、分工领取的对照结果。用于"当前分工是否对应阶段目标"、"阶段还有哪些缺口"。',
+          responses: {
+            '200': { description: '阶段对照清单', content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                stage: { type: 'object', description: '当前阶段信息' },
+                checklist: { type: 'array', description: '阶段目标对照项' },
+                metrics: { type: 'object', description: '完成、阻塞、缺证据统计' }
+              }
+            }}}}
+          }
+        }
+      },
+
       '/api/tasks': {
         get: {
           operationId: 'listTasks',
