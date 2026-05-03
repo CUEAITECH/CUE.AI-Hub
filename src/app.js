@@ -57,7 +57,10 @@ async function api(path, options = {}) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || `Request failed: ${response.status}`);
+    const message = payload.details
+      ? `${payload.error || `Request failed: ${response.status}`}：${payload.details}`
+      : payload.error || `Request failed: ${response.status}`;
+    throw new Error(message);
   }
   return payload;
 }
@@ -155,7 +158,7 @@ function renderCueAiProject() {
   const project = state.projects.find((item) => item.id === 'cue_ai_classroom');
 
   if (!project) {
-    panel.innerHTML = '<div class="empty-state">尚未配置 Cue.AI 内部项目。</div>';
+    panel.innerHTML = '<div class="empty-state">尚未配置 Cue.AI 仓库。</div>';
     return;
   }
 
@@ -179,7 +182,7 @@ function renderCueAiProject() {
         <div><dt>状态</dt><dd>${escapeHtml(project.status || '待同步')}</dd></div>
         <div><dt>近期 commits</dt><dd>${Number(project.commitCount) || 0}</dd></div>
       </dl>
-      <small>${project.lastSyncAt ? `上次同步 ${new Date(project.lastSyncAt).toLocaleString('zh-CN', { hour12: false })}` : '还没有同步过，点击"同步 Cue.AI Git"拉取远端数据'}</small>
+      <small>${project.lastSyncAt ? `上次同步 ${new Date(project.lastSyncAt).toLocaleString('zh-CN', { hour12: false })}` : '还没有同步过，点击"同步 GitHub 远端"拉取远端数据'}</small>
     </div>
   `;
 }
@@ -191,7 +194,7 @@ function renderActivities() {
     .slice(0, 8);
 
   if (!projectActivities.length) {
-    list.innerHTML = '<div class="empty-state">点击"同步 Cue.AI Git"后，这里会展示最近 commit 和工作区改动。</div>';
+    list.innerHTML = '<div class="empty-state">点击"同步 GitHub 远端"后，这里会展示最近 commit 和工作区改动。</div>';
     return;
   }
 

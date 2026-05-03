@@ -354,9 +354,25 @@ async function handleApi(req, res, url) {
       const idx = (draft.projects || []).findIndex((p) => p.id === projectId);
       if (idx === -1) return draft;
       // 只允许更新安全字段，不允许覆盖 id
-      const allowed = ['name', 'repository', 'githubOwner', 'githubFullRepo', 'summary'];
+      const allowed = ['name', 'repository', 'githubOwner', 'githubFullRepo', 'localPath', 'summary'];
       const patch = Object.fromEntries(Object.entries(json).filter(([k]) => allowed.includes(k)));
-      draft.projects[idx] = { ...draft.projects[idx], ...patch };
+      const current = draft.projects[idx];
+      const repoChanged = ['repository', 'githubOwner', 'githubFullRepo', 'localPath']
+        .some((key) => Object.hasOwn(patch, key) && patch[key] !== current[key]);
+      const shouldResetSync = repoChanged || json.resetSync === true;
+      draft.projects[idx] = {
+        ...current,
+        ...patch,
+        ...(shouldResetSync
+          ? {
+              branch: '',
+              status: '待同步',
+              lastSyncAt: '',
+              commitCount: 0,
+              dirtyFileCount: 0
+            }
+          : {})
+      };
       return draft;
     });
     const project = (nextStore.projects || []).find((p) => p.id === projectId);
