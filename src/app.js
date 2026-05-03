@@ -18,6 +18,7 @@ const state = {
   compareReport: '',
   assignments: [],
   planAdjustments: [],
+  docTasks: {},
   stageChecklist: null,
   config: { githubEnabled: false, apiKeyRequiredForWrites: false, wecomEnabled: false, llmEnabled: false }
 };
@@ -179,6 +180,119 @@ function renderStage() {
       `).join('')}
     </div>
   `;
+}
+
+function roadmapStatusIcon(status) {
+  if (status === '已完成') return '✓';
+  if (status === '推进中') return '▶';
+  if (status === '阻塞') return '!';
+  if (status === '高风险') return '!';
+  return '•';
+}
+
+function roadmapStatusClass(status) {
+  if (status === '已完成') return 'done';
+  if (status === '推进中') return 'active';
+  if (status === '阻塞') return 'blocked';
+  if (status === '高风险') return 'risk';
+  return 'waiting';
+}
+
+function renderRoadmap() {
+  const summaryEl = document.querySelector('#roadmapSummary');
+  const laneEl = document.querySelector('#roadmapLane');
+  const detailEl = document.querySelector('#roadmapDetails');
+  if (!summaryEl || !laneEl || !detailEl) return;
+
+  const stage = state.stageChecklist?.stage || state.currentStage || {};
+  const metrics = state.stageChecklist?.metrics || {};
+  const checklist = state.stageChecklist?.checklist || [];
+  const activeTasks = (state.tasks || []).filter((task) => task.status !== '已完成');
+  const todayClaims = getTodayAssignments();
+
+  if (!checklist.length) {
+    summaryEl.innerHTML = '<div class="empty-state">暂无阶段路线。</div>';
+    laneEl.innerHTML = '';
+    detailEl.innerHTML = '';
+    return;
+  }
+
+  summaryEl.innerHTML = `
+    <article>
+      <span>当前副本</span>
+      <strong>${escapeHtml(stage.name || 'CUE 项目中枢 MVP')}</strong>
+      <small>${escapeHtml(stage.status || '进行中')} · 目标 ${escapeHtml(stage.targetDate || '待确认')}</small>
+    </article>
+    <article>
+      <span>路线进度</span>
+      <strong>${Number(stage.progress) || 0}%</strong>
+      <small>${metrics.done || 0}/${metrics.total || checklist.length} 节点完成</small>
+    </article>
+    <article>
+      <span>今日领取</span>
+      <strong>${todayClaims.length}</strong>
+      <small>${activeTasks.length} 个任务仍在推进</small>
+    </article>
+    <article>
+      <span>卡点</span>
+      <strong>${metrics.blocked || 0}</strong>
+      <small>${metrics.missingEvidence || 0} 个节点缺证据</small>
+    </article>
+  `;
+
+  laneEl.innerHTML = checklist.map((item, index) => {
+    const statusClass = roadmapStatusClass(item.status);
+    const progress = Math.max(0, Math.min(100, Number(item.progress) || 0));
+    return `
+      <article class="roadmap-node roadmap-${statusClass}">
+        <div class="roadmap-node-index">${index + 1}</div>
+        <div class="roadmap-node-body">
+          <div class="roadmap-node-top">
+            <b>${escapeHtml(item.title)}</b>
+            <span>${roadmapStatusIcon(item.status)}</span>
+          </div>
+          <p>${escapeHtml(item.acceptance || '')}</p>
+          <div class="roadmap-node-progress"><i style="width:${progress}%"></i></div>
+          <small>${escapeHtml(item.owner || '未指定')} · ${progress}% · ${escapeHtml(item.status)}</small>
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  detailEl.innerHTML = checklist.map((item) => {
+    const statusClass = roadmapStatusClass(item.status);
+    const tasks = item.linkedTasks || [];
+    const commits = item.evidence?.commits || [];
+    const reviews = item.evidence?.reviews || [];
+    const assignments = item.evidence?.assignments || [];
+    return `
+      <article class="roadmap-detail roadmap-${statusClass}">
+        <div class="roadmap-detail-head">
+          <div>
+            <span>${escapeHtml(item.status)}</span>
+            <h3>${escapeHtml(item.title)}</h3>
+          </div>
+          <b>${Number(item.progress) || 0}%</b>
+        </div>
+        <div class="roadmap-detail-section">
+          <strong>任务</strong>
+          ${tasks.length ? tasks.map((task) => `
+            <p>${escapeHtml(task.title)} <em>${escapeHtml(task.owner || '未指定')} · ${escapeHtml(task.status || '待确认')} · ${Number(task.progress) || 0}%</em></p>
+          `).join('') : '<p class="muted-line">暂无关联任务</p>'}
+        </div>
+        <div class="roadmap-detail-section">
+          <strong>证据</strong>
+          <p>Commit ${commits.length} · Review ${reviews.length} · 领取 ${assignments.length}</p>
+        </div>
+        <div class="roadmap-detail-section">
+          <strong>下一步</strong>
+          ${item.gaps?.length
+            ? item.gaps.map((gap) => `<p>${escapeHtml(gap)}</p>`).join('')
+            : '<p>证据链完整，继续推进验收。</p>'}
+        </div>
+      </article>
+    `;
+  }).join('');
 }
 
 function renderTasks() {
@@ -635,6 +749,7 @@ function renderMeeting() {
 function renderAll() {
   renderMetrics();
   renderStage();
+  renderRoadmap();
   renderCueAiProject();
   renderActivities();
   renderTasks();
@@ -667,6 +782,7 @@ async function loadState() {
   state.eveningReports = payload.eveningReports || {};
   state.currentStage = payload.currentStage || {};
   state.metrics = payload.metrics || {};
+  state.docTasks = payload.docTasks || {};
   state.stageChecklist = payload.stageChecklist || null;
   setText('#syncStatus', '本地 API 已连接');
 

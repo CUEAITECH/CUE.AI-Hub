@@ -676,6 +676,206 @@ select:focus {
   font-style: normal;
 }
 
+.roadmap-panel {
+  overflow: hidden;
+}
+
+.roadmap-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.roadmap-summary article {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 14px;
+}
+
+.roadmap-summary span,
+.roadmap-detail-head span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.roadmap-summary strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roadmap-summary small {
+  display: block;
+  margin-top: 6px;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.roadmap-lane {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(190px, 1fr));
+  gap: 16px;
+  overflow-x: auto;
+  padding: 8px 2px 14px;
+}
+
+.roadmap-lane::before {
+  content: "";
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 31px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--blue), var(--green), var(--amber));
+  opacity: 0.42;
+}
+
+.roadmap-node {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  min-width: 190px;
+}
+
+.roadmap-node-index {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 2px solid rgba(77, 163, 255, 0.55);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 800;
+}
+
+.roadmap-node-body,
+.roadmap-detail {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+.roadmap-node-top,
+.roadmap-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.roadmap-node-top b,
+.roadmap-detail-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.roadmap-node-top span {
+  display: grid;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(77, 163, 255, 0.14);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.roadmap-node p,
+.roadmap-detail-section p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.roadmap-node-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 10px 0 8px;
+}
+
+.roadmap-node-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+}
+
+.roadmap-node small {
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.roadmap-done .roadmap-node-index,
+.roadmap-done .roadmap-node-top span {
+  border-color: rgba(61, 220, 151, 0.62);
+  background: rgba(61, 220, 151, 0.14);
+  color: var(--green);
+}
+
+.roadmap-risk .roadmap-node-index,
+.roadmap-blocked .roadmap-node-index,
+.roadmap-risk .roadmap-node-top span,
+.roadmap-blocked .roadmap-node-top span {
+  border-color: rgba(255, 92, 122, 0.62);
+  background: rgba(255, 92, 122, 0.14);
+  color: var(--red);
+}
+
+.roadmap-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.roadmap-detail-head {
+  margin-bottom: 10px;
+}
+
+.roadmap-detail-head b {
+  color: var(--green);
+  font-size: 20px;
+}
+
+.roadmap-detail-section {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.roadmap-detail-section strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.roadmap-detail-section em,
+.muted-line {
+  color: var(--dim);
+  font-style: normal;
+}
+
 .meeting-toolbar {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
@@ -1403,6 +1603,10 @@ select:focus {
   .assignment-layout { grid-template-columns: 1fr; }
   .assignment-claim-bar { grid-template-columns: 1fr; }
   .stage-checklist-grid { grid-template-columns: 1fr; }
+  .roadmap-summary,
+  .roadmap-detail-grid { grid-template-columns: 1fr; }
+  .roadmap-lane { grid-template-columns: 1fr; overflow: visible; }
+  .roadmap-lane::before { display: none; }
 }
 
 /* ── GitHub 链接 ── */
