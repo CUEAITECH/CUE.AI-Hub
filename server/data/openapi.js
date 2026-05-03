@@ -217,6 +217,44 @@ export function buildOpenApiSpec(serverUrl) {
         }
       },
 
+      '/api/wecom/summary': {
+        get: {
+          operationId: 'getWeComProjectSummary',
+          summary: '获取企业微信项目摘要',
+          description: '返回一段适合企业微信机器人直接回复的项目状态摘要。用于"现在项目进展怎么样"、"晚会前先给我项目概况"。输出参数只需配置 summary 为 String。',
+          responses: {
+            '200': { description: '项目摘要', content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                summary: { type: 'string', description: '可直接回复给用户的中文项目状态摘要' },
+                alertCount: { type: 'number', description: '当前告警数量' },
+                generatedAt: { type: 'string', format: 'date-time', description: '生成时间' },
+                metrics: { type: 'object', description: '项目健康指标' }
+              }
+            }}}}
+          }
+        }
+      },
+
+      '/api/wecom/risks': {
+        get: {
+          operationId: 'getWeComRiskSummary',
+          summary: '获取企业微信风险摘要',
+          description: '返回一段适合企业微信机器人直接回复的风险摘要。用于"今天有哪些风险"、"晚会要先处理什么"。输出参数只需配置 summary 为 String。',
+          responses: {
+            '200': { description: '风险摘要', content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                summary: { type: 'string', description: '可直接回复给用户的中文风险摘要' },
+                alertCount: { type: 'number', description: '当前告警数量' },
+                generatedAt: { type: 'string', format: 'date-time', description: '生成时间' },
+                metrics: { type: 'object', description: '项目健康指标' }
+              }
+            }}}}
+          }
+        }
+      },
+
       '/api/reports/daily': {
         post: {
           operationId: 'generateDailyReport',

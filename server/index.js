@@ -127,6 +127,118 @@ function getDateParam(url) {
   return url.searchParams.get('date') || todayText();
 }
 
+function formatShanghaiTime(value) {
+  if (!value) return '暂无';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date);
+}
+
+function formatList(items, formatter, emptyText, limit = 3) {
+  const picked = (items || []).slice(0, limit);
+  if (!picked.length) return emptyText;
+  return picked.map((item, index) => `${index + 1}. ${formatter(item)}`).join('\n');
+}
+
+function buildWeComProjectSummary(store, alerts) {
+  const metrics = buildMetrics(store, alerts);
+  const projects = store.projects || [];
+  const project = projects[0] || {};
+  const activeTasks = (store.tasks || [])
+    .filter((task) => task.status !== '已完成')
+    .sort((a, b) => (b.risk === '高') - (a.risk === '高') || (a.progress || 0) - (b.progress || 0));
+  const p1Alerts = alerts.filter((alert) => alert.severity === 'P1');
+  const recentActivities = (store.activities || []).filter((activity) => activity.type === 'commit');
+  const blockingReviews = (store.reviews || []).filter((review) => review.level === 'Block');
+
+  const projectLine = project.githubFullRepo || project.repository
+    ? `${project.name || project.repository}（${project.githubFullRepo || project.repository}）`
+    : '尚未配置真实仓库';
+
+  const lines = [
+    `项目状态：${projectLine}`,
+    `同步状态：${project.status || '待同步'}；分支：${project.branch || '未记录'}；最近同步：${formatShanghaiTime(project.lastSyncAt)}`,
+    `健康度：${metrics.healthScore} 分；高风险任务：${metrics.highRiskTasks} 个；P1 告警：${metrics.urgentAlerts} 个；待审阅：${metrics.pendingReviews} 条；今日提交：${metrics.commitsToday} 次；站会响应率：${metrics.standupResponseRate}`,
+    '',
+    '当前重点任务：',
+    formatList(
+      activeTasks,
+      (task) => `${task.owner || '未分配'}「${task.title}」${task.progress ?? 0}% / ${task.status || '待确认'} / 风险${task.risk || '未标注'} / 截止 ${task.due || '未定'}`,
+      '暂无未完成任务。',
+      5
+    ),
+    '',
+    '优先处理风险：',
+    formatList(
+      p1Alerts.length ? p1Alerts : alerts.filter((alert) => alert.severity === 'P2'),
+      (alert) => `${alert.severity} ${alert.target || '未指定'}：${alert.title}。${alert.detail || ''}`,
+      '当前无 P1/P2 风险。',
+      5
+    ),
+    '',
+    '最近提交：',
+    formatList(
+      recentActivities,
+      (activity) => `${activity.owner || activity.actor || '未知'}：${activity.title || '未命名提交'}（${formatShanghaiTime(activity.createdAt)}）`,
+      '暂无 GitHub 提交记录。',
+      5
+    ),
+    '',
+    blockingReviews.length
+      ? `AI Review 阻断：${blockingReviews.slice(0, 3).map((review) => `${review.owner || '未知'}「${review.title}」`).join('；')}`
+      : 'AI Review 阻断：暂无。'
+  ];
+
+  return lines.join('\n');
+}
+
+function buildWeComRiskSummary(store, alerts) {
+  const metrics = buildMetrics(store, alerts);
+  const counts = ['P1', 'P2', 'P3'].map((level) => `${level} ${alerts.filter((alert) => alert.severity === level).length}`).join(' / ');
+  const highRiskTasks = (store.tasks || []).filter((task) => task.risk === '高' || task.status === '高风险');
+  const staleTasks = alerts.filter((alert) => alert.id?.includes('idle'));
+  const noGitTasks = alerts.filter((alert) => alert.id?.includes('no_git'));
+
+  const lines = [
+    `风险摘要：${counts}；项目健康度 ${metrics.healthScore} 分。`,
+    '',
+    '最高优先级告警：',
+    formatList(
+      alerts.filter((alert) => alert.severity === 'P1'),
+      (alert) => `${alert.target || '未指定'}：${alert.title}。${alert.detail || ''}`,
+      '当前无 P1 告警。',
+      5
+    ),
+    '',
+    '高风险任务：',
+    formatList(
+      highRiskTasks,
+      (task) => `${task.owner || '未分配'}「${task.title}」${task.progress ?? 0}% / ${task.status || '待确认'} / 截止 ${task.due || '未定'}`,
+      '当前无高风险任务。',
+      5
+    ),
+    '',
+    '需要晚会确认：',
+    formatList(
+      [...staleTasks, ...noGitTasks],
+      (alert) => `${alert.target || '未指定'}：${alert.title}`,
+      '暂无需要晚会确认的停滞或无 Git 信号任务。',
+      5
+    ),
+    '',
+    '建议动作：晚会先处理 P1 阻断，再让无 Git 信号任务补关联 commit/PR，最后把超过 24 小时无更新的任务拆分、转派或重新领取。'
+  ];
+
+  return lines.join('\n');
+}
+
 // ─── 晚报生成（供 API 端点和调度器共用）───────────────────────────────────────
 const EVENING_SYSTEM_PROMPT = `你是 CUE Project Hub 的晚报 AI，专为技术负责人生成每日研发晚报。
 晚报结构（Markdown 格式）：
@@ -923,6 +1035,32 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     if (!content) { sendError(res, 400, '缺少 content 字段'); return true; }
     const ok = await sendWeComMarkdown(content);
     sendJson(res, 200, { sent: ok });
+    return true;
+  }
+
+  // GET /api/wecom/summary — 企业微信 API 插件友好的项目摘要
+  if (req.method === 'GET' && url.pathname === '/api/wecom/summary') {
+    const store = await loadStore();
+    const alerts = scanRisks(store);
+    sendJson(res, 200, {
+      summary: buildWeComProjectSummary(store, alerts),
+      metrics: buildMetrics(store, alerts),
+      alertCount: alerts.length,
+      generatedAt: new Date().toISOString()
+    });
+    return true;
+  }
+
+  // GET /api/wecom/risks — 企业微信 API 插件友好的风险摘要
+  if (req.method === 'GET' && url.pathname === '/api/wecom/risks') {
+    const store = await loadStore();
+    const alerts = scanRisks(store);
+    sendJson(res, 200, {
+      summary: buildWeComRiskSummary(store, alerts),
+      metrics: buildMetrics(store, alerts),
+      alertCount: alerts.length,
+      generatedAt: new Date().toISOString()
+    });
     return true;
   }
 
