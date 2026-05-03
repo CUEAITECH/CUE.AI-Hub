@@ -18,7 +18,7 @@ const state = {
   compareReport: '',
   assignments: [],
   planAdjustments: [],
-  config: { wecomEnabled: false, llmEnabled: false }
+  config: { githubEnabled: false, apiKeyRequiredForWrites: false, wecomEnabled: false, llmEnabled: false }
 };
 
 const fallbackRules = [
@@ -50,12 +50,29 @@ function mdToHtml(text) {
 }
 
 async function api(path, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase();
+  const needsApiKey = state.config?.apiKeyRequiredForWrites
+    && ['POST', 'PATCH', 'DELETE'].includes(method);
+  const headers = { 'content-type': 'application/json', ...(options.headers || {}) };
+
+  if (needsApiKey && !headers['X-CUE-API-Key']) {
+    const storedKey = localStorage.getItem('cueApiKey') || '';
+    const apiKey = storedKey || window.prompt('请输入 CUE API Key，用于执行写入或触发动作。') || '';
+    if (apiKey) {
+      localStorage.setItem('cueApiKey', apiKey);
+      headers['X-CUE-API-Key'] = apiKey;
+    }
+  }
+
   const response = await fetch(path, {
-    headers: { 'content-type': 'application/json', ...(options.headers || {}) },
+    headers,
     ...options
   });
 
   const payload = await response.json().catch(() => ({}));
+  if (response.status === 401 && payload.error === 'invalid api key' && needsApiKey) {
+    localStorage.removeItem('cueApiKey');
+  }
   if (!response.ok) {
     const message = payload.details
       ? `${payload.error || `Request failed: ${response.status}`}：${payload.details}`

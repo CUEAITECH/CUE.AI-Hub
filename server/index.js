@@ -45,6 +45,7 @@ const rootDir = dirname(__dirname);
 const port = Number(process.env.PORT || 4317);
 const host = process.env.HOST || '127.0.0.1';
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
+const cueApiKey = process.env.CUE_API_KEY || '';
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -65,6 +66,20 @@ function sendJson(res, status, data) {
 
 function sendError(res, status, message, details = undefined) {
   sendJson(res, status, { error: message, details });
+}
+
+function hasValidApiKey(req) {
+  if (!cueApiKey) return true;
+  const provided = req.headers['x-cue-api-key'];
+  return typeof provided === 'string' && provided === cueApiKey;
+}
+
+function requiresApiKey(req, url) {
+  if (!cueApiKey) return false;
+  if (!url.pathname.startsWith('/api/')) return false;
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return false;
+  if (url.pathname === '/api/webhooks/github') return false;
+  return true;
 }
 
 async function readBody(req) {
@@ -906,6 +921,7 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
   if (req.method === 'GET' && url.pathname === '/api/config') {
     sendJson(res, 200, {
       githubEnabled: Boolean(process.env.GITHUB_TOKEN),
+      apiKeyRequiredForWrites: Boolean(cueApiKey),
       wecomEnabled: isWeComAvailable(),
       llmEnabled: Boolean(process.env.ANTHROPIC_API_KEY)
     });
@@ -1092,6 +1108,11 @@ const server = createServer(async (req, res) => {
 
   try {
     if (url.pathname.startsWith('/api/')) {
+      if (requiresApiKey(req, url) && !hasValidApiKey(req)) {
+        sendError(res, 401, 'invalid api key', '写入或触发动作的 API 需要请求头 X-CUE-API-Key。');
+        return;
+      }
+
       const handled = await handleApi(req, res, url);
       if (!handled) sendError(res, 404, 'api route not found');
       return;
