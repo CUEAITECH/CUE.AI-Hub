@@ -56,6 +56,10 @@ const cueApiKey = process.env.CUE_API_KEY || '';
 const hubUrl = process.env.HUB_URL || 'https://hub.cueai.top';
 // MEETING_HOUR：每日晚会时间（默认 18），作战包在 15 分钟前自动推送
 const meetingHour = Number(process.env.MEETING_HOUR || 18);
+// GITHUB_SYNC_INTERVAL_MINUTES：自动同步 GitHub 的间隔，设为 0 可关闭
+const githubSyncIntervalMinutes = Math.max(0, Number(process.env.GITHUB_SYNC_INTERVAL_MINUTES || 10));
+const githubSyncLimit = Math.max(1, Number(process.env.GITHUB_SYNC_LIMIT || 20));
+const githubSyncDiffLimit = Math.max(0, Number(process.env.GITHUB_SYNC_DIFF_LIMIT || 5));
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -342,6 +346,95 @@ async function generatePlanAdjustment(activities, store) {
   return text;
 }
 
+async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
+  if (!hasGitHubConfig(project)) {
+    throw new Error(`项目未配置 githubOwner，请先设置 githubOwner 和 repository`);
+  }
+
+  const scan = await scanGitHubProject(project, {
+    since: scanOptions.since || '14 days ago',
+    limit: Number(scanOptions.limit || 15),
+    diffLimit: Number(scanOptions.diffLimit ?? 8)
+  });
+  const beforeStore = await loadStore();
+  const existingActivityIds = new Set((beforeStore.activities || []).map((activity) => activity.id));
+  const existingReviewIds = new Set((beforeStore.reviews || []).map((review) => review.id));
+  const reviewCandidates = scan.activities.filter((activity) => (
+    activity.type === 'commit' && !existingReviewIds.has(`review_${activity.sha}`)
+  ));
+  const commitReviews = await Promise.all(
+    reviewCandidates.map(async (activity) => ({
+      id: `review_${activity.sha}`,
+      projectId: project.id,
+      activityId: activity.id,
+      ...await reviewChange({
+        repo: activity.repo,
+        title: activity.title,
+        owner: activity.owner,
+        diff: activity.diff || activity.files.join('\n'),
+        files: activity.files
+      })
+    }))
+  );
+  const lightweightActivities = scan.activities.map(({ diff, ...activity }) => activity);
+  let addedActivityCount = 0;
+  let addedReviewCount = 0;
+
+  const nextStore = await updateStore((draft) => {
+    draft.projects = (draft.projects || []).map((item) =>
+      item.id === project.id
+        ? {
+            ...item,
+            branch: scan.branch,
+            status: '已同步 (GitHub)',
+            lastSyncAt: new Date().toISOString(),
+            commitCount: scan.commitCount,
+            dirtyFileCount: 0
+          }
+        : item
+    );
+    const retainedActivities = (draft.activities || []).filter((activity) => activity.projectId !== project.id);
+    const mergedActivityIds = new Set();
+    const projectActivities = lightweightActivities.filter((activity) => {
+      if (mergedActivityIds.has(activity.id)) return false;
+      mergedActivityIds.add(activity.id);
+      return true;
+    });
+    const newReviews = commitReviews.filter((review) => !existingReviewIds.has(review.id));
+    addedActivityCount = projectActivities.filter((activity) => !existingActivityIds.has(activity.id)).length;
+    addedReviewCount = newReviews.length;
+    draft.activities = [...projectActivities, ...retainedActivities].slice(0, 700);
+    draft.reviews = [...newReviews, ...(draft.reviews || [])].slice(0, 300);
+    return draft;
+  });
+
+  const alerts = scanRisks(nextStore);
+  return {
+    project: nextStore.projects.find((item) => item.id === project.id),
+    source: 'github-api',
+    addedActivities: addedActivityCount,
+    addedReviews: addedReviewCount,
+    activities: lightweightActivities,
+    reviews: commitReviews,
+    metrics: buildMetrics(nextStore, alerts),
+    alerts
+  };
+}
+
+function githubSyncErrorHint(project, err) {
+  const msg = err.message || '';
+  const is404 = msg.includes('404');
+  const is403 = msg.includes('403') || msg.includes('速率限制');
+  const hasToken = Boolean(process.env.GITHUB_TOKEN);
+  if (is404) {
+    return hasToken
+      ? `已配置 GITHUB_TOKEN，但无法访问仓库 "${project.githubFullRepo}"。请确认 token 的 Resource owner 是组织、已选择该仓库，并完成组织 SSO/审批授权。`
+      : `仓库 "${project.githubFullRepo}" 不存在或为私有仓库。私有仓库需要在 .env 中配置 GITHUB_TOKEN。`;
+  }
+  if (is403) return '已触发 GitHub API 速率限制（匿名 60 次/小时）。配置 GITHUB_TOKEN 可提升至 5000 次/小时。';
+  return msg;
+}
+
 async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/health') {
     sendJson(res, 200, { ok: true, name: 'CUE Project Hub', time: new Date().toISOString() });
@@ -543,76 +636,17 @@ async function handleApi(req, res, url) {
       return true;
     }
 
-    let scan;
     try {
-      scan = await scanGitHubProject(project, {
+      const result = await syncGitHubProjectIntoStore(project, {
         since: url.searchParams.get('since') || '14 days ago',
         limit: Number(url.searchParams.get('limit') || 15)
       });
+      sendJson(res, 200, result);
+      return true;
     } catch (err) {
-      const msg = err.message || '';
-      const is404 = msg.includes('404');
-      const is403 = msg.includes('403') || msg.includes('速率限制');
-      const hasToken = Boolean(process.env.GITHUB_TOKEN);
-      const hint = is404
-        ? hasToken
-          ? `已配置 GITHUB_TOKEN，但无法访问仓库 "${project.githubFullRepo}"。请确认 token 的 Resource owner 是组织、已选择该仓库，并完成组织 SSO/审批授权。`
-          : `仓库 "${project.githubFullRepo}" 不存在或为私有仓库。私有仓库需要在 .env 中配置 GITHUB_TOKEN。`
-        : is403
-        ? '已触发 GitHub API 速率限制（匿名 60 次/小时）。配置 GITHUB_TOKEN 可提升至 5000 次/小时。'
-        : msg;
-      sendError(res, 422, 'GitHub 同步失败', hint);
+      sendError(res, 422, 'GitHub 同步失败', githubSyncErrorHint(project, err));
       return true;
     }
-
-    const commitReviews = await Promise.all(
-      scan.activities.filter((a) => a.type === 'commit').map(async (activity) => ({
-        id: `review_${activity.sha}`,
-        projectId: project.id,
-        activityId: activity.id,
-        ...await reviewChange({
-          repo: activity.repo,
-          title: activity.title,
-          owner: activity.owner,
-          diff: activity.diff || activity.files.join('\n'),
-          files: activity.files
-        })
-      }))
-    );
-    const lightweightActivities = scan.activities.map(({ diff, ...a }) => a);
-    let addedActivityCount = 0;
-    let addedReviewCount = 0;
-
-    const nextStore = await updateStore((draft) => {
-      draft.projects = (draft.projects || []).map((item) =>
-        item.id === project.id
-          ? { ...item, branch: scan.branch, status: '已同步 (GitHub)', lastSyncAt: new Date().toISOString(), commitCount: scan.commitCount, dirtyFileCount: 0 }
-          : item
-      );
-      const existingActivityIds = new Set((draft.activities || []).map((a) => a.id));
-      const existingReviewIds = new Set((draft.reviews || []).map((r) => r.id));
-      const retainedActivities = (draft.activities || []).filter((a) => a.projectId !== project.id);
-      const newActivities = lightweightActivities.filter((a) => !existingActivityIds.has(a.id));
-      const newReviews = commitReviews.filter((r) => !existingReviewIds.has(r.id));
-      addedActivityCount = newActivities.length;
-      addedReviewCount = newReviews.length;
-      draft.activities = [...newActivities, ...retainedActivities].slice(0, 700);
-      draft.reviews = [...newReviews, ...(draft.reviews || [])].slice(0, 300);
-      return draft;
-    });
-
-    const alerts = scanRisks(nextStore);
-    sendJson(res, 200, {
-      project: nextStore.projects.find((item) => item.id === project.id),
-      source: 'github-api',
-      addedActivities: addedActivityCount,
-      addedReviews: addedReviewCount,
-      activities: lightweightActivities,
-      reviews: commitReviews,
-      metrics: buildMetrics(nextStore, alerts),
-      alerts
-    });
-    return true;
   }
 
   if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/sync-local-git')) {
@@ -1334,8 +1368,39 @@ const server = createServer(async (req, res) => {
 // 例如：MEETING_HOUR=18 → 每天 17:45 自动生成并推送到企微
 function startScheduler() {
   let lastEveningReportDate = '';
+  let githubSyncRunning = false;
   const prepHour = meetingHour === 0 ? 23 : meetingHour - 1; // 前一小时
   const prepMinute = 45;
+
+  async function syncGitHubProjects() {
+    if (githubSyncIntervalMinutes <= 0 || githubSyncRunning) return;
+    githubSyncRunning = true;
+    try {
+      const store = await loadStore();
+      const projects = (store.projects || []).filter((project) => hasGitHubConfig(project));
+      for (const project of projects) {
+        try {
+          const result = await syncGitHubProjectIntoStore(project, {
+            since: '7 days ago',
+            limit: githubSyncLimit,
+            diffLimit: githubSyncDiffLimit
+          });
+          if (result.addedActivities || result.addedReviews) {
+            console.log(`[Scheduler] GitHub 已同步 ${project.githubFullRepo || project.repository}：新增 ${result.addedActivities} 条提交，新增 ${result.addedReviews} 条 Review`);
+          }
+        } catch (err) {
+          console.error(`[Scheduler] GitHub 同步失败 ${project.githubFullRepo || project.repository || project.id}:`, err.message);
+        }
+      }
+    } finally {
+      githubSyncRunning = false;
+    }
+  }
+
+  if (githubSyncIntervalMinutes > 0) {
+    setTimeout(syncGitHubProjects, 15_000);
+    setInterval(syncGitHubProjects, githubSyncIntervalMinutes * 60_000);
+  }
 
   setInterval(async () => {
     // 使用 Asia/Shanghai 时区，避免服务器时区偏差
@@ -1378,5 +1443,6 @@ server.listen(port, host, () => {
     CUE_API_KEY        ${process.env.CUE_API_KEY ? '✅ 已配置（写接口鉴权）' : '⚪ 未配置（写接口对外开放）'}
     HUB_URL            ${hubUrl}
     MEETING_HOUR       ${meetingHour}:00（作战包 ${prepHour}:45 自动推送）
+    GITHUB_AUTO_SYNC   ${githubSyncIntervalMinutes > 0 ? `✅ 每 ${githubSyncIntervalMinutes} 分钟同步一次` : '⏸️ 已关闭'}
 `);
 });
