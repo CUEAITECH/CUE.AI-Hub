@@ -403,8 +403,11 @@ async function handleApi(req, res, url) {
       const msg = err.message || '';
       const is404 = msg.includes('404');
       const is403 = msg.includes('403') || msg.includes('速率限制');
+      const hasToken = Boolean(process.env.GITHUB_TOKEN);
       const hint = is404
-        ? `仓库 "${project.githubFullRepo}" 不存在或为私有仓库。私有仓库需要在 .env 中配置 GITHUB_TOKEN（Personal Access Token，权限 repo）。`
+        ? hasToken
+          ? `已配置 GITHUB_TOKEN，但无法访问仓库 "${project.githubFullRepo}"。请确认 token 的 Resource owner 是组织、已选择该仓库，并完成组织 SSO/审批授权。`
+          : `仓库 "${project.githubFullRepo}" 不存在或为私有仓库。私有仓库需要在 .env 中配置 GITHUB_TOKEN。`
         : is403
         ? '已触发 GitHub API 速率限制（匿名 60 次/小时）。配置 GITHUB_TOKEN 可提升至 5000 次/小时。'
         : msg;
@@ -902,6 +905,7 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
   // GET /api/config — 返回前端需要的功能开关（不含密钥）
   if (req.method === 'GET' && url.pathname === '/api/config') {
     sendJson(res, 200, {
+      githubEnabled: Boolean(process.env.GITHUB_TOKEN),
       wecomEnabled: isWeComAvailable(),
       llmEnabled: Boolean(process.env.ANTHROPIC_API_KEY)
     });
