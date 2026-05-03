@@ -128,6 +128,34 @@ function getTaskAssignments(taskId) {
   return getTodayAssignments().filter((assignment) => assignment.taskId === taskId);
 }
 
+function getFocusedAssignmentTasks(limit = 8) {
+  const todayAssignments = getTodayAssignments();
+  const stageTaskIds = new Set((state.stageChecklist?.checklist || [])
+    .filter((item) => ['阻塞', '高风险', '待补证据', '推进中'].includes(item.status))
+    .flatMap((item) => item.linkedTasks || [])
+    .map((task) => task.id));
+
+  return [...(state.tasks || [])]
+    .filter((task) => task.status !== '已完成')
+    .map((task) => {
+      const claimed = todayAssignments.some((assignment) => assignment.taskId === task.id);
+      const score = [
+        claimed ? 80 : 0,
+        stageTaskIds.has(task.id) ? 60 : 0,
+        task.status === '高风险' || task.risk === '高' ? 50 : 0,
+        task.risk === '中' ? 20 : 0,
+        Number(task.progress) < 60 ? 10 : 0
+      ].reduce((sum, item) => sum + item, 0);
+      return { ...task, assignmentFocusScore: score };
+    })
+    .sort((a, b) => {
+      const score = b.assignmentFocusScore - a.assignmentFocusScore;
+      if (score !== 0) return score;
+      return (a.due || '9999-12-31').localeCompare(b.due || '9999-12-31');
+    })
+    .slice(0, limit);
+}
+
 // ── 渲染函数 ─────────────────────────────────────────────────
 
 function renderMetrics() {
@@ -563,8 +591,9 @@ function renderAssignments() {
   const dateEl = document.querySelector('#assignmentDate');
   if (dateEl) dateEl.textContent = today;
   const activeTasks = state.tasks.filter((task) => task.status !== '已完成');
+  const focusedTasks = getFocusedAssignmentTasks(8);
   setOptions('#assignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
-  setOptions('#assignmentTask', activeTasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
+  setOptions('#assignmentTask', focusedTasks.length ? focusedTasks : activeTasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
 
   // 今日认领情况（按成员分组）
   const summaryEl = document.querySelector('#assignmentSummary');
@@ -612,7 +641,12 @@ function renderAssignments() {
       assignableEl.innerHTML = '<div class="empty-state">暂无进行中的任务。</div>';
     } else {
       // 统计每个任务已有哪些人认领
-      assignableEl.innerHTML = activeTasks.map((task) => {
+      assignableEl.innerHTML = `
+        <div class="assignment-focus-note">
+          <strong>今日建议领取</strong>
+          <span>从 ${activeTasks.length} 个未完成任务中筛出 ${focusedTasks.length} 个，优先展示卡点、风险和阶段路径相关任务。</span>
+        </div>
+        ${focusedTasks.map((task) => {
         const claimants = todayAssignments.filter((a) => a.taskId === task.id);
         return `
           <div class="assignable-task-row">
@@ -629,7 +663,7 @@ function renderAssignments() {
             <button class="claim-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">认领</button>
           </div>
         `;
-      }).join('');
+      }).join('')}`;
 
       assignableEl.querySelectorAll('.claim-btn').forEach((btn) => {
         btn.addEventListener('click', () =>

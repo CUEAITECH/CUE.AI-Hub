@@ -1,17 +1,17 @@
 :root {
-  --bg: #0b0f14;
-  --panel: #111821;
-  --panel-2: #141e29;
-  --line: rgba(164, 180, 202, 0.16);
-  --text: #edf2f8;
-  --muted: #91a0b2;
-  --dim: #647386;
-  --blue: #4da3ff;
-  --cyan: #35d3c7;
-  --green: #3ddc97;
-  --amber: #ffbd4a;
-  --red: #ff5c7a;
-  --shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+  --bg: #f7f7f2;
+  --panel: #ffffff;
+  --panel-2: #f2f2ec;
+  --line: rgba(18, 18, 18, 0.12);
+  --text: #101010;
+  --muted: #5f5f58;
+  --dim: #8a8a82;
+  --blue: #0f62fe;
+  --cyan: #087f6f;
+  --green: #0f7a55;
+  --amber: #9a6400;
+  --red: #b42318;
+  --shadow: none;
 }
 
 * {
@@ -21,12 +21,9 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(77, 163, 255, 0.16), transparent 30%),
-    radial-gradient(circle at 82% 10%, rgba(53, 211, 199, 0.12), transparent 32%),
-    var(--bg);
+  background: var(--bg);
   color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   letter-spacing: 0;
 }
 
@@ -49,13 +46,13 @@ button {
   position: sticky;
   top: 0;
   z-index: 10;
-  height: 72px;
+  height: 68px;
   display: flex;
   align-items: center;
   gap: 18px;
   padding: 0 28px;
   border-bottom: 1px solid var(--line);
-  background: rgba(11, 15, 20, 0.84);
+  background: rgba(247, 247, 242, 0.88);
   backdrop-filter: blur(18px);
 }
 
@@ -69,8 +66,8 @@ button {
 }
 
 .brand span {
-  font-size: 22px;
-  font-weight: 800;
+  font-size: 20px;
+  font-weight: 650;
 }
 
 .brand small {
@@ -99,8 +96,8 @@ button {
 .nav-item:hover,
 .nav-item.active {
   color: var(--text);
-  background: rgba(77, 163, 255, 0.12);
-  border-color: rgba(77, 163, 255, 0.24);
+  background: rgba(16, 16, 16, 0.06);
+  border-color: rgba(16, 16, 16, 0.08);
 }
 
 .topbar-actions {
@@ -119,15 +116,16 @@ button {
 
 .primary-action,
 .panel-head button {
-  background: linear-gradient(135deg, rgba(77, 163, 255, 0.92), rgba(53, 211, 199, 0.82));
-  color: #061019;
-  font-weight: 700;
+  border-color: #101010;
+  background: #101010;
+  color: #fff;
+  font-weight: 650;
 }
 
 main {
-  width: min(1280px, calc(100% - 48px));
+  width: min(1220px, calc(100% - 48px));
   margin: 0 auto;
-  padding: 38px 0 72px;
+  padding: 28px 0 72px;
 }
 
 .hero {
@@ -144,7 +142,7 @@ main {
 .metric-card {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)), var(--panel);
+  background: var(--panel);
   box-shadow: var(--shadow);
 }
 
@@ -155,9 +153,9 @@ main {
 .eyebrow,
 .panel-head span {
   display: inline-flex;
-  color: var(--cyan);
+  color: var(--muted);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 650;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -171,8 +169,9 @@ p {
 
 h1 {
   margin-top: 12px;
-  font-size: clamp(38px, 6vw, 68px);
-  line-height: 1;
+  font-size: clamp(38px, 6vw, 64px);
+  font-weight: 520;
+  line-height: 1.04;
 }
 
 .hero p {
@@ -200,9 +199,10 @@ h1 {
 
 .health-card strong {
   margin: 10px 0;
-  font-size: 76px;
+  font-size: 70px;
+  font-weight: 520;
   line-height: 1;
-  color: var(--green);
+  color: var(--text);
 }
 
 .health-card small,
@@ -291,7 +291,7 @@ h1 {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.028);
+  background: var(--panel);
 }
 
 .task-row-head {
@@ -334,7 +334,7 @@ h1 {
   max-width: 100%;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(53, 211, 199, 0.1);
+  background: rgba(8, 127, 111, 0.08);
   color: var(--cyan);
   font-size: 11px;
   padding: 3px 7px;
@@ -344,17 +344,17 @@ h1 {
 
 .claim-inline-btn {
   width: fit-content;
-  border: 1px solid rgba(77, 163, 255, 0.36);
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(77, 163, 255, 0.12);
-  color: var(--blue);
+  background: var(--panel-2);
+  color: var(--text);
   font-size: 12px;
   font-weight: 700;
   padding: 4px 9px;
 }
 
 .claim-inline-btn:hover {
-  background: rgba(77, 163, 255, 0.22);
+  background: rgba(16, 16, 16, 0.08);
 }
 
 .risk-badge {
@@ -366,31 +366,31 @@ h1 {
 
 .risk-低 {
   color: var(--green);
-  background: rgba(61, 220, 151, 0.12);
+  background: rgba(15, 122, 85, 0.08);
 }
 
 .risk-中 {
   color: var(--amber);
-  background: rgba(255, 189, 74, 0.12);
+  background: rgba(154, 100, 0, 0.09);
 }
 
 .risk-高 {
   color: var(--red);
-  background: rgba(255, 92, 122, 0.12);
+  background: rgba(180, 35, 24, 0.08);
 }
 
 .progress {
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(16, 16, 16, 0.08);
 }
 
 .progress i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--blue), var(--cyan));
+  background: #101010;
 }
 
 .risk-item,
@@ -404,11 +404,11 @@ h1 {
 .report-summary {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.028);
+  background: var(--panel);
 }
 
 .cue-ai-panel {
-  border-color: rgba(53, 211, 199, 0.28);
+  border-color: var(--line);
 }
 
 .cue-ai-project {
@@ -464,7 +464,7 @@ h1 {
   width: fit-content;
   border-radius: 999px;
   padding: 5px 9px;
-  background: rgba(77, 163, 255, 0.13);
+  background: rgba(16, 16, 16, 0.06);
   color: var(--blue);
   font-size: 12px;
 }
@@ -498,7 +498,7 @@ h1 {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(16, 16, 16, 0.06);
 }
 
 .risk-item p {
@@ -523,7 +523,7 @@ textarea {
   resize: vertical;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #0c131c;
+  background: var(--panel);
   color: var(--text);
   padding: 14px;
   outline: none;
@@ -535,7 +535,7 @@ select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #0c131c;
+  background: var(--panel);
   color: var(--text);
   padding: 12px 14px;
   outline: none;
@@ -544,7 +544,7 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: rgba(77, 163, 255, 0.55);
+  border-color: rgba(16, 16, 16, 0.42);
 }
 
 .stage-panel .panel-head {
@@ -553,7 +553,7 @@ select:focus {
 
 .stage-panel b,
 .meeting-toolbar strong {
-  color: var(--green);
+  color: var(--text);
   font-size: 22px;
 }
 
@@ -561,7 +561,7 @@ select:focus {
   height: 12px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(16, 16, 16, 0.08);
   margin-bottom: 10px;
 }
 
@@ -569,7 +569,7 @@ select:focus {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--green), var(--cyan));
+  background: #101010;
 }
 
 .stage-checklist {
@@ -603,7 +603,7 @@ select:focus {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.028);
+  background: var(--panel);
   padding: 12px;
 }
 
@@ -623,7 +623,7 @@ select:focus {
 .stage-check-top span {
   flex-shrink: 0;
   border-radius: 999px;
-  background: rgba(77, 163, 255, 0.12);
+  background: rgba(16, 16, 16, 0.06);
   color: var(--blue);
   font-size: 11px;
   padding: 3px 7px;
@@ -631,12 +631,12 @@ select:focus {
 
 .stage-check-阻塞 .stage-check-top span,
 .stage-check-高风险 .stage-check-top span {
-  background: rgba(255, 92, 122, 0.12);
+  background: rgba(180, 35, 24, 0.08);
   color: var(--red);
 }
 
 .stage-check-已完成 .stage-check-top span {
-  background: rgba(61, 220, 151, 0.12);
+  background: rgba(15, 122, 85, 0.08);
   color: var(--green);
 }
 
@@ -651,7 +651,7 @@ select:focus {
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(16, 16, 16, 0.08);
   margin: 10px 0 8px;
 }
 
@@ -659,7 +659,7 @@ select:focus {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--blue), var(--cyan));
+  background: #101010;
 }
 
 .stage-check-item small,
@@ -691,7 +691,7 @@ select:focus {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--panel);
   padding: 14px;
 }
 
@@ -735,8 +735,8 @@ select:focus {
   right: 22px;
   top: 31px;
   height: 2px;
-  background: linear-gradient(90deg, var(--blue), var(--green), var(--amber));
-  opacity: 0.42;
+  background: #101010;
+  opacity: 0.18;
 }
 
 .roadmap-node {
@@ -754,7 +754,7 @@ select:focus {
   width: 44px;
   height: 44px;
   place-items: center;
-  border: 2px solid rgba(77, 163, 255, 0.55);
+  border: 1px solid rgba(16, 16, 16, 0.2);
   border-radius: 50%;
   background: var(--panel);
   color: var(--text);
@@ -766,7 +766,7 @@ select:focus {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--panel);
   padding: 12px;
 }
 
@@ -793,8 +793,8 @@ select:focus {
   height: 24px;
   place-items: center;
   border-radius: 50%;
-  background: rgba(77, 163, 255, 0.14);
-  color: var(--blue);
+  background: rgba(16, 16, 16, 0.06);
+  color: var(--text);
   font-size: 12px;
   font-weight: 800;
 }
@@ -810,7 +810,7 @@ select:focus {
   height: 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(16, 16, 16, 0.08);
   margin: 10px 0 8px;
 }
 
@@ -818,7 +818,7 @@ select:focus {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--blue), var(--cyan));
+  background: #101010;
 }
 
 .roadmap-node small {
@@ -828,8 +828,8 @@ select:focus {
 
 .roadmap-done .roadmap-node-index,
 .roadmap-done .roadmap-node-top span {
-  border-color: rgba(61, 220, 151, 0.62);
-  background: rgba(61, 220, 151, 0.14);
+  border-color: rgba(15, 122, 85, 0.32);
+  background: rgba(15, 122, 85, 0.08);
   color: var(--green);
 }
 
@@ -837,8 +837,8 @@ select:focus {
 .roadmap-blocked .roadmap-node-index,
 .roadmap-risk .roadmap-node-top span,
 .roadmap-blocked .roadmap-node-top span {
-  border-color: rgba(255, 92, 122, 0.62);
-  background: rgba(255, 92, 122, 0.14);
+  border-color: rgba(180, 35, 24, 0.32);
+  background: rgba(180, 35, 24, 0.08);
   color: var(--red);
 }
 
@@ -853,7 +853,7 @@ select:focus {
 }
 
 .roadmap-detail-head b {
-  color: var(--green);
+  color: var(--text);
   font-size: 20px;
 }
 
@@ -1017,7 +1017,7 @@ select:focus {
 
 .review-pass em {
   color: var(--green);
-  background: rgba(61, 220, 151, 0.12);
+  background: rgba(15, 122, 85, 0.08);
 }
 
 .review-warning em {
@@ -1027,7 +1027,7 @@ select:focus {
 
 .review-block em {
   color: var(--red);
-  background: rgba(255, 92, 122, 0.12);
+  background: rgba(180, 35, 24, 0.08);
 }
 
 .rule-list {
@@ -1041,7 +1041,7 @@ select:focus {
 .rule-list li {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.028);
+  background: var(--panel);
   padding: 14px;
   color: var(--muted);
 }
@@ -1051,7 +1051,7 @@ select:focus {
   border-radius: 8px;
   color: var(--muted);
   padding: 16px;
-  background: rgba(255, 255, 255, 0.018);
+  background: var(--panel-2);
 }
 
 .risk-P1 b,
@@ -1061,7 +1061,7 @@ select:focus {
 }
 
 .risk-P1 b {
-  background: rgba(255, 92, 122, 0.18);
+  background: rgba(180, 35, 24, 0.08);
 }
 
 .risk-P2 b {
@@ -1069,7 +1069,7 @@ select:focus {
 }
 
 .risk-P3 b {
-  background: rgba(77, 163, 255, 0.18);
+  background: rgba(16, 16, 16, 0.06);
 }
 
 .toast {
@@ -1078,10 +1078,10 @@ select:focus {
   bottom: 22px;
   max-width: min(420px, calc(100vw - 44px));
   padding: 12px 14px;
-  border: 1px solid rgba(53, 211, 199, 0.34);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #0d1720;
-  color: var(--text);
+  background: #101010;
+  color: #fff;
   box-shadow: var(--shadow);
   opacity: 0;
   transform: translateY(12px);
@@ -1285,7 +1285,7 @@ select:focus {
 
 /* ── 企微状态标签 ── */
 .wecom-pill {
-  background: rgba(61, 220, 151, 0.15);
+  background: rgba(15, 122, 85, 0.08);
   color: var(--green);
 }
 
@@ -1458,9 +1458,9 @@ select:focus {
   gap: 12px;
   align-items: end;
   padding: 14px;
-  border: 1px solid rgba(77, 163, 255, 0.22);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(77, 163, 255, 0.055);
+  background: var(--panel-2);
 }
 
 .assignment-claim-bar label {
@@ -1475,16 +1475,16 @@ select:focus {
 
 .assignment-claim-bar button {
   min-height: 46px;
-  border: 1px solid rgba(77, 163, 255, 0.4);
+  border: 1px solid #101010;
   border-radius: 8px;
-  background: rgba(77, 163, 255, 0.18);
-  color: var(--blue);
-  font-weight: 800;
+  background: #101010;
+  color: #fff;
+  font-weight: 650;
   padding: 0 18px;
 }
 
 .assignment-claim-bar button:hover {
-  background: rgba(77, 163, 255, 0.28);
+  background: #2b2b2b;
 }
 
 .assignment-layout {
@@ -1508,6 +1508,24 @@ select:focus {
 
 /* 可认领任务行 */
 .assignable-list { display: flex; flex-direction: column; gap: 8px; }
+.assignment-focus-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 10px 12px;
+}
+.assignment-focus-note strong {
+  flex-shrink: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
 .assignable-task-row {
   display: flex;
   align-items: center;
@@ -1524,13 +1542,13 @@ select:focus {
 .assignable-task-title strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .assignable-task-meta { font-size: 12px; color: var(--dim); }
 .assignable-claimants { margin-top: 6px; font-size: 12px; color: var(--cyan); }
-.assignable-claimants span { background: rgba(53, 211, 199, 0.1); border-radius: 4px; padding: 1px 6px; margin-right: 4px; }
+.assignable-claimants span { background: rgba(8, 127, 111, 0.08); border-radius: 4px; padding: 1px 6px; margin-right: 4px; }
 .claim-btn {
   flex-shrink: 0;
-  background: rgba(77, 163, 255, 0.15);
-  border: 1px solid rgba(77, 163, 255, 0.4);
+  background: #101010;
+  border: 1px solid #101010;
   border-radius: 6px;
-  color: var(--blue);
+  color: #fff;
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
@@ -1538,7 +1556,7 @@ select:focus {
   transition: background 0.15s;
   white-space: nowrap;
 }
-.claim-btn:hover { background: rgba(77, 163, 255, 0.28); }
+.claim-btn:hover { background: #2b2b2b; }
 
 /* 认领情况 */
 .assignment-summary-wrap,
@@ -1549,7 +1567,7 @@ select:focus {
   padding: 16px;
 }
 .assign-group { margin-bottom: 12px; }
-.assign-owner { display: block; font-size: 13px; color: var(--cyan); margin-bottom: 6px; }
+.assign-owner { display: block; font-size: 13px; color: var(--text); margin-bottom: 6px; }
 .assign-item {
   display: flex;
   align-items: flex-start;
@@ -1557,7 +1575,7 @@ select:focus {
   font-size: 13px;
   padding: 6px 8px;
   border-radius: 6px;
-  background: rgba(255,255,255,0.03);
+  background: var(--panel);
   margin-bottom: 4px;
 }
 .assign-item.assign-已完成 { opacity: 0.55; }
@@ -1567,11 +1585,11 @@ select:focus {
   padding: 1px 6px;
   border-radius: 4px;
   flex-shrink: 0;
-  background: rgba(77, 163, 255, 0.12);
-  color: var(--blue);
+  background: rgba(16, 16, 16, 0.06);
+  color: var(--text);
 }
-.assign-item.assign-已完成 .assign-status-badge { background: rgba(61, 220, 151, 0.12); color: var(--green); }
-.assign-item.assign-未完成 .assign-status-badge { background: rgba(255, 92, 122, 0.12); color: var(--red); }
+.assign-item.assign-已完成 .assign-status-badge { background: rgba(15, 122, 85, 0.08); color: var(--green); }
+.assign-item.assign-未完成 .assign-status-badge { background: rgba(180, 35, 24, 0.08); color: var(--red); }
 .assign-note { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
 .assign-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .assign-done-btn, .assign-cancel-btn {
