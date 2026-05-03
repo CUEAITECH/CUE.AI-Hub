@@ -103,17 +103,7 @@ function getDateParam(url) {
 }
 
 // ─── 晚报生成（供 API 端点和调度器共用）───────────────────────────────────────
-async function generateEveningReport(date) {
-  const store = await loadStore();
-  const todayCommits = (store.activities || []).filter(
-    (a) => a.type === 'commit' && (a.date || '').slice(0, 10) === date
-  );
-  const todayAssignments = (store.assignments || []).filter((a) => a.date === date);
-  const todayReviews = (store.reviews || []).filter(
-    (r) => (r.createdAt || '').slice(0, 10) === date
-  );
-
-  const EVENING_SYSTEM = `你是 CUE Project Hub 的晚报 AI，专为技术负责人生成每日研发晚报。
+const EVENING_SYSTEM_PROMPT = `你是 CUE Project Hub 的晚报 AI，专为技术负责人生成每日研发晚报。
 晚报结构（Markdown 格式）：
 1. **今日 GitHub 提交汇总**：列出所有提交者和提交标题，统计提交总数
 2. **分工 vs 提交对照**：逐条列出今日领取的分工任务，对应是否有 commit 支撑（有 ✅/无 ⚠️）
@@ -122,63 +112,85 @@ async function generateEveningReport(date) {
 5. **明日建议**：基于今日遗留任务和风险，给出 2-3 条具体建议
 要求：语言专业、简洁，用中文，总长不超过 800 字。`;
 
-  const commitLines = todayCommits.length
-    ? todayCommits.map((c) => `- ${c.owner || c.actor || '未知'}: ${c.title} (${c.repo || ''})`).join('\n')
-    : '今日暂无 commit 记录';
+/**
+ * 生成晚报：规则引擎（对账结构）+ LLM（增强文本）+ 快照持久化 + WeCom 推送
+ * 同时被 POST /api/reports/evening 路由和 18:00 调度器调用。
+ */
+async function generateEveningReport(date) {
+  const store = await loadStore();
 
-  const assignmentLines = todayAssignments.length
-    ? todayAssignments.map((a) => {
-        const hasCommit = todayCommits.some((c) =>
-          (c.owner || c.actor || '') === a.owner
-        );
+  // 1. 快照：保存生成时刻的提交和分工，供后续对照分析使用（不受后续新 commit 影响）
+  const snapshotCommits = (store.activities || []).filter(
+    (a) => a.type === 'commit' && (a.date || '').slice(0, 10) === date
+  );
+  const snapshotAssignments = (store.assignments || []).filter((a) => a.date === date);
+  const dateReviews = (store.reviews || []).filter(
+    (r) => (r.createdAt || '').slice(0, 10) === date
+  );
+
+  // 2. 规则引擎：生成结构化晚报（对账表、nextTargets、进度更新）
+  const structuredReport = buildEveningReport(store, date);
+
+  // 3. LLM 增强文本（prompt caching 应用于 EVENING_SYSTEM_PROMPT）
+  const commitLines = snapshotCommits.length
+    ? snapshotCommits.map((c) => `- ${c.owner || c.actor || '未知'}: ${c.title} (${c.repo || ''})`).join('\n')
+    : '今日暂无 commit 记录';
+  const assignmentLines = snapshotAssignments.length
+    ? snapshotAssignments.map((a) => {
+        const hasCommit = snapshotCommits.some((c) => (c.owner || c.actor || '') === a.owner);
         return `- [${a.status}] ${a.owner} 领取「${a.taskTitle}」${a.note ? '（' + a.note + '）' : ''} → ${hasCommit ? '✅ 有提交记录' : '⚠️ 无提交记录'}`;
       }).join('\n')
     : '今日暂无分工领取记录';
-
-  const reviewLines = todayReviews.length
-    ? todayReviews.map((r) => `- [${r.level}] ${r.title}（${r.owner}）评分: ${r.score}`).join('\n')
+  const reviewLines = dateReviews.length
+    ? dateReviews.map((r) => `- [${r.level}] ${r.title}（${r.owner}）评分: ${r.score}`).join('\n')
     : '今日暂无 Review 记录';
-
-  const unfinishedLines = todayAssignments
+  const unfinishedLines = snapshotAssignments
     .filter((a) => a.status !== '已完成')
     .map((a) => `- ⚠️ ${a.owner}：「${a.taskTitle}」状态: ${a.status}`)
     .join('\n') || '无未完成领取项';
 
-  const userPrompt = `请生成 ${date} 的研发晚报。
+  const llmText = await callClaude(EVENING_SYSTEM_PROMPT, `请生成 ${date} 的研发晚报。
 
-今日 GitHub 提交（共 ${todayCommits.length} 条）：
+今日 GitHub 提交（共 ${snapshotCommits.length} 条）：
 ${commitLines}
 
-今日分工领取 vs 提交对照（共 ${todayAssignments.length} 条领取）：
+今日分工领取 vs 提交对照（共 ${snapshotAssignments.length} 条领取）：
 ${assignmentLines}
 
-今日 AI Review（共 ${todayReviews.length} 条）：
+今日 AI Review（共 ${dateReviews.length} 条）：
 ${reviewLines}
 
 未完成领取项：
-${unfinishedLines}`;
+${unfinishedLines}`);
 
-  const report = await callClaude(EVENING_SYSTEM, userPrompt) ||
-    `# ${date} 研发晚报\n\n今日提交：${todayCommits.length} 条\n分工领取：${todayAssignments.length} 条\n\n（LLM 生成失败，显示基础数据）`;
-
-  const eveningEntry = {
-    report,
-    generatedAt: new Date().toISOString(),
-    commits: todayCommits,
-    assignments: todayAssignments
+  // 4. 合并：结构化数据 + LLM 文本 + 快照字段
+  const finalEntry = {
+    ...structuredReport,
+    report: llmText || structuredReport.report,
+    commits: snapshotCommits,
+    assignments: snapshotAssignments
   };
 
-  await updateStore((draft) => {
-    draft.eveningReports = draft.eveningReports || {};
-    draft.eveningReports[date] = eveningEntry;
-    return draft;
+  // 5. 应用进度更新（更新 tasks/currentStage/planAdjustments）并保存
+  const progressedStore = applyEveningReportProgress(store, structuredReport);
+  const alerts = scanRisks(progressedStore);
+  await saveStore({
+    ...progressedStore,
+    eveningReports: {
+      ...(progressedStore.eveningReports || {}),
+      [date]: finalEntry
+    },
+    alerts
   });
 
+  // 6. 推送企业微信
   if (isWeComAvailable()) {
-    await sendWeComMarkdown(`# 🌆 ${date} 研发晚报\n\n${report}`);
+    await sendWeComMarkdown(`# 🌆 ${date} 研发晚报\n\n${finalEntry.report}`).catch((err) =>
+      console.error('[WeCom] 晚报推送失败:', err.message)
+    );
   }
 
-  return eveningEntry;
+  return finalEntry;
 }
 
 // ─── Commit 触发计划调整建议 ──────────────────────────────────────────────────
@@ -607,34 +619,29 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/reports/evening') {
     const store = await loadStore();
     const date = getDateParam(url);
-    sendJson(res, 200, {
-      date,
-      report: store.eveningReports?.[date] || null
-    });
+    const entry = (store.eveningReports || {})[date];
+    if (!entry) {
+      sendJson(res, 200, { date, report: null, error: '该日暂无晚报记录' });
+    } else {
+      sendJson(res, 200, { date, ...entry });
+    }
     return true;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/reports/evening') {
     const { json } = await readBody(req);
     const date = json?.date || todayText();
-    const baseStore = await loadStore();
-    const eveningReport = buildEveningReport(baseStore, date);
-    const progressedStore = applyEveningReportProgress(baseStore, eveningReport);
-    const alerts = scanRisks(progressedStore);
-    const nextStore = await saveStore({
-      ...progressedStore,
-      eveningReports: {
-        ...(progressedStore.eveningReports || {}),
-        [date]: eveningReport
-      },
-      alerts
-    });
+    // generateEveningReport 内部完成：规则引擎 + LLM + 快照持久化 + WeCom 推送
+    const finalEntry = await generateEveningReport(date);
+    // 重新读取已更新的 store 以返回最新 tasks/currentStage/alerts
+    const updatedStore = await loadStore();
+    const alerts = updatedStore.alerts || [];
     sendJson(res, 201, {
-      report: eveningReport,
-      tasks: nextStore.tasks,
-      currentStage: nextStore.currentStage,
+      report: finalEntry,
+      tasks: updatedStore.tasks,
+      currentStage: updatedStore.currentStage,
       alerts,
-      metrics: buildMetrics(nextStore, alerts)
+      metrics: buildMetrics(updatedStore, alerts)
     });
     return true;
   }
@@ -959,45 +966,21 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     return true;
   }
 
-  // ─── 晚报 ─────────────────────────────────────────────────────────────────────
-
-  // POST /api/reports/evening — 手动触发生成晚报
-  if (req.method === 'POST' && url.pathname === '/api/reports/evening') {
-    const today = new Date().toISOString().slice(0, 10);
-    const eveningEntry = await generateEveningReport(today);
-    sendJson(res, 200, { date: today, ...eveningEntry });
-    return true;
-  }
-
-  // GET /api/reports/evening?date=YYYY-MM-DD — 获取指定日期晚报
-  if (req.method === 'GET' && url.pathname === '/api/reports/evening') {
-    const store = await loadStore();
-    const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
-    const entry = (store.eveningReports || {})[date];
-    if (!entry) {
-      sendJson(res, 200, { date, report: null, error: '该日暂无晚报记录' });
-    } else {
-      sendJson(res, 200, { date, ...entry });
-    }
-    return true;
-  }
-
   // ─── 晚报分工 vs commits 对照总结 ─────────────────────────────────────────────
 
   // GET /api/reports/compare?date=YYYY-MM-DD
   if (req.method === 'GET' && url.pathname === '/api/reports/compare') {
     const store = await loadStore();
-    const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    const date = url.searchParams.get('date') || todayText();
     const eveningEntry = (store.eveningReports || {})[date];
     if (!eveningEntry) {
-      sendJson(res, 200, { error: '该日无晚报记录' });
+      sendJson(res, 200, { date, error: '该日无晚报记录，请先生成晚报' });
       return true;
     }
 
+    // 使用晚报快照中的分工和提交记录，而非实时数据
     const snapshotAssignments = eveningEntry.assignments || [];
-    const dateCommits = (store.activities || []).filter(
-      (a) => a.type === 'commit' && (a.date || '').slice(0, 10) === date
-    );
+    const snapshotCommits = eveningEntry.commits || [];
 
     const COMPARE_SYSTEM = `你是 CUE Project Hub 的对照分析 AI。根据当日晚报中记录的任务分工快照和实际 GitHub commit 记录，生成对照分析报告（Markdown）。
 对每个分工领取：判断是否有对应的 commit（通过提交者姓名匹配）。
@@ -1009,16 +992,16 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     const assignmentLines = snapshotAssignments.length
       ? snapshotAssignments.map((a) => `- ${a.owner} 领取「${a.taskTitle}」状态:${a.status}`).join('\n')
       : '无分工记录';
-    const commitLines = dateCommits.length
-      ? dateCommits.map((c) => `- ${c.owner || c.actor || '未知'}: ${c.title}`).join('\n')
-      : '无 commit 记录';
+    const commitLines = snapshotCommits.length
+      ? snapshotCommits.map((c) => `- ${c.owner || c.actor || '未知'}: ${c.title}`).join('\n')
+      : '无 commit 记录（晚报快照时刻）';
 
     const comparison = await callClaude(
       COMPARE_SYSTEM,
-      `${date} 晚报分工快照：\n${assignmentLines}\n\n当日实际 commits：\n${commitLines}`
-    ) || `# ${date} 对照分析\n\n分工：${snapshotAssignments.length} 条，提交：${dateCommits.length} 条\n\n（LLM 生成失败）`;
+      `${date} 晚报分工快照：\n${assignmentLines}\n\n快照时刻 commit 记录：\n${commitLines}`
+    ) || `# ${date} 对照分析\n\n分工：${snapshotAssignments.length} 条，提交：${snapshotCommits.length} 条\n\n（LLM 生成失败）`;
 
-    sendJson(res, 200, { date, comparison, assignments: snapshotAssignments, commits: dateCommits });
+    sendJson(res, 200, { date, comparison, assignments: snapshotAssignments, commits: snapshotCommits });
     return true;
   }
 
@@ -1076,12 +1059,18 @@ const server = createServer(async (req, res) => {
 function startScheduler() {
   let lastEveningReportDate = '';
   setInterval(async () => {
+    // 使用 Asia/Shanghai 时区获取当前小时和日期，避免服务器时区偏差
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-    if (now.getHours() === 18 && now.getMinutes() === 0 && lastEveningReportDate !== today) {
+    const shanghaiHour = Number(
+      new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', hour: 'numeric', hour12: false }).format(now)
+    );
+    const today = todayText(); // Asia/Shanghai 时区日期
+    if (shanghaiHour === 18 && now.getMinutes() === 0 && lastEveningReportDate !== today) {
       lastEveningReportDate = today;
       console.log('[Scheduler] 触发 18:00 晚报生成...');
-      await generateEveningReport(today);
+      await generateEveningReport(today).catch((err) =>
+        console.error('[Scheduler] 晚报生成失败:', err.message)
+      );
     }
   }, 60_000);
 }
