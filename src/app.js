@@ -977,7 +977,7 @@ async function runReview() {
   const payload = await api('/api/reviews', {
     method: 'POST',
     body: JSON.stringify({
-      repo: 'cue-project-hub',
+      repo: 'CUEAITECH/Cue.AI',
       title,
       owner: 'AI Reviewer',
       diff,

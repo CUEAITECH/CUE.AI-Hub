@@ -64,14 +64,13 @@ http://127.0.0.1:4317
 默认接入项目：
 
 ```text
-Cue.AI Classroom -> /Users/dirtortian/Documents/GitHub/OmniNexus-Edu-copilot
+Cue.AI -> CUEAITECH/Cue.AI
 ```
 
-点击页面中的 `同步 Cue.AI Git` 后，系统会：
+点击页面中的 `同步 GitHub 远端` 后，系统会：
 
 - 读取当前分支
-- 读取最近 commit
-- 检测未提交工作区文件
+- 通过 GitHub API 读取最近 commit
 - 将已知 Git 作者映射到团队成员
 - 为同步到的 commit 生成 AI Review
 - 刷新项目健康度、风险队列和活动流
@@ -103,7 +102,7 @@ GITHUB_WEBHOOK_SECRET=your_secret npm run dev
 - 排期引擎：根据阶段目标关键词生成任务、负责人、截止时间、依赖和验收标准。
 - 审阅引擎：检测 token、密钥、认证、支付、权限、调试语句、TODO、大 PR、缺少测试、缺少任务关联。
 - 风险引擎：检测任务延期、临近截止低进度、24 小时无更新、无 Git 关联、阻断级 AI Review。
-- Cue.AI 同步：扫描本地 `OmniNexus-Edu-copilot` 仓库，导入最近 commit、工作区改动和 AI Review 结果。
+- Cue.AI 同步：通过 GitHub API 扫描 `CUEAITECH/Cue.AI` 仓库，导入最近 commit 和 AI Review 结果。
 
 下一步会把真实 LLM Provider 接入这些引擎，同时保留规则引擎作为兜底。
 
@@ -128,7 +127,7 @@ GITHUB_WEBHOOK_SECRET=your_secret npm run dev
 
 ## 产品拆分原则
 
-- `OmniNexus-Edu-copilot`：CUE 课堂产品仓库
-- `CUE-Project-Hub`：CUE 项目中枢仓库
+- `CUEAITECH/Cue.AI`：当前项目中枢默认跟踪的真实产品仓库
+- `CUEAITECH/CUE-Project-Hub`：项目中枢自身代码仓库
 
-两个项目保持独立仓库、独立路线图和独立部署。CUE 项目中枢可以接入 CUE 课堂项目，但不与课堂项目共用代码仓库。
+两个项目保持独立仓库、独立路线图和独立部署。CUE 项目中枢默认只跟踪 `Cue.AI` 产品仓库；自身仓库仅用于开发和部署项目中枢。

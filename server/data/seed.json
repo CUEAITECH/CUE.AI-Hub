@@ -12,7 +12,7 @@
       "acceptance": "能够接收 push、pull_request、review 事件并写入活动日志。",
       "createdAt": "2026-05-01T09:00:00.000Z",
       "updatedAt": "2026-05-01T10:20:00.000Z",
-      "linkedRefs": ["cue-project-hub#12"]
+      "linkedRefs": ["CUEAITECH/Cue.AI#12"]
     },
     {
       "id": "task_ai_review",
@@ -95,38 +95,7 @@
       "focus": "目标确认、客户验证"
     }
   ],
-  "reviews": [
-    {
-      "id": "review_001",
-      "repo": "cue-project-hub",
-      "title": "feat: add delivery dashboard shell",
-      "score": 82,
-      "level": "Warning",
-      "owner": "罗子宽",
-      "findings": ["缺少空状态处理", "建议补充任务创建后的校验"],
-      "createdAt": "2026-05-01T10:00:00.000Z"
-    },
-    {
-      "id": "review_002",
-      "repo": "cue-project-hub-api",
-      "title": "fix: verify GitHub webhook signature",
-      "score": 91,
-      "level": "Pass",
-      "owner": "胡佳涛",
-      "findings": ["签名校验路径清晰"],
-      "createdAt": "2026-05-01T10:10:00.000Z"
-    },
-    {
-      "id": "review_003",
-      "repo": "cue-project-hub",
-      "title": "chore: update auth flow styles",
-      "score": 64,
-      "level": "Block",
-      "owner": "林世棋",
-      "findings": ["任务关联不明确", "修改范围包含无关认证逻辑", "缺少回归测试说明"],
-      "createdAt": "2026-05-01T10:15:00.000Z"
-    }
-  ],
+  "reviews": [],
   "projects": [
     {
       "id": "cue_ai_classroom",

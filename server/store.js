@@ -6,6 +6,15 @@ const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
 const seedPath = join(dataDir, 'seed.json');
 const dbPath = join(dataDir, 'db.json');
+const cueAiRepo = 'CUEAITECH/Cue.AI';
+const legacyCueAiRepoAliases = new Set([
+  'OmniNexus-Edu-copilot',
+  'OmniNexusEdu/OmniNexus-Edu-copilot',
+  'dirtortian/OmniNexus-Edu-copilot',
+  'CUEAITECH/OmniNexus-Edu-copilot'
+]);
+const legacyHubReviewRepos = new Set(['cue-project-hub', 'cue-project-hub-api', 'CUEAITECH/CUE-Project-Hub']);
+const seedDemoReviewIds = new Set(['review_001', 'review_002', 'review_003']);
 
 let cache = null;
 
@@ -88,6 +97,20 @@ function migrateStore(store) {
   });
 
   next.activities = (next.activities || []).map(({ diff, ...activity }) => activity);
+  next.reviews = (next.reviews || [])
+    .filter((review) => !(seedDemoReviewIds.has(review.id) && legacyHubReviewRepos.has(review.repo)))
+    .map((review) => {
+      if (legacyCueAiRepoAliases.has(review.repo) || legacyHubReviewRepos.has(review.repo)) {
+        return { ...review, repo: cueAiRepo };
+      }
+      return review;
+    });
+  next.tasks = (next.tasks || []).map((task) => ({
+    ...task,
+    linkedRefs: (task.linkedRefs || []).map((ref) => (
+      String(ref).startsWith('cue-project-hub#') ? String(ref).replace('cue-project-hub#', `${cueAiRepo}#`) : ref
+    ))
+  }));
   next.assignments = next.assignments || [];
   next.standups = next.standups || [];
   next.eveningReports = next.eveningReports || {};
