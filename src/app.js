@@ -855,8 +855,8 @@ async function generateEveningReport() {
 
 async function doCompareReport() {
   toast('AI 正在生成对照分析...');
-  const today = new Date().toISOString().slice(0, 10);
-  const payload = await api(`/api/reports/compare?date=${today}`);
+  const date = getMeetingDate(); // 使用晚会日期选择器的日期（Shanghai 时区）
+  const payload = await api(`/api/reports/compare?date=${date}`);
   if (payload.error) {
     state.compareReport = `> ⚠️ ${payload.error}`;
   } else {
@@ -865,6 +865,21 @@ async function doCompareReport() {
   renderCompareReport();
   setReportTab('compare');
   toast('对照分析完成');
+}
+
+// ── 会后总结 ──────────────────────────────────────────────────
+async function generateMeetingSummary() {
+  toast('正在生成晚会后总结...');
+  const date = getMeetingDate();
+  const payload = await api('/api/reports/meeting-summary', {
+    method: 'POST',
+    body: JSON.stringify({ date })
+  });
+  const wecomMsg = payload.wecomSent
+    ? '，已推送至企业微信' : state.config.wecomEnabled ? '，企微推送失败，请检查 Webhook' : '';
+  toast(`会后总结完成（${payload.assignmentCount} 条分工）${wecomMsg}`);
+  // 刷新分工显示
+  await refreshAssignments().catch(() => {});
 }
 
 // ── 日报 ──────────────────────────────────────────────────────
@@ -1160,6 +1175,12 @@ function bindEvents() {
   });
   document.querySelector('[data-action="gen-evening-report"]').addEventListener('click', () => {
     generateEveningReport().then(() => setRoute('report')).catch((e) => toast(e.message));
+  });
+  // 会后总结按钮（meeting 页和 assignment 页各有一个）
+  document.querySelectorAll('[data-action="meeting-summary"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      generateMeetingSummary().catch((e) => toast(e.message));
+    });
   });
 
   // ESC 关闭 modal

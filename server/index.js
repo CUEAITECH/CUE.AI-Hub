@@ -30,7 +30,14 @@ import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhoo
 import { scanLocalGitProject } from './services/localGit.js';
 import { scanGitHubProject, hasGitHubConfig } from './services/githubApi.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
-import { isWeComAvailable, pushRiskAlerts, pushReport, sendWeComMarkdown } from './services/wecom.js';
+import {
+  isWeComAvailable,
+  pushRiskAlerts,
+  pushReport,
+  sendWeComMarkdown,
+  buildPreMeetingWeComMsg,
+  buildMeetingSummaryWeComMsg
+} from './services/wecom.js';
 import { buildOpenApiSpec } from './data/openapi.js';
 import {
   applyEveningReportProgress,
@@ -46,6 +53,9 @@ const port = Number(process.env.PORT || 4317);
 const host = process.env.HOST || '127.0.0.1';
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
 const cueApiKey = process.env.CUE_API_KEY || '';
+const hubUrl = process.env.HUB_URL || 'https://hub.cueai.top';
+// MEETING_HOUR：每日晚会时间（默认 18），作战包在 15 分钟前自动推送
+const meetingHour = Number(process.env.MEETING_HOUR || 18);
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -198,9 +208,10 @@ ${unfinishedLines}`);
     alerts
   });
 
-  // 6. 推送企业微信
+  // 6. 推送企业微信：使用无表格的结构化格式（企微不支持 Markdown 表格）
   if (isWeComAvailable()) {
-    await sendWeComMarkdown(`# 🌆 ${date} 研发晚报\n\n${finalEntry.report}`).catch((err) =>
+    const wecomMsg = buildPreMeetingWeComMsg(finalEntry, hubUrl);
+    await sendWeComMarkdown(wecomMsg).catch((err) =>
       console.error('[WeCom] 晚报推送失败:', err.message)
     );
   }
@@ -921,7 +932,9 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
       githubEnabled: Boolean(process.env.GITHUB_TOKEN),
       apiKeyRequiredForWrites: Boolean(cueApiKey),
       wecomEnabled: isWeComAvailable(),
-      llmEnabled: Boolean(process.env.ANTHROPIC_API_KEY)
+      llmEnabled: Boolean(process.env.ANTHROPIC_API_KEY),
+      meetingHour,
+      hubUrl
     });
     return true;
   }
@@ -1053,6 +1066,86 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     return true;
   }
 
+  // ─── 晚会后总结 ───────────────────────────────────────────────────────────────
+
+  // POST /api/reports/meeting-summary — 晚会结束后手动触发，总结今日分工并推企微
+  if (req.method === 'POST' && url.pathname === '/api/reports/meeting-summary') {
+    const { json } = await readBody(req);
+    const date = json?.date || todayText();
+    const store = await loadStore();
+
+    const todayAssignments = (store.assignments || []).filter((a) => a.date === date);
+    const eveningEntry = (store.eveningReports || {})[date];
+    const nextTargets = eveningEntry?.nextTargets || [];
+
+    // LLM 生成会后总结（含分工+明日重点+待跟进，不超过 300 字，企微友好）
+    const SUMMARY_SYSTEM = `你是 CUE Project Hub 的晚会总结 AI。根据今日晚会的分工领取情况，生成简洁的会后总结。
+格式（纯 Markdown 列表，无表格，总长不超过 300 字）：
+## 今日分工
+- 成员名 → 「任务标题」
+（逐条列出，每人一行）
+## 明日重点
+（2-3 条最重要的技术目标）
+## 待跟进
+（有风险或未领取的，无则省略）
+要求：语言简洁，适合企业微信群消息。`;
+
+    const assignmentLines = todayAssignments.length
+      ? todayAssignments.map((a) => `- ${a.owner} → 「${a.taskTitle}」（${a.status}）`).join('\n')
+      : '今日暂无分工记录';
+    const targetLines = nextTargets.slice(0, 6)
+      .map((t) => `- ${t.priority} ${t.owner}：${t.taskTitle}`).join('\n') || '';
+
+    const summaryText = await callClaude(
+      SUMMARY_SYSTEM,
+      `${date} 晚会分工（共 ${todayAssignments.length} 条）：\n${assignmentLines}${
+        targetLines ? `\n\n晚报建议关注：\n${targetLines}` : ''
+      }`
+    );
+
+    // 存储会后总结
+    await updateStore((draft) => {
+      draft.reports = draft.reports || {};
+      draft.reports[date] = {
+        ...(draft.reports[date] || {}),
+        meetingSummary: summaryText || '',
+        meetingSummaryAt: new Date().toISOString()
+      };
+      return draft;
+    });
+
+    // 推送企微：使用 WeCom 格式化函数
+    let wecomSent = false;
+    if (isWeComAvailable()) {
+      const wecomMsg = buildMeetingSummaryWeComMsg(date, todayAssignments, summaryText || '', hubUrl);
+      wecomSent = await sendWeComMarkdown(wecomMsg).catch((err) => {
+        console.error('[WeCom] 会后总结推送失败:', err.message);
+        return false;
+      });
+    }
+
+    sendJson(res, 200, {
+      date,
+      summary: summaryText || '',
+      assignmentCount: todayAssignments.length,
+      wecomSent
+    });
+    return true;
+  }
+
+  // GET /api/reports/meeting-summary?date=YYYY-MM-DD — 获取指定日期会后总结
+  if (req.method === 'GET' && url.pathname === '/api/reports/meeting-summary') {
+    const store = await loadStore();
+    const date = url.searchParams.get('date') || todayText();
+    const dayReport = (store.reports || {})[date] || {};
+    sendJson(res, 200, {
+      date,
+      summary: dayReport.meetingSummary || null,
+      generatedAt: dayReport.meetingSummaryAt || null
+    });
+    return true;
+  }
+
   return false;
 }
 
@@ -1098,21 +1191,32 @@ const server = createServer(async (req, res) => {
   }
 });
 
-// ─── 每日 18:00 自动生成晚报并推送企业微信 ───────────────────────────────────
+// ─── 每日晚会前 15 分钟自动生成作战包并推送企业微信 ─────────────────────────
+// 晚会时间由 MEETING_HOUR 控制（默认 18），作战包在 MEETING_HOUR:45 推送
+// 例如：MEETING_HOUR=18 → 每天 17:45 自动生成并推送到企微
 function startScheduler() {
   let lastEveningReportDate = '';
+  const prepHour = meetingHour === 0 ? 23 : meetingHour - 1; // 前一小时
+  const prepMinute = 45;
+
   setInterval(async () => {
-    // 使用 Asia/Shanghai 时区获取当前小时和日期，避免服务器时区偏差
+    // 使用 Asia/Shanghai 时区，避免服务器时区偏差
     const now = new Date();
-    const shanghaiHour = Number(
-      new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', hour: 'numeric', hour12: false }).format(now)
-    );
-    const today = todayText(); // Asia/Shanghai 时区日期
-    if (shanghaiHour === 18 && now.getMinutes() === 0 && lastEveningReportDate !== today) {
+    const shanghaiParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Shanghai',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false
+    }).formatToParts(now);
+    const sh = Number(shanghaiParts.find((p) => p.type === 'hour')?.value ?? -1);
+    const sm = Number(shanghaiParts.find((p) => p.type === 'minute')?.value ?? -1);
+    const today = todayText();
+
+    if (sh === prepHour && sm === prepMinute && lastEveningReportDate !== today) {
       lastEveningReportDate = today;
-      console.log('[Scheduler] 触发 18:00 晚报生成...');
+      console.log(`[Scheduler] ${prepHour}:${String(prepMinute).padStart(2,'0')} 触发晚会前作战包生成...`);
       await generateEveningReport(today).catch((err) =>
-        console.error('[Scheduler] 晚报生成失败:', err.message)
+        console.error('[Scheduler] 作战包生成失败:', err.message)
       );
     }
   }, 60_000);
@@ -1121,5 +1225,20 @@ function startScheduler() {
 startScheduler();
 
 server.listen(port, host, () => {
-  console.log(`CUE Project Hub running at http://${host}:${port}`);
+  const prepHour = meetingHour === 0 ? 23 : meetingHour - 1;
+  console.log(`
+╔═══════════════════════════════════════════════╗
+║         CUE Project Hub 启动成功              ║
+╚═══════════════════════════════════════════════╝
+  地址：http://${host}:${port}
+  Hub：${hubUrl}
+
+  环境变量状态：
+    ANTHROPIC_API_KEY  ${process.env.ANTHROPIC_API_KEY ? '✅ 已配置（LLM 功能启用）' : '❌ 未配置（降级规则引擎）'}
+    GITHUB_TOKEN       ${process.env.GITHUB_TOKEN ? '✅ 已配置（GitHub API 同步）' : '❌ 未配置（限速 60次/小时）'}
+    WECOM_WEBHOOK_URL  ${process.env.WECOM_WEBHOOK_URL ? '✅ 已配置（企微推送启用）' : '❌ 未配置（推送不可用）'}
+    CUE_API_KEY        ${process.env.CUE_API_KEY ? '✅ 已配置（写接口鉴权）' : '⚪ 未配置（写接口对外开放）'}
+    HUB_URL            ${hubUrl}
+    MEETING_HOUR       ${meetingHour}:00（作战包 ${prepHour}:45 自动推送）
+`);
 });

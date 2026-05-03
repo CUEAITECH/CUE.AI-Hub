@@ -1216,3 +1216,16 @@ select:focus {
   font-size: 13px;
 }
 .repo-link:hover { text-decoration: underline; }
+
+/* ── 会后总结按钮 ── */
+.btn-meeting-summary {
+  background: var(--green, #22c55e);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.btn-meeting-summary:hover { opacity: 0.88; }
