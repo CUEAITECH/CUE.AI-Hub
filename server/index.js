@@ -106,7 +106,7 @@ function getDateParam(url) {
 async function generateEveningReport(date) {
   const store = await loadStore();
   const todayCommits = (store.activities || []).filter(
-    (a) => a.type === 'commit' && (a.date || '').slice(0, 10) === date
+    (a) => a.type === 'commit' && String(a.createdAt || a.date || '').slice(0, 10) === date
   );
   const todayAssignments = (store.assignments || []).filter((a) => a.date === date);
   const todayReviews = (store.reviews || []).filter(
@@ -621,16 +621,27 @@ async function handleApi(req, res, url) {
     const eveningReport = buildEveningReport(baseStore, date);
     const progressedStore = applyEveningReportProgress(baseStore, eveningReport);
     const alerts = scanRisks(progressedStore);
+    let wecomSent = false;
+
+    if (isWeComAvailable() && json?.pushWeCom !== false) {
+      wecomSent = await pushReport(`# 🌆 CUE 晚会作战包 · ${date}\n\n${eveningReport.report}`);
+    }
+
     const nextStore = await saveStore({
       ...progressedStore,
       eveningReports: {
         ...(progressedStore.eveningReports || {}),
-        [date]: eveningReport
+        [date]: {
+          ...eveningReport,
+          wecomSent
+        }
       },
       alerts
     });
     sendJson(res, 201, {
-      report: eveningReport,
+      date,
+      report: nextStore.eveningReports[date],
+      wecomSent,
       tasks: nextStore.tasks,
       currentStage: nextStore.currentStage,
       alerts,
@@ -996,7 +1007,7 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
 
     const snapshotAssignments = eveningEntry.assignments || [];
     const dateCommits = (store.activities || []).filter(
-      (a) => a.type === 'commit' && (a.date || '').slice(0, 10) === date
+      (a) => a.type === 'commit' && String(a.createdAt || a.date || '').slice(0, 10) === date
     );
 
     const COMPARE_SYSTEM = `你是 CUE Project Hub 的对照分析 AI。根据当日晚报中记录的任务分工快照和实际 GitHub commit 记录，生成对照分析报告（Markdown）。

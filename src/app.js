@@ -458,16 +458,17 @@ function renderConfig() {
   const wecomStatus = document.querySelector('#wecomStatus');
   const btnPushRisks = document.querySelector('#btnPushRisks');
   const btnPushReport = document.querySelector('#btnPushReport');
+  const btnPushEveningReport = document.querySelector('#btnPushEveningReport');
   if (state.config.wecomEnabled) {
     if (wecomStatus) wecomStatus.style.display = '';
     if (btnPushRisks) btnPushRisks.style.display = '';
     if (btnPushReport) btnPushReport.style.display = '';
+    if (btnPushEveningReport) btnPushEveningReport.style.display = '';
   }
+}
 
-// (merged from main)
-
-function renderStandups() {
-  const list = document.querySelector('#standupList');
+function renderMeetingStandups() {
+  const list = document.querySelector('#meetingStandupList');
   if (!list) return;
   const date = getMeetingDate();
   const standups = state.standups.filter((standup) => standup.date === date);
@@ -485,6 +486,61 @@ function renderStandups() {
     </div>
   `).join('');
 }
+
+function renderMeetingAssignments() {
+  const list = document.querySelector('#meetingAssignmentList');
+  if (!list) return;
+  const date = getMeetingDate();
+  const assignments = state.assignments.filter((assignment) => assignment.date === date);
+  if (!assignments.length) {
+    list.innerHTML = '<div class="empty-state">晚会确认后，在这里记录成员领取的下一步任务。</div>';
+    return;
+  }
+
+  list.innerHTML = assignments.map((assignment) => `
+    <div class="assignment-item">
+      <strong>${escapeHtml(assignment.owner)} · ${escapeHtml(assignment.taskTitle || assignment.taskId)}</strong>
+      <span>${escapeHtml(assignment.note || '等待 Git 信号对账')} · ${escapeHtml(assignment.wecomStatus || '待企业微信确认')}</span>
+      <small>${escapeHtml(assignment.status || '进行中')} · ${assignment.updatedAt ? new Date(assignment.updatedAt).toLocaleString('zh-CN', { hour12: false }) : ''}</small>
+    </div>
+  `).join('');
+}
+
+function renderMeetingReport() {
+  const reportBox = document.querySelector('#meetingEveningReport');
+  const summary = document.querySelector('#meetingReportSummary');
+  if (!reportBox || !summary) return;
+  const reportEntry = state.eveningReports?.[getMeetingDate()];
+  const reportMarkdown = typeof reportEntry === 'string'
+    ? reportEntry
+    : reportEntry?.report || state.eveningReport || '';
+  const reportSummary = typeof reportEntry === 'object' ? reportEntry.summary || {} : {};
+
+  if (!reportMarkdown) {
+    summary.innerHTML = '<div><span>状态</span><b>待生成</b></div>';
+    reportBox.textContent = '点击"生成晚会报告"后，这里会输出前一天任务领取、今日提交、AI Review 风险和下一步细化目标。';
+    return;
+  }
+
+  summary.innerHTML = `
+    <div><span>领取任务</span><b>${Number(reportSummary.assignmentCount) || state.assignments.filter((item) => item.date === getMeetingDate()).length}</b></div>
+    <div><span>Git 提交</span><b>${Number(reportSummary.commitCount) || 0}</b></div>
+    <div><span>Block Review</span><b>${Number(reportSummary.blockReviewCount) || 0}</b></div>
+    <div><span>无提交支撑</span><b>${Number(reportSummary.noCommitAssignmentCount) || 0}</b></div>
+    <div><span>阶段进度</span><b>${Number(reportSummary.stageProgress) || Number(state.currentStage?.progress) || 0}%</b></div>
+  `;
+  reportBox.textContent = reportMarkdown;
+}
+
+function renderMeeting() {
+  const meetingDate = document.querySelector('#meetingDate');
+  if (meetingDate && !meetingDate.value) meetingDate.value = getTodayText();
+  setOptions('#meetingAssignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
+  setOptions('#meetingStandupOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
+  setOptions('#meetingAssignmentTask', state.tasks.filter((task) => task.status !== '已完成'), (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
+  renderMeetingAssignments();
+  renderMeetingStandups();
+  renderMeetingReport();
 }
 
 function renderAll() {
@@ -504,6 +560,7 @@ function renderAll() {
   renderCompareReport();
   renderAssignments();
   renderPlanAdjustments();
+  renderMeeting();
 }
 
 // ── 业务逻辑 ─────────────────────────────────────────────────
@@ -536,7 +593,15 @@ async function loadState() {
   state.config = config;
   state.assignments = assignPayload.assignments || [];
   state.planAdjustments = adjustPayload.adjustments || [];
-  if (eveningPayload.report) state.eveningReport = eveningPayload.report;
+  if (eveningPayload.report) {
+    state.eveningReports = {
+      ...state.eveningReports,
+      [eveningPayload.date || getTodayText()]: eveningPayload.report
+    };
+    state.eveningReport = typeof eveningPayload.report === 'string'
+      ? eveningPayload.report
+      : eveningPayload.report.report || '';
+  }
 
   renderAll();
   renderConfig();
@@ -741,13 +806,31 @@ async function refreshAssignments() {
 // ── 晚报 ─────────────────────────────────────────────────────────
 
 async function generateEveningReport() {
-  toast('AI 正在生成晚报（含 commit 汇总）...');
-  const payload = await api('/api/reports/evening', { method: 'POST', body: '{}' });
-  state.eveningReport = payload.report || '';
+  toast('正在同步仓库并生成晚会报告...');
+  await syncCueAiGit().catch((error) => {
+    toast(`仓库同步未完成，继续使用已有数据生成报告：${error.message}`);
+  });
+  const date = getMeetingDate();
+  const payload = await api('/api/reports/evening', {
+    method: 'POST',
+    body: JSON.stringify({ date, pushWeCom: true })
+  });
+  const reportEntry = payload.report || {};
+  state.eveningReport = typeof reportEntry === 'string' ? reportEntry : reportEntry.report || '';
+  state.eveningReports = {
+    ...state.eveningReports,
+    [payload.date || date]: reportEntry
+  };
+  state.tasks = payload.tasks || state.tasks;
+  state.currentStage = payload.currentStage || state.currentStage;
+  state.alerts = payload.alerts || state.alerts;
+  state.metrics = payload.metrics || state.metrics;
   renderEveningReport();
-  // 切换到晚报 tab
+  renderMeeting();
+  renderStage();
   setReportTab('evening');
-  toast('晚报生成完成' + (payload.wecomSent ? '，已推送至企业微信' : ''));
+  setText('#syncStatus', `晚会报告已生成 · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`);
+  toast('晚会报告生成完成' + (payload.wecomSent ? '，已推送至企业微信' : ''));
 }
 
 async function doCompareReport() {
@@ -830,14 +913,14 @@ async function syncSignals() {
   toast('已同步本地任务、审阅和风险信号');
 }
 
-async function syncCueAiGit() {
+async function syncCueAiGit(options = {}) {
   const project = state.projects.find((p) => p.id === 'cue_ai_classroom');
   const useGitHub = project?.githubOwner;
   const endpoint = useGitHub
     ? '/api/projects/cue_ai_classroom/sync-github'
     : '/api/projects/cue_ai_classroom/sync-local-git';
 
-  setText('#syncStatus', useGitHub ? '正在同步 GitHub 远端...' : '正在同步本地 Git...');
+  if (!options.silent) setText('#syncStatus', useGitHub ? '正在同步 GitHub 远端...' : '正在同步本地 Git...');
   const payload = await api(endpoint, { method: 'POST', body: '{}' });
   const nextState = await api('/api/state');
   state.tasks = nextState.tasks || [];
@@ -854,21 +937,21 @@ async function syncCueAiGit() {
   renderAll();
   const srcLabel = payload.source === 'github-api' ? 'GitHub 远端' : '本地 Git';
   setText('#syncStatus', `已同步 (${srcLabel}) · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`);
-  toast(`同步完成（${srcLabel}）：${payload.addedActivities || 0} 条 commit，${payload.addedReviews || 0} 条 AI Review`);
+  if (!options.silent) toast(`同步完成（${srcLabel}）：${payload.addedActivities || 0} 条 commit，${payload.addedReviews || 0} 条 AI Review`);
+}
 
-// (merged from main)
-
-async function createAssignment() {
-  const taskId = document.querySelector('#assignmentTask').value;
+async function createMeetingAssignment() {
+  const taskId = document.querySelector('#meetingAssignmentTask').value;
   const task = state.tasks.find((item) => item.id === taskId);
+  if (!taskId) { toast('请选择领取任务'); return; }
   const payload = await api('/api/assignments', {
     method: 'POST',
     body: JSON.stringify({
       date: getMeetingDate(),
-      owner: document.querySelector('#assignmentOwner').value,
+      owner: document.querySelector('#meetingAssignmentOwner').value,
       taskId,
       taskTitle: task?.title || taskId,
-      note: document.querySelector('#assignmentNote').value,
+      note: document.querySelector('#meetingAssignmentNote').value,
       status: '进行中',
       wecomStatus: '待企业微信确认'
     })
@@ -878,18 +961,19 @@ async function createAssignment() {
     ...state.assignments.filter((assignment) => assignment.date !== getMeetingDate())
   ];
   renderMeeting();
+  renderAssignments();
   toast('任务领取已记录，晚会后可同步到企业微信');
 }
 
-async function submitStandup() {
+async function submitMeetingStandup() {
   const payload = await api('/api/standups', {
     method: 'POST',
     body: JSON.stringify({
       date: getMeetingDate(),
-      owner: document.querySelector('#standupOwner').value,
-      yesterday: document.querySelector('#standupYesterday').value,
-      today: document.querySelector('#standupToday').value,
-      blockers: document.querySelector('#standupBlockers').value
+      owner: document.querySelector('#meetingStandupOwner').value,
+      yesterday: document.querySelector('#meetingStandupYesterday').value,
+      today: document.querySelector('#meetingStandupToday').value,
+      blockers: document.querySelector('#meetingStandupBlockers').value
     })
   });
   state.standups = [
@@ -897,27 +981,31 @@ async function submitStandup() {
     ...state.standups.filter((standup) => standup.date !== getMeetingDate())
   ];
   renderMeeting();
+  renderStandup();
   toast('站会记录已提交');
 }
 
-async function generateEveningReport() {
-  await syncCueAiGit({ silent: true });
-  const payload = await api('/api/reports/evening', {
-    method: 'POST',
-    body: JSON.stringify({ date: getMeetingDate() })
-  });
-  state.tasks = payload.tasks || state.tasks;
-  state.currentStage = payload.currentStage || state.currentStage;
-  state.alerts = payload.alerts || state.alerts;
-  state.metrics = payload.metrics || state.metrics;
-  state.eveningReports = {
-    ...state.eveningReports,
-    [getMeetingDate()]: payload.report
-  };
-  renderAll();
-  setRoute('meeting');
-  toast('晚会作战包已生成，阶段进度已更新');
+async function copyEveningReport() {
+  const report = document.querySelector('#meetingEveningReport')?.textContent || state.eveningReport || '';
+  if (!report || report.startsWith('点击')) {
+    toast('还没有可复制的晚会报告');
+    return;
+  }
+  await navigator.clipboard.writeText(report);
+  toast('晚会报告已复制，可粘贴到企业微信');
 }
+
+async function pushEveningReportManual() {
+  const report = document.querySelector('#meetingEveningReport')?.textContent || state.eveningReport || '';
+  if (!report || report.startsWith('点击')) {
+    toast('还没有可推送的晚会报告');
+    return;
+  }
+  const payload = await api('/api/wecom/push', {
+    method: 'POST',
+    body: JSON.stringify({ content: `# 🌆 CUE 晚会作战包\n\n${report}` })
+  });
+  toast(payload.sent ? '晚会报告已推送至企业微信' : '推送失败，请检查 WECOM_WEBHOOK_URL');
 }
 
 function setRoute(route) {
@@ -979,6 +1067,21 @@ function bindEvents() {
   });
   document.querySelector('[data-action="test-alert"]').addEventListener('click', () => {
     syncSignals().then(() => toast('已测试提醒规则，风险队列已刷新')).catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="generate-evening-report"]')?.addEventListener('click', () => {
+    generateEveningReport().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="create-assignment"]')?.addEventListener('click', () => {
+    createMeetingAssignment().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="submit-meeting-standup"]')?.addEventListener('click', () => {
+    submitMeetingStandup().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="copy-evening-report"]')?.addEventListener('click', () => {
+    copyEveningReport().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="push-evening-report"]')?.addEventListener('click', () => {
+    pushEveningReportManual().catch((e) => toast(e.message));
   });
 
   // 任务 modal
