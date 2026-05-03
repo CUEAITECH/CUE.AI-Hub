@@ -774,7 +774,7 @@ async function handleApi(req, res, url) {
         );
         if (!dup) {
           existing.unshift({
-            id: createId(),
+            id: createId('task'),
             title: t.title,
             owner: t.owner || '',
             priority: t.priority || 'P1',
@@ -869,7 +869,7 @@ async function handleApi(req, res, url) {
           const existing = draft.tasks || [];
           for (const t of parsedTasks) {
             if (!existing.find((e) => e.title === t.title && e.sourceDoc === t.sourceDoc)) {
-              existing.unshift({ id: createId(), title: t.title, owner: t.owner || '', priority: t.priority || 'P1', status: t.status || 'pending', description: t.description || '', dueDate: t.dueDate || '', sourceDoc: t.sourceDoc || '', projectId, acceptance: '', createdAt: new Date().toISOString() });
+              existing.unshift({ id: createId('task'), title: t.title, owner: t.owner || '', priority: t.priority || 'P1', status: t.status || 'pending', description: t.description || '', dueDate: t.dueDate || '', sourceDoc: t.sourceDoc || '', projectId, acceptance: '', createdAt: new Date().toISOString() });
               imported++;
             }
           }
