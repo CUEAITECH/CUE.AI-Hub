@@ -45,6 +45,7 @@ const rootDir = dirname(__dirname);
 const port = Number(process.env.PORT || 4317);
 const host = process.env.HOST || '127.0.0.1';
 const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
+const cueApiKey = process.env.CUE_API_KEY || '';
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -65,6 +66,20 @@ function sendJson(res, status, data) {
 
 function sendError(res, status, message, details = undefined) {
   sendJson(res, status, { error: message, details });
+}
+
+function hasValidApiKey(req) {
+  if (!cueApiKey) return true;
+  const provided = req.headers['x-cue-api-key'];
+  return typeof provided === 'string' && provided === cueApiKey;
+}
+
+function requiresApiKey(req, url) {
+  if (!cueApiKey) return false;
+  if (!url.pathname.startsWith('/api/')) return false;
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return false;
+  if (url.pathname === '/api/webhooks/github') return false;
+  return true;
 }
 
 async function readBody(req) {
@@ -121,7 +136,7 @@ async function generateEveningReport(date) {
 
   // 1. 快照：保存生成时刻的提交和分工，供后续对照分析使用（不受后续新 commit 影响）
   const snapshotCommits = (store.activities || []).filter(
-    (a) => a.type === 'commit' && (a.date || '').slice(0, 10) === date
+    (a) => a.type === 'commit' && String(a.createdAt || a.date || '').slice(0, 10) === date
   );
   const snapshotAssignments = (store.assignments || []).filter((a) => a.date === date);
   const dateReviews = (store.reviews || []).filter(
@@ -366,9 +381,25 @@ async function handleApi(req, res, url) {
       const idx = (draft.projects || []).findIndex((p) => p.id === projectId);
       if (idx === -1) return draft;
       // 只允许更新安全字段，不允许覆盖 id
-      const allowed = ['name', 'repository', 'githubOwner', 'githubFullRepo', 'summary'];
+      const allowed = ['name', 'repository', 'githubOwner', 'githubFullRepo', 'localPath', 'summary'];
       const patch = Object.fromEntries(Object.entries(json).filter(([k]) => allowed.includes(k)));
-      draft.projects[idx] = { ...draft.projects[idx], ...patch };
+      const current = draft.projects[idx];
+      const repoChanged = ['repository', 'githubOwner', 'githubFullRepo', 'localPath']
+        .some((key) => Object.hasOwn(patch, key) && patch[key] !== current[key]);
+      const shouldResetSync = repoChanged || json.resetSync === true;
+      draft.projects[idx] = {
+        ...current,
+        ...patch,
+        ...(shouldResetSync
+          ? {
+              branch: '',
+              status: '待同步',
+              lastSyncAt: '',
+              commitCount: 0,
+              dirtyFileCount: 0
+            }
+          : {})
+      };
       return draft;
     });
     const project = (nextStore.projects || []).find((p) => p.id === projectId);
@@ -399,8 +430,11 @@ async function handleApi(req, res, url) {
       const msg = err.message || '';
       const is404 = msg.includes('404');
       const is403 = msg.includes('403') || msg.includes('速率限制');
+      const hasToken = Boolean(process.env.GITHUB_TOKEN);
       const hint = is404
-        ? `仓库 "${project.githubFullRepo}" 不存在或为私有仓库。私有仓库需要在 .env 中配置 GITHUB_TOKEN（Personal Access Token，权限 repo）。`
+        ? hasToken
+          ? `已配置 GITHUB_TOKEN，但无法访问仓库 "${project.githubFullRepo}"。请确认 token 的 Resource owner 是组织、已选择该仓库，并完成组织 SSO/审批授权。`
+          : `仓库 "${project.githubFullRepo}" 不存在或为私有仓库。私有仓库需要在 .env 中配置 GITHUB_TOKEN。`
         : is403
         ? '已触发 GitHub API 速率限制（匿名 60 次/小时）。配置 GITHUB_TOKEN 可提升至 5000 次/小时。'
         : msg;
@@ -637,7 +671,9 @@ async function handleApi(req, res, url) {
     const updatedStore = await loadStore();
     const alerts = updatedStore.alerts || [];
     sendJson(res, 201, {
+      date,
       report: finalEntry,
+      wecomSent: isWeComAvailable(),
       tasks: updatedStore.tasks,
       currentStage: updatedStore.currentStage,
       alerts,
@@ -882,6 +918,8 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
   // GET /api/config — 返回前端需要的功能开关（不含密钥）
   if (req.method === 'GET' && url.pathname === '/api/config') {
     sendJson(res, 200, {
+      githubEnabled: Boolean(process.env.GITHUB_TOKEN),
+      apiKeyRequiredForWrites: Boolean(cueApiKey),
       wecomEnabled: isWeComAvailable(),
       llmEnabled: Boolean(process.env.ANTHROPIC_API_KEY)
     });
@@ -1044,6 +1082,11 @@ const server = createServer(async (req, res) => {
 
   try {
     if (url.pathname.startsWith('/api/')) {
+      if (requiresApiKey(req, url) && !hasValidApiKey(req)) {
+        sendError(res, 401, 'invalid api key', '写入或触发动作的 API 需要请求头 X-CUE-API-Key。');
+        return;
+      }
+
       const handled = await handleApi(req, res, url);
       if (!handled) sendError(res, 404, 'api route not found');
       return;

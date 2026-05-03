@@ -5,6 +5,7 @@
 export function buildOpenApiSpec(serverUrl) {
   const ref = (name) => ({ '$ref': `#/components/schemas/${name}` });
   const jsonBody = (schema) => ({ content: { 'application/json': { schema } } });
+  const apiKeySecurity = [{ CueApiKey: [] }];
   const jsonResponse = (desc, schema) => ({
     [desc === '成功' ? '200' : desc === '创建成功' ? '201' : '200']: {
       description: desc,
@@ -77,6 +78,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'createTask',
           summary: '创建新任务',
           description: '创建一个新研发任务。用于"帮我创建一个任务：XX，负责人：YY，截止日期：ZZ"。',
+          security: apiKeySecurity,
           requestBody: { required: true, ...jsonBody(ref('TaskInput')) },
           responses: {
             '201': { description: '创建成功', content: { 'application/json': { schema: {
@@ -92,6 +94,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'updateTask',
           summary: '更新任务',
           description: '更新任务的状态、进度、负责人等字段。用于"把任务 XX 的进度更新为 80%"、"把任务 YY 标记为已完成"。需要先通过 listTasks 获取任务 ID。',
+          security: apiKeySecurity,
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: '任务 ID（形如 task_xxx）' }],
           requestBody: { required: true, ...jsonBody(ref('TaskInput')) },
           responses: {
@@ -106,6 +109,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'deleteTask',
           summary: '删除任务',
           description: '删除指定任务。需要先通过 listTasks 获取任务 ID。',
+          security: apiKeySecurity,
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
           responses: { '200': { description: '删除成功' } }
         }
@@ -160,6 +164,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'submitStandup',
           summary: '提交站会',
           description: '提交今日站会，包含昨日完成、今日计划、阻塞项。当用户说"我昨天完成了XX，今天计划做YY，没有阻塞"时，解析内容并调用此接口代为提交。',
+          security: apiKeySecurity,
           requestBody: { required: true, ...jsonBody(ref('StandupInput')) },
           responses: {
             '201': { description: '提交成功', content: { 'application/json': { schema: {
@@ -178,6 +183,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'summarizeStandups',
           summary: 'AI 汇总今日站会',
           description: '用 AI 汇总今天所有成员的站会，生成结构化日站摘要，包含阻塞项和请假信息。用于"帮我汇总一下今天的站会"。',
+          security: apiKeySecurity,
           requestBody: { required: false, ...jsonBody({ type: 'object' }) },
           responses: {
             '200': { description: '站会汇总', content: { 'application/json': { schema: {
@@ -197,6 +203,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'scanRisks',
           summary: '扫描风险并获取告警',
           description: '扫描所有任务和审阅记录，返回风险告警（延期、无进展、阻断 Review 等）。用于"今天有什么风险"、"有哪些紧急问题"。',
+          security: apiKeySecurity,
           requestBody: { required: false, ...jsonBody({ type: 'object' }) },
           responses: {
             '200': { description: '风险告警', content: { 'application/json': { schema: {
@@ -215,6 +222,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'generateDailyReport',
           summary: '生成 AI 研发日报',
           description: 'AI 根据今日任务进展、代码审阅、站会记录、风险告警生成结构化日报，适合发给管理者。用于"帮我生成今天的日报"、"生成研发日报"。',
+          security: apiKeySecurity,
           requestBody: { required: false, ...jsonBody({ type: 'object' }) },
           responses: {
             '200': { description: '日报内容', content: { 'application/json': { schema: {
@@ -234,6 +242,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'generatePlan',
           summary: '根据阶段目标 AI 生成任务计划',
           description: '输入阶段目标（自然语言），AI 自动拆解为 3-6 个具体任务并分配负责人。用于"帮我把下周的目标拆成任务"。',
+          security: apiKeySecurity,
           requestBody: {
             required: true,
             content: { 'application/json': { schema: {
@@ -266,6 +275,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'claimTask',
           summary: '领取今日分工任务',
           description: '成员领取一个任务作为今日分工。用于"我今天认领XX任务"、"我负责YY"。',
+          security: apiKeySecurity,
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['owner', 'taskId'], properties: { owner: { type: 'string' }, taskId: { type: 'string' }, note: { type: 'string' } } } } } },
           responses: { '201': { description: '领取成功' } }
         }
@@ -276,6 +286,7 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'generateEveningReport',
           summary: '生成今日晚报（含 commit 汇总）',
           description: '汇总今日 GitHub 提交、任务分工完成情况，生成结构化晚报。用于"生成今天的晚报"、"帮我总结一下今天的工作"。',
+          security: apiKeySecurity,
           responses: { '200': { description: '晚报内容' } }
         },
         get: {
@@ -308,6 +319,14 @@ export function buildOpenApiSpec(serverUrl) {
     },
 
     components: {
+      securitySchemes: {
+        CueApiKey: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-CUE-API-Key',
+          description: '公网写接口鉴权密钥。服务器配置 CUE_API_KEY 后，POST/PATCH/DELETE /api/* 需要传入该请求头。'
+        }
+      },
       schemas: {
         Task: {
           type: 'object',

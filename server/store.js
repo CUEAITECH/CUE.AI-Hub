@@ -7,8 +7,6 @@ const dataDir = join(rootDir, 'server', 'data');
 const seedPath = join(dataDir, 'seed.json');
 const dbPath = join(dataDir, 'db.json');
 
-const cueAiRepoPath = join(rootDir, '..', 'OmniNexus-Edu-copilot');
-
 let cache = null;
 
 async function readJson(path) {
@@ -48,22 +46,39 @@ function migrateStore(store) {
   if (!next.projects.some((project) => project.id === 'cue_ai_classroom')) {
     next.projects.unshift({
       id: 'cue_ai_classroom',
-      name: 'Cue.AI Classroom',
-      githubOwner: 'dirtortian',
-      repository: 'OmniNexus-Edu-copilot',
-      githubFullRepo: 'dirtortian/OmniNexus-Edu-copilot',
-      localPath: cueAiRepoPath,
+      name: 'Cue.AI',
+      githubOwner: 'CUEAITECH',
+      repository: 'Cue.AI',
+      githubFullRepo: 'CUEAITECH/Cue.AI',
+      localPath: '',
       branch: '',
       status: '待同步',
       lastSyncAt: '',
-      summary: 'CUE 课堂产品主仓库，先作为项目中枢的内部试点项目接入。'
+      summary: 'Cue.AI 主仓库，作为项目中枢的真实研发交付试点项目。'
     });
   }
 
   // 迁移：为已有项目补充 githubOwner / githubFullRepo 字段
   next.projects = next.projects.map((p) => {
-    if (p.id === 'cue_ai_classroom' && !p.githubOwner) {
-      return { ...p, githubOwner: 'dirtortian', githubFullRepo: 'dirtortian/OmniNexus-Edu-copilot' };
+    if (
+      p.id === 'cue_ai_classroom'
+      && (
+        !p.githubOwner
+        || p.githubFullRepo === 'dirtortian/OmniNexus-Edu-copilot'
+        || p.githubFullRepo === 'OmniNexusEdu/OmniNexus-Edu-copilot'
+        || p.githubFullRepo === 'CUEAITECH/CUE-Project-Hub'
+        || p.localPath?.includes('OmniNexus-Edu-copilot')
+      )
+    ) {
+      return {
+        ...p,
+        name: 'Cue.AI',
+        githubOwner: 'CUEAITECH',
+        repository: 'Cue.AI',
+        githubFullRepo: 'CUEAITECH/Cue.AI',
+        localPath: p.localPath === rootDir ? '' : p.localPath,
+        summary: 'Cue.AI 主仓库，作为项目中枢的真实研发交付试点项目。'
+      };
     }
     // 如果有 githubOwner 但缺 githubFullRepo，自动补全
     if (p.githubOwner && p.repository && !p.githubFullRepo) {
