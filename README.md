@@ -239,7 +239,64 @@ CUE 项目中枢 MVP
 
 前端总览页的“当前阶段”模块下已经展示这份清单。之后晚会分工应该优先围绕清单里的 `阻塞`、`高风险`、`待补证据` 项展开，而不是只看当前任务列表。
 
-### 7. 晚会闭环
+### 7. AI 产品经理：从目标仓库文档生成任务
+
+Claude 刚刚新增的重点能力已经合入 `main`：项目中枢现在不只看 GitHub commit，也可以读取 `Cue.AI` 目标仓库的 `docs/` 计划文档，把阶段计划解析成可执行任务，并把执行进度写回目标仓库。
+
+核心模块：
+
+```text
+server/services/docsManager.js
+```
+
+已完成内容：
+
+- 从目标仓库 `CUEAITECH/Cue.AI` 读取 `docs/*.md`。
+- 自动跳过商业计划、用户场景、核心指标、技术选型、功能优先级、README、既有阶段进度追踪等非任务文档。
+- 调用 Claude 将开发计划解析成结构化任务：
+  - 标题
+  - 负责人
+  - 优先级
+  - 来源文档
+  - 任务描述
+  - 截止时间
+  - 状态
+- 按 `title + sourceDoc` 去重后导入项目中枢任务板。
+- 将解析快照缓存到 `store.docTasks[projectId]`，用于后续进度对照。
+- 基于当前任务真实状态、今日分工领取情况和文档解析任务，生成 `docs/阶段进度追踪.md`。
+- 通过 GitHub Contents API 将 `docs/阶段进度追踪.md` 写回 `CUEAITECH/Cue.AI` 仓库。
+
+前端总览页的 Cue.AI 项目卡片已经新增两个操作按钮：
+
+```text
+从文档导入任务
+更新文档进度
+```
+
+相关接口：
+
+```text
+POST /api/projects/:id/sync-docs
+POST /api/projects/:id/update-docs
+POST /api/projects/:id/daily-scan
+```
+
+接口含义：
+
+- `sync-docs`：读取目标仓库 `docs/`，用 Claude 解析任务，并导入 Hub 任务板。
+- `update-docs`：把 Hub 内的任务状态、今日领取情况写回 `docs/阶段进度追踪.md`。
+- `daily-scan`：串联 GitHub commit 同步、文档任务导入、阶段进度写回，适合后续做每日自动任务。
+
+这部分解决了一个关键问题：任务分工不再只依赖 Hub 里的默认 seed 数据，而是可以从 `Cue.AI` 当前阶段文档里提取。后续晚会分工应该以“目标仓库 docs 计划 -> AI 解析任务 -> Hub 任务板 -> 成员领取 -> GitHub 证据 -> 进度写回”作为主链路。
+
+注意事项：
+
+- `update-docs` 需要 `GITHUB_TOKEN` 具备目标仓库内容写权限。
+- 如果目标仓库属于组织，token 的 Resource owner 必须选组织，并完成对应仓库授权或 SSO/审批。
+- 当前导入任务仍建议在晚会前由负责人快速复核，避免 Claude 将背景说明误解析成开发任务。
+- `docs/阶段进度追踪.md` 是自动生成文件，后续应避免人工大段改写；人工修正建议回到原始计划文档或 Hub 任务板。
+
+### 8. 晚会闭环
 
 项目中枢已经具备晚会前后闭环的基础能力。
 
@@ -284,7 +341,7 @@ GET /api/plan-adjustments
 MEETING_HOUR=18
 ```
 
-### 8. 数据持久化和迁移
+### 9. 数据持久化和迁移
 
 项目中枢使用 JSON 文件持久化：
 
@@ -316,6 +373,7 @@ server/data/seed.json
 - 补齐 `planAdjustments`
 - 补齐 `currentStage`
 - 补齐 `currentStage.checklist`
+- 补齐 `docTasks`
 - 旧 repo 名统一归并到 `CUEAITECH/Cue.AI`
 - 删除旧 seed demo review
 - 删除 activity diff，避免 db.json 过大
@@ -327,6 +385,10 @@ server/data/seed.json
 - Cue.AI 真实仓库接入
 - GitHub 远端自动同步
 - GitHub 作者映射到中文成员
+- Cue.AI docs 计划文档读取
+- Claude 解析开发任务
+- 解析任务导入 Hub 任务板
+- 自动生成并写回 `docs/阶段进度追踪.md`
 - AI Review 队列
 - Claude 优先、规则引擎兜底
 - 风险扫描
@@ -349,7 +411,8 @@ server/data/seed.json
 当前仍需继续完善的能力：
 
 - 企业微信写接口工具配置，例如领取任务、提交站会、更新进度。
-- 阶段清单从 Cue.AI 仓库文档自动提取，而不是只使用默认清单。
+- 文档解析任务导入前的人工确认和批量编辑。
+- `docs/阶段进度追踪.md` 与 Hub 任务 ID 的双向映射。
 - AI 自动把 commit 更准确地关联到阶段目标和任务。
 - 阶段目标清单可在前端编辑。
 - 风险项能一键转成晚会分工。
@@ -492,6 +555,9 @@ GET /api/projects
 PATCH /api/projects/:id
 POST /api/projects/:id/sync-github
 POST /api/projects/:id/sync-local-git
+POST /api/projects/:id/sync-docs
+POST /api/projects/:id/update-docs
+POST /api/projects/:id/daily-scan
 ```
 
 当前主项目 ID：
@@ -505,6 +571,12 @@ cue_ai_classroom
 ```text
 CUEAITECH/Cue.AI
 ```
+
+其中 `sync-docs`、`update-docs`、`daily-scan` 是 AI 产品经理链路：
+
+- `sync-docs` 从 `CUEAITECH/Cue.AI/docs` 解析任务并导入 Hub。
+- `update-docs` 写回 `CUEAITECH/Cue.AI/docs/阶段进度追踪.md`。
+- `daily-scan` 将 commit 同步、docs 解析、进度写回串成一次完整扫描。
 
 ### 任务
 
@@ -645,20 +717,25 @@ X-CUE-API-Key: <CUE_API_KEY>
 
 ```text
 Cue.AI GitHub 仓库
-  -> 自动同步
+  -> docs/阶段计划文档
+  -> AI 产品经理解析任务
+  -> Hub 任务板
+  -> GitHub 自动同步
   -> AI Review
   -> 风险扫描
   -> 阶段目标对照清单
   -> 任务领取
   -> 晚会报告
+  -> docs/阶段进度追踪.md 写回
   -> 企业微信查询
 ```
 
 下一阶段开发不应该继续堆普通看板功能，而应该围绕“闭环是否真实”推进：
 
-1. 让阶段清单可配置、可编辑、可从 Cue.AI 文档自动提取。
+1. 让文档解析任务支持人工确认、批量调整和一键入板。
 2. 让企业微信能直接完成领取任务、提交站会、更新进度。
 3. 让 AI 根据阶段清单自动建议今晚该分配什么任务。
 4. 让 commit/PR 更准确地关联任务和阶段目标。
-5. 让风险项一键转成晚会行动项。
-6. 加强权限、审计和数据备份。
+5. 让 `docs/阶段进度追踪.md` 和 Hub 任务状态形成稳定双向对账。
+6. 让风险项一键转成晚会行动项。
+7. 加强权限、审计和数据备份。
