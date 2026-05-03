@@ -65,6 +65,21 @@ index.html              ← 8 个 section.view 对应 8 个导航页
 2. **企微格式**：企微 Markdown 不支持表格，用 `buildPreMeetingWeComMsg` 和 `buildMeetingSummaryWeComMsg` 生成列表格式消息，严禁在企微推送中使用 `|` 表格语法。
 3. **对照分析**：`GET /api/reports/compare` 必须使用 `eveningEntry.commits`（快照），不能从 `store.activities` 实时查询。
 
+### AI 产品经理（docsManager）
+
+`server/services/docsManager.js` 实现从目标仓库 docs/ 抓取计划 → LLM 解析任务 → 写回进度文档的完整流程。
+
+三个 API 端点（均在 `/api/projects/:id/` 下）：
+- **`POST /sync-docs`** — 列举 docs/*.md（跳过：商业计划、用户场景、核心指标、技术选型、功能优先级、阶段进度追踪），LLM 解析结构化任务，去重（title+sourceDoc）后导入 hub 任务板，并将解析快照存入 `store.docTasks[projectId]`。
+- **`POST /update-docs`** — 基于 `store.docTasks[projectId]`（快照）+ hub 任务真实状态 + 今日分工，生成 `docs/阶段进度追踪.md` 并通过 GitHub PUT API 写回目标仓库。
+- **`POST /daily-scan`** — 全流程串联：sync-commits（复用 scanGitHubProject）→ sync-docs → update-docs，每步独立 try/catch 并在响应 `steps` 字段中报告各步结果。
+
+注意事项：
+- `store.docTasks` 是 `{ [projectId]: parsedTask[] }` 字典，在 `migrateStore()` 中默认为 `{}`。
+- `buildProgressMarkdown` 生成的 ✅/🔶/⬜ 状态以 hub 任务状态为准，hub 无记录时才用文档原始状态。
+- 写回 GitHub 需要 `GITHUB_TOKEN` 有 repo 写权限（classic token 选 `repo`，fine-grained 选 `Contents: write`）。
+- `PROGRESS_DOC_PATH` = `docs/阶段进度追踪.md`，固定路径。
+
 ### GitHub 同步
 
 `scanGitHubProject`（远端 API，无需本地 clone）优先于 `scanLocalGitProject`。选择逻辑：项目有 `githubOwner` 字段则走 GitHub API，否则走本地 git。GitHub 作者名通过 `authorMap`（`githubApi.js` 第 73 行）映射到中文团队成员名。

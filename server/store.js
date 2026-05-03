@@ -42,6 +42,7 @@ function migrateStore(store) {
     eveningReports: {},
     reports: {},
     planAdjustments: [],
+    docTasks: {},
     currentStage: {
       id: 'stage_mvp',
       name: 'CUE 项目中枢 MVP',

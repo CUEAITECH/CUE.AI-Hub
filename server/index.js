@@ -41,6 +41,12 @@ import {
 } from './services/wecom.js';
 import { buildOpenApiSpec } from './data/openapi.js';
 import {
+  fetchProjectDocs,
+  parseDocsForTasks,
+  buildProgressMarkdown,
+  writeProgressToGitHub
+} from './services/docsManager.js';
+import {
   applyEveningReportProgress,
   buildEveningReport,
   normalizeAssignment,
@@ -736,6 +742,166 @@ async function handleApi(req, res, url) {
       metrics: buildMetrics(nextStore, alerts),
       alerts
     });
+    return true;
+  }
+
+  // POST /api/projects/:id/sync-docs — 从目标仓库 docs/ 解析任务并导入 hub
+  if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/sync-docs')) {
+    const projectId = url.pathname.split('/')[3];
+    const store = await loadStore();
+    const project = (store.projects || []).find((p) => p.id === projectId);
+    if (!project) { sendError(res, 404, '项目不存在'); return true; }
+
+    const { owner, repo } = project.githubFullRepo?.includes('/')
+      ? { owner: project.githubFullRepo.split('/')[0], repo: project.githubFullRepo.split('/')[1] }
+      : { owner: project.githubOwner || '', repo: project.repository || '' };
+
+    if (!owner || !repo) { sendError(res, 400, '项目未配置 githubFullRepo，请先 PATCH 设置'); return true; }
+
+    const docs = await fetchProjectDocs(owner, repo);
+    if (!docs.length) { sendJson(res, 200, { imported: 0, message: 'docs/ 目录无计划文档' }); return true; }
+
+    const parsedTasks = await parseDocsForTasks(docs);
+    if (!parsedTasks.length) { sendJson(res, 200, { imported: 0, message: 'LLM 未解析出任务（无 API key 或文档无可执行任务）' }); return true; }
+
+    // 去重：同 title + sourceDoc 不重复导入
+    let imported = 0;
+    const nextStore = await updateStore((draft) => {
+      const existing = draft.tasks || [];
+      for (const t of parsedTasks) {
+        const dup = existing.find(
+          (e) => e.title === t.title && e.sourceDoc === t.sourceDoc
+        );
+        if (!dup) {
+          existing.unshift({
+            id: createId(),
+            title: t.title,
+            owner: t.owner || '',
+            priority: t.priority || 'P1',
+            status: t.status || 'pending',
+            description: t.description || '',
+            dueDate: t.dueDate || '',
+            sourceDoc: t.sourceDoc || '',
+            projectId,
+            acceptance: '',
+            createdAt: new Date().toISOString()
+          });
+          imported++;
+        }
+      }
+      draft.tasks = existing;
+      // 缓存原始 docTasks 快照（用于进度追踪对照）
+      if (!draft.docTasks) draft.docTasks = {};
+      draft.docTasks[projectId] = parsedTasks;
+      return draft;
+    });
+    sendJson(res, 200, { imported, total: parsedTasks.length, tasks: nextStore.tasks.filter((t) => t.projectId === projectId) });
+    return true;
+  }
+
+  // POST /api/projects/:id/update-docs — 将 hub 任务状态写回目标仓库 阶段进度追踪.md
+  if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/update-docs')) {
+    const projectId = url.pathname.split('/')[3];
+    const store = await loadStore();
+    const project = (store.projects || []).find((p) => p.id === projectId);
+    if (!project) { sendError(res, 404, '项目不存在'); return true; }
+
+    const { owner, repo } = project.githubFullRepo?.includes('/')
+      ? { owner: project.githubFullRepo.split('/')[0], repo: project.githubFullRepo.split('/')[1] }
+      : { owner: project.githubOwner || '', repo: project.repository || '' };
+
+    if (!owner || !repo) { sendError(res, 400, '项目未配置 githubFullRepo'); return true; }
+
+    const docTasks = (store.docTasks || {})[projectId] || [];
+    const hubTasks = (store.tasks || []).filter((t) => t.projectId === projectId);
+    const today = todayText();
+    const todayAssignments = (store.assignments || []).filter((a) => a.date === today && a.projectId === projectId);
+
+    const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today);
+    await writeProgressToGitHub(owner, repo, markdown);
+
+    sendJson(res, 200, { written: true, path: 'docs/阶段进度追踪.md', date: today });
+    return true;
+  }
+
+  // POST /api/projects/:id/daily-scan — 全流程：同步 commits + sync-docs + update-docs
+  if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/daily-scan')) {
+    const projectId = url.pathname.split('/')[3];
+    const store = await loadStore();
+    const project = (store.projects || []).find((p) => p.id === projectId);
+    if (!project) { sendError(res, 404, '项目不存在'); return true; }
+
+    const result = { projectId, steps: {} };
+
+    // Step 1: 同步 GitHub commits（复用已有逻辑）
+    try {
+      const { owner, repo } = project.githubFullRepo?.includes('/')
+        ? { owner: project.githubFullRepo.split('/')[0], repo: project.githubFullRepo.split('/')[1] }
+        : { owner: project.githubOwner || '', repo: project.repository || '' };
+
+      if (owner && repo) {
+        const syncResult = await scanGitHubProject(project, { maxCommits: 30 });
+        if (syncResult) {
+          await updateStore((draft) => {
+            const newActivities = syncResult.activities || [];
+            const retained = (draft.activities || []).filter((a) => !newActivities.find((n) => n.id === a.id));
+            draft.activities = [...newActivities, ...retained].slice(0, 700);
+            return draft;
+          });
+          result.steps.syncCommits = { ok: true, added: syncResult.activities?.length || 0 };
+        }
+      }
+    } catch (err) {
+      result.steps.syncCommits = { ok: false, error: err.message };
+    }
+
+    // Step 2: sync-docs（解析并导入任务）
+    try {
+      const freshStore = await loadStore();
+      const { owner, repo } = project.githubFullRepo?.includes('/')
+        ? { owner: project.githubFullRepo.split('/')[0], repo: project.githubFullRepo.split('/')[1] }
+        : { owner: project.githubOwner || '', repo: project.repository || '' };
+      const docs = await fetchProjectDocs(owner, repo);
+      const parsedTasks = await parseDocsForTasks(docs);
+      let imported = 0;
+      if (parsedTasks.length) {
+        await updateStore((draft) => {
+          const existing = draft.tasks || [];
+          for (const t of parsedTasks) {
+            if (!existing.find((e) => e.title === t.title && e.sourceDoc === t.sourceDoc)) {
+              existing.unshift({ id: createId(), title: t.title, owner: t.owner || '', priority: t.priority || 'P1', status: t.status || 'pending', description: t.description || '', dueDate: t.dueDate || '', sourceDoc: t.sourceDoc || '', projectId, acceptance: '', createdAt: new Date().toISOString() });
+              imported++;
+            }
+          }
+          draft.tasks = existing;
+          if (!draft.docTasks) draft.docTasks = {};
+          draft.docTasks[projectId] = parsedTasks;
+          return draft;
+        });
+      }
+      result.steps.syncDocs = { ok: true, imported, total: parsedTasks.length };
+    } catch (err) {
+      result.steps.syncDocs = { ok: false, error: err.message };
+    }
+
+    // Step 3: update-docs（写回进度）
+    try {
+      const freshStore = await loadStore();
+      const { owner, repo } = project.githubFullRepo?.includes('/')
+        ? { owner: project.githubFullRepo.split('/')[0], repo: project.githubFullRepo.split('/')[1] }
+        : { owner: project.githubOwner || '', repo: project.repository || '' };
+      const docTasks = (freshStore.docTasks || {})[projectId] || [];
+      const hubTasks = (freshStore.tasks || []).filter((t) => t.projectId === projectId);
+      const today = todayText();
+      const todayAssignments = (freshStore.assignments || []).filter((a) => a.date === today && a.projectId === projectId);
+      const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today);
+      await writeProgressToGitHub(owner, repo, markdown);
+      result.steps.updateDocs = { ok: true };
+    } catch (err) {
+      result.steps.updateDocs = { ok: false, error: err.message };
+    }
+
+    sendJson(res, 200, result);
     return true;
   }
 
