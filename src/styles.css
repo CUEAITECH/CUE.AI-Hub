@@ -1587,6 +1587,9 @@ select:focus {
   .standup-layout {
     grid-template-columns: 1fr;
   }
+  .assignment-brief-grid {
+    grid-template-columns: 1fr;
+  }
   .modal-row {
     grid-template-columns: 1fr;
   }
@@ -1737,6 +1740,7 @@ select:focus {
 .assign-item {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 13px;
   padding: 6px 8px;
@@ -1758,6 +1762,47 @@ select:focus {
 .assign-item.assign-未完成 .assign-status-badge { background: rgba(180, 35, 24, 0.08); color: var(--red); }
 .assign-note { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
 .assign-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.assignment-brief {
+  flex: 0 0 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 8px 10px;
+}
+.assignment-brief summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+.assignment-brief p {
+  margin-top: 8px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.assignment-brief-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.assignment-brief-grid strong {
+  color: var(--text);
+  font-size: 12px;
+}
+.assignment-brief-grid ol,
+.assignment-brief-grid ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.assignment-brief small {
+  display: block;
+  margin-top: 10px;
+  color: var(--dim);
+  line-height: 1.5;
+}
 .assign-done-btn, .assign-cancel-btn {
   background: none;
   border: 1px solid var(--line);

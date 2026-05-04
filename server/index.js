@@ -55,6 +55,7 @@ import {
   todayText
 } from './services/dailyBrief.js';
 import { buildHybridAnalysis } from './services/semanticLinker.js';
+import { generateAssignmentBrief } from './services/assignmentBrief.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -531,6 +532,14 @@ async function handleApi(req, res, url) {
       sendError(res, 400, 'owner and task are required');
       return true;
     }
+    const task = (store.tasks || []).find((item) => item.id === assignment.taskId) || null;
+    assignment.brief = await generateAssignmentBrief({
+      task,
+      owner: assignment.owner,
+      note: assignment.note,
+      store
+    });
+    assignment.briefGeneratedBy = assignment.brief.generatedBy;
 
     const nextStore = await updateStore((draft) => {
       draft.assignments = [assignment, ...(draft.assignments || [])].slice(0, 500);
@@ -1357,6 +1366,13 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
       createdAt: now,
       updatedAt: now
     };
+    assignment.brief = await generateAssignmentBrief({
+      task,
+      owner: assignment.owner,
+      note: assignment.note,
+      store
+    });
+    assignment.briefGeneratedBy = assignment.brief.generatedBy;
     const nextStore = await updateStore((draft) => {
       // 同一人同一任务同一天只保留最新一条
       draft.assignments = (draft.assignments || []).filter(

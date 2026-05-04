@@ -131,6 +131,19 @@ function getTaskAssignments(taskId) {
   return getTodayAssignments().filter((assignment) => assignment.taskId === taskId);
 }
 
+function isCueAiTask(task) {
+  return task?.projectId === 'cue_ai_classroom'
+    || task?.repo === 'CUEAITECH/Cue.AI'
+    || task?.githubFullRepo === 'CUEAITECH/Cue.AI'
+    || String(task?.sourceDoc || '').startsWith('docs/');
+}
+
+function getAssignableTaskPool() {
+  const activeTasks = (state.tasks || []).filter((task) => task.status !== '已完成');
+  const cueAiTasks = activeTasks.filter(isCueAiTask);
+  return cueAiTasks.length ? cueAiTasks : activeTasks;
+}
+
 function getFocusedAssignmentTasks(limit = 8) {
   const todayAssignments = getTodayAssignments();
   const stageTaskIds = new Set((state.stageChecklist?.checklist || [])
@@ -138,12 +151,12 @@ function getFocusedAssignmentTasks(limit = 8) {
     .flatMap((item) => item.linkedTasks || [])
     .map((task) => task.id));
 
-  return [...(state.tasks || [])]
-    .filter((task) => task.status !== '已完成')
+  return getAssignableTaskPool()
     .map((task) => {
       const claimed = todayAssignments.some((assignment) => assignment.taskId === task.id);
       const score = [
         claimed ? 80 : 0,
+        isCueAiTask(task) ? 70 : 0,
         stageTaskIds.has(task.id) ? 60 : 0,
         task.status === '高风险' || task.risk === '高' ? 50 : 0,
         task.risk === '中' ? 20 : 0,
@@ -589,12 +602,40 @@ function renderCompareReport() {
 
 // ── 分工渲染 ────────────────────────────────────────────────────
 
+function renderAssignmentBrief(brief) {
+  if (!brief) return '';
+  const steps = (brief.steps || []).slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  const criteria = (brief.acceptanceCriteria || []).slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  const deliverables = (brief.deliverables || []).slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  return `
+    <details class="assignment-brief">
+      <summary>任务细则 · ${escapeHtml(brief.generatedBy === 'claude' ? 'LLM' : '规则降级')}</summary>
+      <p>${escapeHtml(brief.objective || '')}</p>
+      <div class="assignment-brief-grid">
+        <div>
+          <strong>执行步骤</strong>
+          <ol>${steps}</ol>
+        </div>
+        <div>
+          <strong>验收标准</strong>
+          <ul>${criteria}</ul>
+        </div>
+        <div>
+          <strong>交付物</strong>
+          <ul>${deliverables}</ul>
+        </div>
+      </div>
+      <small>${escapeHtml(brief.gitEvidence || '')}</small>
+    </details>
+  `;
+}
+
 function renderAssignments() {
   const today = getTodayText();
   const todayAssignments = getTodayAssignments();
   const dateEl = document.querySelector('#assignmentDate');
   if (dateEl) dateEl.textContent = today;
-  const activeTasks = state.tasks.filter((task) => task.status !== '已完成');
+  const activeTasks = getAssignableTaskPool();
   const focusedTasks = getFocusedAssignmentTasks(8);
   setOptions('#assignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
   setOptions('#assignmentTask', focusedTasks.length ? focusedTasks : activeTasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
@@ -619,6 +660,7 @@ function renderAssignments() {
               <span class="assign-title">${escapeHtml(a.taskTitle || '未知任务')}</span>
               <span class="assign-status-badge">${escapeHtml(a.status || '进行中')}</span>
               ${a.note ? `<small class="assign-note">${escapeHtml(a.note)}</small>` : ''}
+              ${renderAssignmentBrief(a.brief)}
               <div class="assign-actions">
                 ${a.status !== '已完成' ? `<button class="assign-done-btn" data-assign-id="${escapeHtml(a.id)}" title="标记完成">✓</button>` : ''}
                 <button class="assign-cancel-btn" data-assign-id="${escapeHtml(a.id)}" title="取消认领">✕</button>
@@ -648,7 +690,7 @@ function renderAssignments() {
       assignableEl.innerHTML = `
         <div class="assignment-focus-note">
           <strong>今日建议领取</strong>
-          <span>从 ${activeTasks.length} 个未完成任务中筛出 ${focusedTasks.length} 个，优先展示卡点、风险和阶段路径相关任务。</span>
+          <span>从 ${activeTasks.length} 个 Cue.AI 当前阶段任务中筛出 ${focusedTasks.length} 个，优先展示卡点、风险和阶段路径相关任务。认领后会自动生成任务细则。</span>
         </div>
         ${focusedTasks.map((task) => {
         const claimants = todayAssignments.filter((a) => a.taskId === task.id);
