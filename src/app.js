@@ -911,9 +911,20 @@ function renderAssignments() {
       }).join('')}`;
 
       assignableEl.querySelectorAll('.claim-member-btn:not([disabled])').forEach((btn) => {
-        btn.addEventListener('click', once(`claim-${btn.dataset.taskId}-${btn.dataset.owner}`, () =>
-          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, btn.dataset.owner).catch((e) => toast(e.message))
-        ));
+        btn.addEventListener('click', () => {
+          if (btn.disabled) return;
+          // 立即禁用 + 乐观显示已认领
+          btn.disabled = true;
+          btn.classList.add('claimed');
+          btn.textContent = `${btn.dataset.owner} ✓`;
+          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, btn.dataset.owner).catch((e) => {
+            // 失败时回滚按钮状态
+            btn.disabled = false;
+            btn.classList.remove('claimed');
+            btn.textContent = btn.dataset.owner;
+            toast(e.message);
+          });
+        });
       });
       assignableEl.querySelectorAll('.task-link-btn').forEach((btn) => {
         btn.addEventListener('click', () => openTaskDetail(btn.dataset.taskId));

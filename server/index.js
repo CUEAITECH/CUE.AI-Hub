@@ -534,15 +534,8 @@ async function handleApi(req, res, url) {
       sendError(res, 400, 'owner and task are required');
       return true;
     }
-    const task = (store.tasks || []).find((item) => item.id === assignment.taskId) || null;
-    assignment.brief = await generateAssignmentBrief({
-      task,
-      owner: assignment.owner,
-      note: assignment.note,
-      store
-    });
-    assignment.briefGeneratedBy = assignment.brief.generatedBy;
 
+    // 先保存，立即响应，brief 异步生成
     const nextStore = await updateStore((draft) => {
       draft.assignments = [assignment, ...(draft.assignments || [])].slice(0, 500);
       return draft;
@@ -551,6 +544,20 @@ async function handleApi(req, res, url) {
       assignment,
       assignments: (nextStore.assignments || []).filter((item) => item.date === assignment.date)
     });
+
+    // 异步生成 brief，完成后回写
+    const task = (store.tasks || []).find((item) => item.id === assignment.taskId) || null;
+    generateAssignmentBrief({ task, owner: assignment.owner, note: assignment.note, store })
+      .then((brief) => updateStore((draft) => {
+        const idx = (draft.assignments || []).findIndex((a) => a.id === assignment.id);
+        if (idx >= 0) {
+          draft.assignments[idx].brief = brief;
+          draft.assignments[idx].briefGeneratedBy = brief.generatedBy;
+        }
+        return draft;
+      }))
+      .catch((err) => console.error('[Brief]', err.message));
+
     return true;
   }
 
@@ -1401,46 +1408,7 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     return true;
   }
 
-  // POST /api/assignments — 领取任务
-  if (req.method === 'POST' && url.pathname === '/api/assignments') {
-    const { json } = await readBody(req);
-    if (!json?.owner || !json?.taskId) {
-      sendError(res, 400, '缺少 owner 或 taskId 字段');
-      return true;
-    }
-    const store = await loadStore();
-    const task = (store.tasks || []).find((t) => t.id === json.taskId);
-    const today = new Date().toISOString().slice(0, 10);
-    const now = new Date().toISOString();
-    const assignment = {
-      id: createId('assign'),
-      date: today,
-      owner: String(json.owner).trim(),
-      taskId: json.taskId,
-      taskTitle: task ? task.title : String(json.taskTitle || json.taskId),
-      note: String(json.note || '').trim(),
-      status: '进行中',
-      createdAt: now,
-      updatedAt: now
-    };
-    assignment.brief = await generateAssignmentBrief({
-      task,
-      owner: assignment.owner,
-      note: assignment.note,
-      store
-    });
-    assignment.briefGeneratedBy = assignment.brief.generatedBy;
-    const nextStore = await updateStore((draft) => {
-      // 同一人同一任务同一天只保留最新一条
-      draft.assignments = (draft.assignments || []).filter(
-        (a) => !(a.owner === assignment.owner && a.taskId === assignment.taskId && a.date === today)
-      );
-      draft.assignments.unshift(assignment);
-      return draft;
-    });
-    sendJson(res, 201, { assignment, assignments: (nextStore.assignments || []).filter((a) => a.date === today) });
-    return true;
-  }
+  // POST /api/assignments — 领取任务（此路由已由上方早期路由处理，此处为冗余定义，保留作降级）
 
   // PATCH /api/assignments/:id — 更新领取状态
   if (req.method === 'PATCH' && url.pathname.startsWith('/api/assignments/')) {
