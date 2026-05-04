@@ -1982,3 +1982,55 @@ select:focus {
   font-weight: 500;
 }
 .btn-meeting-summary:hover { opacity: 0.88; }
+
+/* ── 全宽卡片（会前报告、日报、规则列表） ── */
+.workspace-card-full {
+  grid-column: 1 / -1;
+}
+
+.workspace-card-solo {
+  grid-column: 1 / -1;
+  min-height: 0;
+}
+
+/* ── 晚会工作台：两列等宽 + 会前报告全宽 ── */
+.meeting-workbench {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* ── 卡片头部右侧多按钮区 ── */
+.card-head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stage-pct {
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ── 日期选择内嵌在 workspace-actions ── */
+.meeting-date-inline input {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  width: 140px;
+}
+.meeting-date-inline input:focus {
+  border-color: rgba(77, 163, 255, 0.55);
+}
+
+@media (max-width: 860px) {
+  .meeting-workbench {
+    grid-template-columns: 1fr;
+  }
+}

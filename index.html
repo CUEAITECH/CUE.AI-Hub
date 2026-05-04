@@ -44,21 +44,20 @@
       </header>
 
       <main>
-        <section class="hero">
-          <div>
-            <span class="eyebrow">AI 研发项目指挥中心</span>
-            <h1>CUE 项目中枢</h1>
-            <p>独立的新产品线，用 AI 把阶段目标、任务分工、Git 提交、代码审阅、站会和风险提醒串成研发交付闭环。</p>
-          </div>
-          <div class="health-card">
-            <span>团队交付健康度</span>
-            <strong id="healthScore">72</strong>
-            <small id="healthSummary">高风险任务 1 个 · 待审阅提交 3 个 · PR 卡点 1 个</small>
-          </div>
-        </section>
-
         <!-- 总览 -->
         <section class="view active" id="overview">
+          <section class="hero">
+            <div>
+              <span class="eyebrow">AI 研发项目指挥中心</span>
+              <h1>CUE 项目中枢</h1>
+              <p>独立的新产品线，用 AI 把阶段目标、任务分工、Git 提交、代码审阅、站会和风险提醒串成研发交付闭环。</p>
+            </div>
+            <div class="health-card">
+              <span>团队交付健康度</span>
+              <strong id="healthScore">72</strong>
+              <small id="healthSummary">高风险任务 1 个 · 待审阅提交 3 个 · PR 卡点 1 个</small>
+            </div>
+          </section>
           <section class="panel cue-ai-panel">
             <div class="panel-head">
               <div>
@@ -182,80 +181,66 @@
           </section>
         </section>
 
-        <!-- 晚会闭环（来自 main：daily meeting command loop） -->
+        <!-- 晚会闭环 -->
         <section class="view" id="meeting">
-          <section class="panel meeting-command">
-            <div class="panel-head">
+          <section class="workspace-shell">
+            <div class="workspace-header">
               <div>
-                <span>晚会流程</span>
+                <span class="workspace-kicker">晚会闭环</span>
                 <h2>会前对账 → 领取分工 → 会后总结</h2>
+                <p>每日 18:00 · 17:45 自动推送作战包到企微</p>
               </div>
-              <div class="panel-actions">
+              <div class="workspace-actions">
+                <label class="meeting-date-inline">
+                  <input id="meetingDate" type="date" aria-label="晚会日期" />
+                </label>
                 <button type="button" data-action="sync-cue-ai">同步仓库</button>
                 <button type="button" data-action="generate-evening-report">生成会前报告</button>
                 <button type="button" data-action="meeting-summary" class="btn-meeting-summary">会后总结 →企微</button>
               </div>
             </div>
-            <div class="meeting-toolbar">
-              <label>
-                <span>晚会日期</span>
-                <input id="meetingDate" type="date" aria-label="晚会日期" />
-              </label>
-              <div>
-                <strong id="meetingStageProgress">阶段进度 0%</strong>
-                <small>生成报告后自动根据任务完成、Git 提交和 Review 风险刷新。</small>
-              </div>
-            </div>
-          </section>
 
-          <section class="split-grid">
-            <article class="panel">
-              <div class="panel-head">
-                <div>
+            <div class="workspace-grid meeting-workbench">
+              <article class="workspace-card">
+                <div class="workspace-card-head">
                   <span>晚会领取</span>
-                  <h2>成员领取明日任务</h2>
+                  <button type="button" data-action="create-assignment">确认领取</button>
                 </div>
-                <button type="button" data-action="create-assignment">确认领取</button>
-              </div>
-              <div class="form-grid">
-                <select id="meetingAssignmentOwner" aria-label="领取人"></select>
-                <select id="meetingAssignmentTask" aria-label="领取任务"></select>
-                <textarea id="meetingAssignmentNote" aria-label="领取说明">今日专注完成核心验收项，并保持 commit 与任务关联。</textarea>
-              </div>
-              <div class="assignment-list" id="meetingAssignmentList"></div>
-            </article>
+                <div class="form-stack">
+                  <select id="meetingAssignmentOwner" aria-label="领取人"></select>
+                  <select id="meetingAssignmentTask" aria-label="领取任务"></select>
+                  <textarea id="meetingAssignmentNote" aria-label="领取说明" placeholder="今日专注完成核心验收项，并保持 commit 与任务关联。"></textarea>
+                </div>
+                <div class="assignment-list" id="meetingAssignmentList"></div>
+              </article>
 
-            <article class="panel">
-              <div class="panel-head">
-                <div>
+              <article class="workspace-card">
+                <div class="workspace-card-head">
                   <span>异步站会</span>
-                  <h2>昨日完成、今日计划、阻塞</h2>
+                  <button type="button" data-action="submit-meeting-standup">提交站会</button>
                 </div>
-                <button type="button" data-action="submit-meeting-standup">提交站会</button>
-              </div>
-              <div class="form-grid">
-                <select id="meetingStandupOwner" aria-label="站会成员"></select>
-                <textarea id="meetingStandupYesterday" aria-label="昨日完成">昨日完成：</textarea>
-                <textarea id="meetingStandupToday" aria-label="今日计划">今日计划：</textarea>
-                <input id="meetingStandupBlockers" type="text" value="无" aria-label="阻塞项" />
-              </div>
-              <div class="standup-list" id="meetingStandupList"></div>
-            </article>
-          </section>
+                <div class="form-stack">
+                  <select id="meetingStandupOwner" aria-label="站会成员"></select>
+                  <textarea id="meetingStandupYesterday" aria-label="昨日完成" placeholder="昨日完成了什么？"></textarea>
+                  <textarea id="meetingStandupToday" aria-label="今日计划" placeholder="今日计划做什么？"></textarea>
+                  <input id="meetingStandupBlockers" type="text" placeholder="阻塞项（无则留空）" aria-label="阻塞项" />
+                </div>
+                <div class="standup-list" id="meetingStandupList"></div>
+              </article>
 
-          <section class="panel">
-            <div class="panel-head">
-              <div>
-                <span>会前报告</span>
-                <h2>企业微信推送草稿</h2>
-              </div>
-              <div class="panel-actions">
-                <button type="button" data-action="copy-evening-report">复制报告</button>
-                <button type="button" data-action="push-evening-report" id="btnPushEveningReport" style="display:none">推送企微</button>
-              </div>
+              <article class="workspace-card workspace-card-full">
+                <div class="workspace-card-head">
+                  <span>会前报告</span>
+                  <div class="card-head-right">
+                    <strong id="meetingStageProgress" class="stage-pct">阶段进度 0%</strong>
+                    <button type="button" data-action="copy-evening-report">复制</button>
+                    <button type="button" data-action="push-evening-report" id="btnPushEveningReport" style="display:none">推送企微</button>
+                  </div>
+                </div>
+                <div class="report-summary" id="meetingReportSummary"></div>
+                <pre class="report-box" id="meetingEveningReport">点击「生成会前报告」后，这里会输出前一天任务领取、今日提交、AI Review 风险和下一步细化目标。</pre>
+              </article>
             </div>
-            <div class="report-summary" id="meetingReportSummary"></div>
-            <pre class="report-box" id="meetingEveningReport">点击"生成晚会报告"后，这里会输出前一天任务领取、今日提交、AI Review 风险和下一步细化目标。</pre>
           </section>
         </section>
 
@@ -317,14 +302,11 @@
                 <div class="review-form form-stack">
                   <label>
                     <span>提交标题</span>
-                    <input id="reviewTitle" type="text" value="feat: task_123 add webhook signature check" aria-label="审阅标题" />
+                    <input id="reviewTitle" type="text" placeholder="feat: task_123 add webhook signature check" aria-label="审阅标题" />
                   </label>
                   <label>
-                    <span>变更 Diff</span>
-                    <textarea id="reviewDiff" aria-label="审阅 diff">+ const token = process.env.GITHUB_TOKEN;
-+ console.log(token);
-+ // TODO: add tests
-</textarea>
+                    <span>变更 Diff（可选）</span>
+                    <textarea id="reviewDiff" aria-label="审阅 diff" placeholder="粘贴 git diff 内容，留空则只审阅标题..."></textarea>
                   </label>
                 </div>
               </article>
@@ -413,14 +395,15 @@
 
         <!-- 分工领取 -->
         <section class="view" id="assignment">
-          <section class="panel">
-            <div class="panel-head">
+          <section class="workspace-shell">
+            <div class="workspace-header">
               <div>
-                <span>今日分工</span>
+                <span class="workspace-kicker">分工领取</span>
                 <h2>任务认领与执行追踪</h2>
+                <p>认领今日任务，会后点「会后总结」推送企微</p>
               </div>
-              <div class="panel-actions">
-                <button type="button" data-action="refresh-assignments">刷新分工</button>
+              <div class="workspace-actions">
+                <button type="button" data-action="refresh-assignments">刷新</button>
                 <button type="button" data-action="gen-evening-report">生成晚报</button>
                 <button type="button" data-action="meeting-summary" class="btn-meeting-summary">会后总结 →企微</button>
               </div>
@@ -437,7 +420,7 @@
               </label>
               <label>
                 <span>今日计划说明</span>
-                <input id="assignmentNote" type="text" value="今日专注完成核心验收项，并保持 commit 与任务关联。" aria-label="今日计划说明" />
+                <input id="assignmentNote" type="text" placeholder="今日专注完成核心验收项，并保持 commit 与任务关联。" aria-label="今日计划说明" />
               </label>
               <button type="button" data-action="claim-selected-task">确认领取</button>
             </div>
@@ -465,6 +448,7 @@
         </section>
 
         <!-- 任务详情 -->
+
         <section class="view" id="task-detail">
           <section class="workspace-shell task-detail-shell">
             <div class="workspace-header task-detail-header">
@@ -483,13 +467,14 @@
 
         <!-- 日报 & 晚报 -->
         <section class="view" id="report">
-          <section class="panel">
-            <div class="panel-head">
+          <section class="workspace-shell">
+            <div class="workspace-header">
               <div>
-                <span>AI 日报 / 晚报</span>
-                <h2>研发交付报告与对照分析</h2>
+                <span class="workspace-kicker">输出</span>
+                <h2>日报 &amp; 晚报</h2>
+                <p>AI 生成研发交付报告，对比昨日分工与今日实际 commit</p>
               </div>
-              <div class="panel-actions">
+              <div class="workspace-actions">
                 <button type="button" data-action="gen-report">生成日报</button>
                 <button type="button" data-action="gen-evening-report2">生成晚报</button>
                 <button type="button" data-action="compare-report">对照分析</button>
@@ -497,41 +482,45 @@
               </div>
             </div>
 
-            <div class="report-tabs" role="tablist">
-              <button class="report-tab active" type="button" data-report-tab="daily" role="tab">📋 日报</button>
-              <button class="report-tab" type="button" data-report-tab="evening" role="tab">🌙 晚报</button>
-              <button class="report-tab" type="button" data-report-tab="compare" role="tab">🔍 昨日对照</button>
-            </div>
-
-            <div id="reportDailyPane" class="report-pane active">
-              <div id="reportContent" class="report-content">
-                <div class="empty-state">点击"生成日报"，AI 将根据今日任务、审阅和站会数据生成研发日报。</div>
+            <article class="workspace-card workspace-card-solo">
+              <div class="report-tabs" role="tablist">
+                <button class="report-tab active" type="button" data-report-tab="daily" role="tab">📋 日报</button>
+                <button class="report-tab" type="button" data-report-tab="evening" role="tab">🌙 晚报</button>
+                <button class="report-tab" type="button" data-report-tab="compare" role="tab">🔍 昨日对照</button>
               </div>
-            </div>
-            <div id="reportEveningPane" class="report-pane">
-              <div id="reportEveningContent" class="report-content">
-                <div class="empty-state">点击"生成晚报"，AI 将汇总今日 GitHub 提交、分工完成情况生成晚报（每日 18:00 自动生成）。</div>
+              <div id="reportDailyPane" class="report-pane active">
+                <div id="reportContent" class="report-content">
+                  <div class="empty-state">点击「生成日报」，AI 将根据今日任务、审阅和站会数据生成研发日报。</div>
+                </div>
               </div>
-            </div>
-            <div id="reportComparePane" class="report-pane">
-              <div id="reportCompareContent" class="report-content">
-                <div class="empty-state">点击"对照分析"，AI 将对比昨日晚报中的任务分工与实际 commit 记录，找出完成和遗漏项。</div>
+              <div id="reportEveningPane" class="report-pane">
+                <div id="reportEveningContent" class="report-content">
+                  <div class="empty-state">点击「生成晚报」，AI 将汇总今日 GitHub 提交、分工完成情况生成晚报（每日 18:00 自动生成）。</div>
+                </div>
               </div>
-            </div>
+              <div id="reportComparePane" class="report-pane">
+                <div id="reportCompareContent" class="report-content">
+                  <div class="empty-state">点击「对照分析」，AI 将对比昨日晚报中的任务分工与实际 commit 记录，找出完成和遗漏项。</div>
+                </div>
+              </div>
+            </article>
           </section>
         </section>
 
         <!-- 自动提醒 -->
         <section class="view" id="automation">
-          <section class="panel">
-            <div class="panel-head">
+          <section class="workspace-shell">
+            <div class="workspace-header">
               <div>
-                <span>自动化规则</span>
-                <h2>自动检测与提醒规则</h2>
+                <span class="workspace-kicker">自动化</span>
+                <h2>自动提醒规则</h2>
+                <p>风险检测与企业微信自动通知</p>
               </div>
               <button type="button" data-action="test-alert">测试提醒</button>
             </div>
-            <ul class="rule-list" id="ruleList"></ul>
+            <article class="workspace-card workspace-card-solo">
+              <ul class="rule-list" id="ruleList"></ul>
+            </article>
           </section>
         </section>
       </main>
