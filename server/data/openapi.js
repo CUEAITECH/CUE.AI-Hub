@@ -235,6 +235,121 @@ export function buildOpenApiSpec(serverUrl) {
         }
       },
 
+      '/api/wecom/tasks': {
+        get: {
+          operationId: 'getTaskList',
+          summary: '获取当前可认领任务列表',
+          description: '返回当前进行中、待确认的任务列表，适合在企业微信中展示让成员选择认领。用于"现在有哪些任务"、"今天可以认领什么任务"。',
+          responses: {
+            '200': { description: '任务列表', content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                tasks: { type: 'array', description: '可认领任务列表', items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    title: { type: 'string' },
+                    owner: { type: 'string' },
+                    status: { type: 'string' },
+                    progress: { type: 'number' }
+                  }
+                }},
+                result: { type: 'string', description: '可直接回复给用户的任务列表摘要' }
+              }
+            }}}}
+          }
+        }
+      },
+
+      '/api/wecom/claim': {
+        post: {
+          operationId: 'claimTaskByKeyword',
+          summary: '按关键词认领任务',
+          description: '成员通过任务关键词认领任务，无需知道任务 ID。用于"我认领XX任务"、"我今天负责YY"。系统会模糊匹配任务标题并自动生成任务细则。',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: {
+              type: 'object',
+              required: ['owner', 'keyword'],
+              properties: {
+                owner: { type: 'string', description: '认领人姓名，需是团队成员之一：田家铭、胡佳涛、罗子宽、林世棋' },
+                keyword: { type: 'string', description: '任务标题关键词，系统自动模糊匹配' },
+                note: { type: 'string', description: '今日工作计划说明（可选）' }
+              }
+            }}}
+          },
+          responses: {
+            '201': { description: '认领成功', content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                result: { type: 'string', description: '可直接回复给用户的认领结果摘要' },
+                assignment: { type: 'object', description: '认领记录' }
+              }
+            }}}},
+            '400': { description: '未找到匹配任务或已认领' }
+          }
+        }
+      },
+
+      '/api/wecom/standup': {
+        post: {
+          operationId: 'submitStandupViaWecom',
+          summary: '企业微信内提交站会',
+          description: '成员在企业微信中直接提交站会。用于"我昨天完成了XX，今天计划YY，没有阻塞"这类自然语言输入。',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: {
+              type: 'object',
+              required: ['owner'],
+              properties: {
+                owner: { type: 'string', description: '提交人姓名，需是团队成员之一：田家铭、胡佳涛、罗子宽、林世棋' },
+                yesterday: { type: 'string', description: '昨天完成了什么' },
+                today: { type: 'string', description: '今天计划做什么' },
+                blockers: { type: 'string', description: '阻塞项，没有填"无"' },
+                isLeave: { type: 'boolean', description: '是否今日请假' }
+              }
+            }}}
+          },
+          responses: {
+            '201': { description: '提交成功', content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                result: { type: 'string', description: '可直接回复给用户的提交确认' }
+              }
+            }}}}
+          }
+        }
+      },
+
+      '/api/wecom/progress': {
+        post: {
+          operationId: 'updateTaskProgressByKeyword',
+          summary: '按关键词更新任务进度',
+          description: '成员通过任务关键词更新进度百分比。用于"把XX任务进度更新为80%"、"YY任务已完成"。',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: {
+              type: 'object',
+              required: ['keyword', 'progress'],
+              properties: {
+                keyword: { type: 'string', description: '任务标题关键词，系统自动模糊匹配' },
+                progress: { type: 'number', minimum: 0, maximum: 100, description: '进度百分比，0-100' },
+                signal: { type: 'string', description: '进展说明（可选）' }
+              }
+            }}}
+          },
+          responses: {
+            '200': { description: '更新成功', content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                result: { type: 'string', description: '可直接回复给用户的更新确认' }
+              }
+            }}}},
+            '404': { description: '未找到匹配任务' }
+          }
+        }
+      },
+
       '/api/wecom/summary': {
         get: {
           operationId: 'getWeComProjectSummary',
