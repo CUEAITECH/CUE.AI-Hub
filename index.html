@@ -286,12 +286,24 @@
               <div>
                 <span class="workspace-kicker">AI 审阅</span>
                 <h2>让提交先过一遍交付和安全审阅</h2>
-                <p>审阅结果会进入风险队列，Block 项需要晚会确认负责人、修复方式和验收口径。</p>
+                <p>审阅结果会进入风险队列，Block/Escalate 项需人工确认后才能推进到晚会闭环。</p>
               </div>
               <div class="workspace-actions">
+                <button type="button" data-action="load-review-queue">刷新待办</button>
                 <button type="button" data-action="run-review">运行审阅</button>
               </div>
             </div>
+
+            <!-- 人工审阅待办 -->
+            <article class="workspace-card workspace-card-solo">
+              <div class="workspace-card-head">
+                <span>人工待办</span>
+                <strong>Block · Escalate · Warning 待确认</strong>
+              </div>
+              <div id="reviewQueue" class="review-queue">
+                <div class="empty-state">点击「刷新待办」加载需人工确认的审阅项</div>
+              </div>
+            </article>
 
             <div class="workspace-grid review-workbench">
               <article class="workspace-card">

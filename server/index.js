@@ -1011,6 +1011,7 @@ async function handleApi(req, res, url) {
     const { json } = await readBody(req);
     const review = {
       id: createId('review'),
+      humanDecision: null,
       ...await reviewChange(json || {})
     };
     const nextStore = await updateStore((store) => {
@@ -1018,6 +1019,60 @@ async function handleApi(req, res, url) {
       return store;
     });
     sendJson(res, 201, { review, reviews: nextStore.reviews });
+    return true;
+  }
+
+  // PATCH /api/reviews/:id — 人工审阅决策（acknowledged / needs-fix / exempted）
+  if (req.method === 'PATCH' && url.pathname.startsWith('/api/reviews/')) {
+    const id = decodeURIComponent(url.pathname.split('/').pop());
+    const { json } = await readBody(req);
+    const allowed = ['acknowledged', 'needs-fix', 'exempted'];
+    const decision = allowed.includes(json?.humanDecision) ? json.humanDecision : null;
+    let updated = null;
+    const nextStore = await updateStore((draft) => {
+      const idx = (draft.reviews || []).findIndex((r) => r.id === id);
+      if (idx === -1) return draft;
+      updated = {
+        ...draft.reviews[idx],
+        humanDecision: decision,
+        humanNote: String(json?.humanNote || '').trim() || draft.reviews[idx].humanNote || '',
+        humanAt: new Date().toISOString()
+      };
+      draft.reviews[idx] = updated;
+      return draft;
+    });
+    if (!updated) { sendError(res, 404, 'review not found'); return true; }
+    sendJson(res, 200, { review: updated });
+    return true;
+  }
+
+  // GET /api/reviews/queue — 人工待办：Block+Escalate 未处理 + 最近无决策的 commit review
+  if (req.method === 'GET' && url.pathname === '/api/reviews/queue') {
+    const store = await loadStore();
+    const allReviews = store.reviews || [];
+    // Block/Escalate 且未做过人工决策
+    const pending = allReviews.filter(
+      (r) => (r.level === 'Block' || r.level === 'Escalate') && !r.humanDecision
+    );
+    // 最近 48h 内、非 Pass 的 review（Warning 也需要关注）
+    const cutoff = Date.now() - 48 * 3600 * 1000;
+    const recent = allReviews.filter((r) => {
+      if (r.humanDecision) return false;
+      if (r.level === 'Block' || r.level === 'Escalate') return false; // already in pending
+      if (r.level === 'Pass') return false;
+      const ts = new Date(r.createdAt || 0).getTime();
+      return ts >= cutoff;
+    });
+    const queue = [
+      ...pending.sort((a, b) => (b.level === 'Block') - (a.level === 'Block')),
+      ...recent.slice(0, 10)
+    ];
+    sendJson(res, 200, {
+      queue,
+      pendingCount: pending.length,
+      recentCount: recent.length,
+      generatedAt: new Date().toISOString()
+    });
     return true;
   }
 
@@ -1597,9 +1652,12 @@ const server = createServer(async (req, res) => {
 // 例如：MEETING_HOUR=18 → 每天 17:45 自动生成并推送到企微
 function startScheduler() {
   let lastEveningReportDate = '';
+  let lastReviewQueueDate = '';
   let githubSyncRunning = false;
   const prepHour = meetingHour === 0 ? 23 : meetingHour - 1; // 前一小时
   const prepMinute = 45;
+  // 晚会前 2h 推送人工审阅待办提醒
+  const reviewHour = meetingHour <= 1 ? meetingHour + 22 : meetingHour - 2;
 
   async function syncGitHubProjects() {
     if (githubSyncIntervalMinutes <= 0 || githubSyncRunning) return;
@@ -1650,6 +1708,42 @@ function startScheduler() {
       await generateEveningReport(today).catch((err) =>
         console.error('[Scheduler] 作战包生成失败:', err.message)
       );
+    }
+
+    // 晚会前 2h（reviewHour:00）推送人工审阅待办提醒
+    if (sh === reviewHour && sm === 0 && lastReviewQueueDate !== today) {
+      lastReviewQueueDate = today;
+      if (isWeComAvailable()) {
+        const store = await loadStore();
+        const allReviews = store.reviews || [];
+        const pending = allReviews.filter(
+          (r) => (r.level === 'Block' || r.level === 'Escalate') && !r.humanDecision
+        );
+        const cutoff = Date.now() - 48 * 3600 * 1000;
+        const warning = allReviews.filter((r) => {
+          if (r.humanDecision || r.level === 'Block' || r.level === 'Escalate' || r.level === 'Pass') return false;
+          return new Date(r.createdAt || 0).getTime() >= cutoff;
+        });
+        if (pending.length || warning.length) {
+          const lines = [
+            `## 📋 人工审阅提醒（晚会前 ${meetingHour - reviewHour}h）`,
+            '',
+            pending.length
+              ? `**Block/Escalate 待处理（${pending.length} 条）：**\n${pending.slice(0, 5).map((r) => `- [${r.level}] ${r.owner || '未知'}：${r.title}`).join('\n')}`
+              : '✅ 无 Block/Escalate 阻断项',
+            '',
+            warning.length
+              ? `**近 48h Warning 待确认（${warning.length} 条）：**\n${warning.slice(0, 5).map((r) => `- ${r.owner || '未知'}：${r.title}`).join('\n')}`
+              : '',
+            '',
+            `[前往人工审阅](${hubUrl}#reviews)`
+          ].filter((l) => l !== undefined).join('\n');
+          await sendWeComMarkdown(lines).catch((err) =>
+            console.error('[Scheduler] 人工审阅提醒推送失败:', err.message)
+          );
+          console.log(`[Scheduler] ${reviewHour}:00 已推送人工审阅提醒（${pending.length} Block/Escalate，${warning.length} Warning）`);
+        }
+      }
     }
   }, 60_000);
 }
