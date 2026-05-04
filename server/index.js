@@ -110,6 +110,8 @@ function requiresApiKey(req, url) {
   if (!url.pathname.startsWith('/api/')) return false;
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return false;
   if (url.pathname === '/api/webhooks/github') return false;
+  // 企微插件接口无需 API key（企微本身已是内部工具）
+  if (url.pathname.startsWith('/api/wecom/')) return false;
   return true;
 }
 
