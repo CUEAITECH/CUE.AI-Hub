@@ -1384,6 +1384,155 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     return true;
   }
 
+  // GET /api/wecom/tasks — 企微插件：返回当前可认领任务列表
+  if (req.method === 'GET' && url.pathname === '/api/wecom/tasks') {
+    const store = await loadStore();
+    const today = todayText();
+    const claimedToday = new Set((store.assignments || []).filter((a) => a.date === today).map((a) => a.taskId));
+    const active = (store.tasks || [])
+      .filter((t) => t.status !== '已完成')
+      .slice(0, 12)
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        owner: t.owner || '未分配',
+        progress: t.progress || 0,
+        risk: t.risk || '低',
+        due: t.due || '未设置',
+        claimedToday: claimedToday.has(t.id)
+      }));
+    const lines = active.map((t, i) =>
+      `${i + 1}. 【${t.risk}风险】${t.title}（${t.owner} · ${t.progress}% · 截止${t.due}）${t.claimedToday ? ' ✅已认领' : ''}`
+    ).join('\n');
+    sendJson(res, 200, {
+      summary: active.length ? `当前 ${active.length} 个进行中任务：\n${lines}` : '暂无进行中任务。',
+      tasks: active
+    });
+    return true;
+  }
+
+  // POST /api/wecom/claim — 企微插件：按关键词认领任务
+  if (req.method === 'POST' && url.pathname === '/api/wecom/claim') {
+    const { json } = await readBody(req);
+    const owner = String(json?.owner || '').trim();
+    const keyword = String(json?.taskKeyword || json?.taskTitle || '').trim();
+    if (!owner || !keyword) {
+      sendJson(res, 200, { result: '❌ 请提供认领人姓名和任务关键词，例如：owner=田家铭 taskKeyword=TRTC' });
+      return true;
+    }
+    const store = await loadStore();
+    const kw = keyword.toLowerCase();
+    const task = (store.tasks || []).find((t) =>
+      t.status !== '已完成' && t.title.toLowerCase().includes(kw)
+    );
+    if (!task) {
+      const candidates = (store.tasks || []).filter((t) => t.status !== '已完成').slice(0, 5)
+        .map((t) => `「${t.title}」`).join('、');
+      sendJson(res, 200, { result: `❌ 未找到包含「${keyword}」的进行中任务。当前可认领：${candidates || '暂无'}` });
+      return true;
+    }
+    const today = todayText();
+    const already = (store.assignments || []).find(
+      (a) => a.owner === owner && a.taskId === task.id && a.date === today
+    );
+    if (already) {
+      sendJson(res, 200, { result: `ℹ️ ${owner} 今日已认领「${task.title}」，无需重复认领。` });
+      return true;
+    }
+    const assignment = {
+      id: createId('assign'),
+      date: today,
+      owner,
+      taskId: task.id,
+      taskTitle: task.title,
+      note: '',
+      status: '进行中',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    await updateStore((draft) => {
+      draft.assignments = (draft.assignments || []).filter(
+        (a) => !(a.owner === owner && a.taskId === task.id && a.date === today)
+      );
+      draft.assignments.unshift(assignment);
+      return draft;
+    });
+    // 异步生成 brief
+    generateAssignmentBrief({ task, owner, note: '', store })
+      .then((brief) => updateStore((draft) => {
+        const idx = (draft.assignments || []).findIndex((a) => a.id === assignment.id);
+        if (idx >= 0) { draft.assignments[idx].brief = brief; draft.assignments[idx].briefGeneratedBy = brief.generatedBy; }
+        return draft;
+      }))
+      .catch((err) => console.error('[Brief/WeComClaim]', err.message));
+    sendJson(res, 200, { result: `✅ ${owner} 已认领「${task.title}」，任务细则正在生成，稍后可在 Hub 查看。` });
+    return true;
+  }
+
+  // POST /api/wecom/standup — 企微插件：提交今日站会
+  if (req.method === 'POST' && url.pathname === '/api/wecom/standup') {
+    const { json } = await readBody(req);
+    const owner = String(json?.owner || '').trim();
+    if (!owner) {
+      sendJson(res, 200, { result: '❌ 请提供成员姓名（owner 字段）' });
+      return true;
+    }
+    const standup = normalizeStandup({
+      owner,
+      yesterday: String(json?.yesterday || '').trim(),
+      today: String(json?.today || '').trim(),
+      blockers: String(json?.blockers || '无').trim()
+    });
+    await updateStore((draft) => {
+      draft.standups = (draft.standups || []).filter(
+        (s) => !(s.owner === owner && s.date === standup.date)
+      );
+      draft.standups.unshift(standup);
+      draft.standups = draft.standups.slice(0, 500);
+      return draft;
+    });
+    const blockerLine = standup.blockers && standup.blockers !== '无' ? `\n⚠️ 阻塞：${standup.blockers}` : '';
+    sendJson(res, 200, { result: `✅ ${owner} 站会已提交（${standup.date}）\n昨日：${standup.yesterday || '未填写'}\n今日：${standup.today || '未填写'}${blockerLine}` });
+    return true;
+  }
+
+  // POST /api/wecom/progress — 企微插件：按关键词更新任务进度
+  if (req.method === 'POST' && url.pathname === '/api/wecom/progress') {
+    const { json } = await readBody(req);
+    const keyword = String(json?.taskKeyword || json?.taskTitle || '').trim();
+    const progress = Number(json?.progress ?? -1);
+    const status = String(json?.status || '').trim();
+    if (!keyword || (progress < 0 && !status)) {
+      sendJson(res, 200, { result: '❌ 请提供任务关键词（taskKeyword）和进度（progress 0-100）或状态（status）' });
+      return true;
+    }
+    const store = await loadStore();
+    const kw = keyword.toLowerCase();
+    const task = (store.tasks || []).find((t) => t.title.toLowerCase().includes(kw));
+    if (!task) {
+      sendJson(res, 200, { result: `❌ 未找到包含「${keyword}」的任务` });
+      return true;
+    }
+    const newProgress = progress >= 0 && progress <= 100 ? progress : task.progress;
+    const newStatus = status || task.status;
+    await updateStore((draft) => {
+      const idx = (draft.tasks || []).findIndex((t) => t.id === task.id);
+      if (idx >= 0) {
+        draft.tasks[idx] = normalizeTask({
+          ...draft.tasks[idx],
+          progress: newProgress,
+          status: newStatus
+        });
+      }
+      return draft;
+    });
+    const parts = [];
+    if (progress >= 0 && progress <= 100) parts.push(`进度 → ${newProgress}%`);
+    if (status) parts.push(`状态 → ${newStatus}`);
+    sendJson(res, 200, { result: `✅ 已更新「${task.title}」：${parts.join('，')}` });
+    return true;
+  }
+
   // GET /api/config — 返回前端需要的功能开关（不含密钥）
   if (req.method === 'GET' && url.pathname === '/api/config') {
     sendJson(res, 200, {
