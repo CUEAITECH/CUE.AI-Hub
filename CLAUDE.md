@@ -32,7 +32,8 @@ server/services/
   planner.js            ← AI 任务规划（LLM 优先 → 规则引擎降级）
   reviewer.js           ← AI 代码审阅（LLM 优先 → 规则引擎降级）
   dailyBrief.js         ← 晚会作战包逻辑（对账、nextTargets、进度更新）
-  riskEngine.js         ← 纯规则风险扫描（不依赖 LLM）
+  riskEngine.js         ← 规则风险扫描 + 缓存的 AI 风险解释/健康度修正
+  semanticLinker.js     ← AI 混合分析：任务/阶段/commit 语义关联、风险解释、健康度建议
   githubApi.js          ← GitHub REST API v3 封装（无需本地 clone）
   githubWebhook.js      ← Webhook 事件解析
   localGit.js           ← 本地 git 命令（fallback）
@@ -84,6 +85,16 @@ index.html              ← 8 个 section.view 对应 8 个导航页
 ### GitHub 同步
 
 `scanGitHubProject`（远端 API，无需本地 clone）优先于 `scanLocalGitProject`。选择逻辑：项目有 `githubOwner` 字段则走 GitHub API，否则走本地 git。GitHub 作者名通过 `authorMap`（`githubApi.js` 第 73 行）映射到中文团队成员名。
+
+### AI 混合分析（semanticLinker）
+
+`POST /api/ai/refresh-analysis` 会触发 Claude 对任务、阶段、commit 和风险候选做语义分析，并缓存到 `store.semanticLinks`、`store.riskAnalyses`、`store.healthAnalysis`。
+
+设计原则：
+- 规则负责召回候选、硬阻断和兜底。
+- Claude 负责语义关联、置信度、原因和建议动作。
+- 页面读取缓存结果，不能在 `GET /api/state` 时直接调用 LLM。
+- P1 硬风险不能被 LLM 降级。
 
 ## 环境变量
 

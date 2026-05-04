@@ -43,6 +43,9 @@ function migrateStore(store) {
     reports: {},
     planAdjustments: [],
     docTasks: {},
+    semanticLinks: {},
+    riskAnalyses: [],
+    healthAnalysis: null,
     currentStage: defaultCurrentStage,
     ...store
   };
@@ -114,6 +117,9 @@ function migrateStore(store) {
   next.eveningReports = next.eveningReports || {};
   next.reports = next.reports || {};
   next.planAdjustments = next.planAdjustments || [];
+  next.semanticLinks = next.semanticLinks || {};
+  next.riskAnalyses = next.riskAnalyses || [];
+  next.healthAnalysis = next.healthAnalysis || null;
   const currentStage = next.currentStage || {};
   const isLegacyHubStage = currentStage.id === 'stage_mvp'
     || currentStage.name === 'CUE 项目中枢 MVP'

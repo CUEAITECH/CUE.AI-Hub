@@ -19,6 +19,9 @@ const state = {
   assignments: [],
   planAdjustments: [],
   docTasks: {},
+  semanticLinks: {},
+  riskAnalyses: [],
+  healthAnalysis: null,
   stageChecklist: null,
   config: { githubEnabled: false, apiKeyRequiredForWrites: false, wecomEnabled: false, llmEnabled: false }
 };
@@ -305,7 +308,7 @@ function renderRoadmap() {
         <div class="roadmap-detail-section">
           <strong>任务</strong>
           ${tasks.length ? tasks.map((task) => `
-            <p>${escapeHtml(task.title)} <em>${escapeHtml(task.owner || '未指定')} · ${escapeHtml(task.status || '待确认')} · ${Number(task.progress) || 0}%</em></p>
+            <p>${escapeHtml(task.title)} <em>${escapeHtml(task.owner || '未指定')} · ${escapeHtml(task.status || '待确认')} · ${Number(task.progress) || 0}%${task.aiLink?.reason ? ` · AI ${Math.round(Number(task.aiLink.confidence || 0) * 100)}%：${escapeHtml(task.aiLink.reason)}` : ''}</em></p>
           `).join('') : '<p class="muted-line">暂无关联任务</p>'}
         </div>
         <div class="roadmap-detail-section">
@@ -448,6 +451,7 @@ function renderRisks() {
       <div>
         <strong>${escapeHtml(alert.title)}</strong>
         <p>${escapeHtml(alert.detail)}</p>
+        ${alert.aiAnalysis?.reason ? `<p class="ai-analysis-line">AI：${escapeHtml(alert.aiAnalysis.reason)} · ${escapeHtml(alert.aiAnalysis.action || '待确认动作')}</p>` : ''}
         <small>提醒对象：${escapeHtml(alert.target)}</small>
       </div>
     </div>
@@ -817,6 +821,9 @@ async function loadState() {
   state.currentStage = payload.currentStage || {};
   state.metrics = payload.metrics || {};
   state.docTasks = payload.docTasks || {};
+  state.semanticLinks = payload.semanticLinks || {};
+  state.riskAnalyses = payload.riskAnalyses || [];
+  state.healthAnalysis = payload.healthAnalysis || null;
   state.stageChecklist = payload.stageChecklist || null;
   setText('#syncStatus', '本地 API 已连接');
 
@@ -1146,6 +1153,19 @@ async function updateDocsProgress() {
   }
 }
 
+async function refreshAiAnalysis() {
+  toast('正在执行 AI 混合分析...');
+  const payload = await api('/api/ai/refresh-analysis', { method: 'POST', body: '{}' });
+  state.alerts = payload.alerts || state.alerts;
+  state.metrics = payload.metrics || state.metrics;
+  state.stageChecklist = payload.stageChecklist || state.stageChecklist;
+  state.semanticLinks = payload.semanticLinks || state.semanticLinks;
+  state.riskAnalyses = payload.riskAnalyses || state.riskAnalyses;
+  state.healthAnalysis = payload.healthAnalysis || state.healthAnalysis;
+  renderAll();
+  toast(payload.healthAnalysis?.nextFocus || 'AI 混合分析已刷新');
+}
+
 // ── 日报 ──────────────────────────────────────────────────────
 
 async function generateReport() {
@@ -1353,9 +1373,9 @@ function bindEvents() {
   document.querySelector('[data-action="sync"]').addEventListener('click', () => {
     syncCueAiGit().catch((e) => toast(e.message));
   });
-  document.querySelector('[data-action="sync-cue-ai"]').addEventListener('click', () => {
+  document.querySelectorAll('[data-action="sync-cue-ai"]').forEach((button) => button.addEventListener('click', () => {
     syncCueAiGit().catch((e) => toast(e.message));
-  });
+  }));
   document.querySelector('[data-action="scan-risks"]').addEventListener('click', () => {
     syncSignals().catch((e) => toast(e.message));
   });
@@ -1452,12 +1472,15 @@ function bindEvents() {
   });
 
   // AI 产品经理：文档同步按钮
-  document.querySelector('[data-action="sync-docs"]')?.addEventListener('click', () => {
+  document.querySelectorAll('[data-action="sync-docs"]').forEach((button) => button.addEventListener('click', () => {
     syncDocsToHub().catch((e) => toast(e.message));
-  });
-  document.querySelector('[data-action="update-docs"]')?.addEventListener('click', () => {
+  }));
+  document.querySelectorAll('[data-action="update-docs"]').forEach((button) => button.addEventListener('click', () => {
     updateDocsProgress().catch((e) => toast(e.message));
-  });
+  }));
+  document.querySelectorAll('[data-action="refresh-ai-analysis"]').forEach((button) => button.addEventListener('click', () => {
+    refreshAiAnalysis().catch((e) => toast(e.message));
+  }));
 
   // ESC 关闭 modal
   document.addEventListener('keydown', (e) => {

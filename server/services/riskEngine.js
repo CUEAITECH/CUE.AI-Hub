@@ -115,7 +115,21 @@ export function scanRisks(store) {
     }
   }
 
-  return alerts;
+  const analysisById = Object.fromEntries((store.riskAnalyses || []).map((analysis) => [analysis.alertId, analysis]));
+  return alerts.map((alert) => {
+    const analysis = analysisById[alert.id];
+    if (!analysis) return alert;
+    const severity = alert.severity === 'P1' ? alert.severity : (analysis.severity || alert.severity);
+    return {
+      ...alert,
+      severity,
+      aiAnalysis: {
+        confidence: analysis.confidence,
+        reason: analysis.reason,
+        action: analysis.action
+      }
+    };
+  });
 }
 
 export function buildMetrics(store, alerts = []) {
@@ -130,10 +144,15 @@ export function buildMetrics(store, alerts = []) {
   const standupCount = new Set((store.standups || [])
     .filter((standup) => standup.date === today)
     .map((standup) => standup.owner)).size;
-  const score = Math.max(0, 100 - highRiskTasks * 12 - blockingReviews * 8 - workingTreeFiles * 2 - alerts.filter((alert) => alert.severity === 'P1').length * 6);
+  const baseScore = Math.max(0, 100 - highRiskTasks * 12 - blockingReviews * 8 - workingTreeFiles * 2 - alerts.filter((alert) => alert.severity === 'P1').length * 6);
+  const adjustment = Math.max(-5, Math.min(5, Number(store.healthAnalysis?.adjustment) || 0));
+  const score = Math.max(0, Math.min(100, baseScore + adjustment));
 
   return {
     healthScore: score,
+    baseHealthScore: baseScore,
+    healthAdjustment: adjustment,
+    healthAnalysis: store.healthAnalysis || null,
     highRiskTasks,
     commitsToday,
     workingTreeFiles,

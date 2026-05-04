@@ -65,9 +65,34 @@ function uniqueById(items) {
   });
 }
 
-function scoreChecklistItem(item, tasks, activities, reviews, assignments) {
+function semanticLinksForStage(store, stageId) {
+  const links = store.semanticLinks || {};
+  return {
+    taskIds: new Set((links.taskStageLinks || [])
+      .filter((link) => link.stageId === stageId && Number(link.confidence) >= 0.55)
+      .map((link) => link.taskId)),
+    activityIds: new Set((links.commitStageLinks || [])
+      .filter((link) => link.stageId === stageId && Number(link.confidence) >= 0.55)
+      .map((link) => link.activityId)),
+    commitTaskLinks: (links.commitTaskLinks || []).filter((link) => Number(link.confidence) >= 0.55)
+  };
+}
+
+function linkReasonMap(links = []) {
+  return Object.fromEntries((links || []).map((link) => [
+    `${link.taskId || link.activityId}:${link.stageId || link.taskId}`,
+    {
+      confidence: link.confidence,
+      reason: link.reason
+    }
+  ]));
+}
+
+function scoreChecklistItem(item, tasks, activities, reviews, assignments, store) {
+  const semantic = semanticLinksForStage(store, item.id);
   const linkedTasks = tasks.filter((task) => (
-    (item.taskIds || []).includes(task.id)
+    semantic.taskIds.has(task.id)
+    || (item.taskIds || []).includes(task.id)
     || textIncludesAny(`${task.title} ${task.acceptance} ${task.signal}`, item.keywords)
   ));
   const evidenceText = [
@@ -78,8 +103,10 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments) {
   const linkedActivities = uniqueById(activities.filter((activity) => (
     activity.type === 'commit'
     && (
-      textIncludesAny(`${activity.title} ${(activity.files || []).join(' ')}`, item.keywords)
+      semantic.activityIds.has(activity.id)
+      || textIncludesAny(`${activity.title} ${(activity.files || []).join(' ')}`, item.keywords)
       || linkedTasks.some((task) => textIncludesAny(`${activity.title} ${(activity.files || []).join(' ')}`, [task.id, task.title]))
+      || semantic.commitTaskLinks.some((link) => link.activityId === activity.id && linkedTasks.some((task) => task.id === link.taskId))
       || textIncludesAny(evidenceText, [activity.title])
     )
   )));
@@ -114,6 +141,9 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments) {
   if (!linkedAssignments.length) gaps.push('晚会未领取或未登记');
   if (hasBlockReview) gaps.push('存在阻断 Review');
 
+  const taskReasons = linkReasonMap((store.semanticLinks || {}).taskStageLinks);
+  const activityReasons = linkReasonMap((store.semanticLinks || {}).commitStageLinks);
+
   return {
     ...item,
     status,
@@ -124,7 +154,8 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments) {
       owner: task.owner,
       status: task.status,
       progress: task.progress,
-      risk: task.risk
+      risk: task.risk,
+      aiLink: taskReasons[`${task.id}:${item.id}`]
     })),
     evidence: {
       commits: linkedActivities.slice(0, 5).map((activity) => ({
@@ -132,7 +163,8 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments) {
         title: activity.title,
         owner: activity.owner || activity.actor,
         shortSha: activity.shortSha,
-        createdAt: activity.createdAt
+        createdAt: activity.createdAt,
+        aiLink: activityReasons[`${activity.id}:${item.id}`]
       })),
       reviews: linkedReviews.slice(0, 5).map((review) => ({
         id: review.id,
@@ -149,7 +181,8 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments) {
         date: assignment.date
       }))
     },
-    gaps
+    gaps,
+    linkMode: (semantic.taskIds.size || semantic.activityIds.size) ? 'hybrid' : 'rules'
   };
 }
 
@@ -162,7 +195,7 @@ export function buildStageChecklist(store) {
   const activities = store.activities || [];
   const reviews = store.reviews || [];
   const assignments = store.assignments || [];
-  const checklist = checklistSource.map((item) => scoreChecklistItem(item, tasks, activities, reviews, assignments));
+  const checklist = checklistSource.map((item) => scoreChecklistItem(item, tasks, activities, reviews, assignments, store));
   const progress = checklist.length
     ? Math.round(checklist.reduce((sum, item) => sum + item.progress, 0) / checklist.length)
     : 0;

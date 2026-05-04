@@ -411,6 +411,7 @@ server/data/seed.json
 - AI Review 队列
 - Claude 优先、规则引擎兜底
 - 风险扫描
+- AI 混合分析：语义关联任务/阶段/commit，解释风险和健康度
 - 任务看板
 - 分工领取
 - 异步站会
@@ -434,7 +435,7 @@ server/data/seed.json
 - 企业微信写接口工具配置，例如领取任务、提交站会、更新进度。
 - 文档解析任务导入前的人工确认和批量编辑。
 - `docs/阶段进度追踪.md` 与 Hub 任务 ID 的双向映射。
-- AI 自动把 commit 更准确地关联到阶段目标和任务。
+- AI 混合分析结果的人工确认、撤销和审计记录。
 - 阶段目标清单可在前端编辑。
 - 风险项能一键转成晚会分工。
 - 企业微信用户 userid 与团队成员映射。
@@ -570,6 +571,22 @@ GET /api/state
 GET /api/stage/checklist
 GET /api/openapi.json
 ```
+
+### AI 混合分析
+
+```text
+POST /api/ai/refresh-analysis
+```
+
+该接口会触发 Claude 对当前任务、阶段节点、commit 和风险候选做一次混合分析，并把结果缓存到 `server/data/db.json`：
+
+- `semanticLinks.taskStageLinks`：任务和阶段节点的语义关联。
+- `semanticLinks.commitStageLinks`：commit 和阶段节点的语义关联。
+- `semanticLinks.commitTaskLinks`：commit 和任务的语义关联。
+- `riskAnalyses`：对规则风险的严重度、原因和动作建议。
+- `healthAnalysis`：对规则健康度的 `-5 ~ +5` 修正建议和管理重点。
+
+规则仍负责底线判断和候选召回，Claude 负责语义判定、置信度和解释。页面读取缓存结果，不会每次打开页面都调用 LLM。
 
 ### 项目和 GitHub 同步
 

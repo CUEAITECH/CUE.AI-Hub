@@ -506,6 +506,11 @@ h1 {
   color: var(--muted);
 }
 
+.ai-analysis-line {
+  color: var(--text) !important;
+  font-size: 12px;
+}
+
 .member-item {
   display: grid;
   grid-template-columns: 1fr 72px;

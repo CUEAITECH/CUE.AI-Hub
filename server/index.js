@@ -54,6 +54,7 @@ import {
   normalizeStandup,
   todayText
 } from './services/dailyBrief.js';
+import { buildHybridAnalysis } from './services/semanticLinker.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -464,6 +465,29 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/stage/checklist') {
     const store = await loadStore();
     sendJson(res, 200, buildStageChecklist(store));
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/ai/refresh-analysis') {
+    const store = await loadStore();
+    const analysis = await buildHybridAnalysis(store);
+    const nextStore = await updateStore((draft) => ({
+      ...draft,
+      semanticLinks: analysis.semanticLinks || {},
+      riskAnalyses: analysis.riskAnalyses || [],
+      healthAnalysis: analysis.healthAnalysis || null,
+      aiAnalysisUpdatedAt: analysis.generatedAt
+    }));
+    const alerts = scanRisks(nextStore);
+    sendJson(res, 200, {
+      semanticLinks: nextStore.semanticLinks,
+      riskAnalyses: nextStore.riskAnalyses,
+      healthAnalysis: nextStore.healthAnalysis,
+      aiAnalysisUpdatedAt: nextStore.aiAnalysisUpdatedAt,
+      metrics: buildMetrics(nextStore, alerts),
+      alerts,
+      stageChecklist: buildStageChecklist(nextStore)
+    });
     return true;
   }
 
