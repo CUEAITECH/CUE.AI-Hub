@@ -98,10 +98,11 @@ function migrateStore(store) {
   next.reviews = (next.reviews || [])
     .filter((review) => !(seedDemoReviewIds.has(review.id) && legacyHubReviewRepos.has(review.repo)))
     .map((review) => {
-      if (legacyCueAiRepoAliases.has(review.repo) || legacyHubReviewRepos.has(review.repo)) {
-        return { ...review, repo: cueAiRepo };
-      }
-      return review;
+      const migrated = legacyCueAiRepoAliases.has(review.repo) || legacyHubReviewRepos.has(review.repo)
+        ? { ...review, repo: cueAiRepo }
+        : review;
+      // 补充 humanDecision 字段（人工审阅决策）
+      return Object.hasOwn(migrated, 'humanDecision') ? migrated : { ...migrated, humanDecision: null };
     });
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
