@@ -200,7 +200,7 @@ function getFocusedAssignmentTasks(limit = 8) {
 function renderMetrics() {
   const metrics = state.metrics || {};
   setText('#healthScore', metrics.healthScore ?? 0);
-  setText('#healthSummary', `高风险任务 ${metrics.highRiskTasks ?? 0} 个 · 待审阅提交 ${metrics.pendingReviews ?? 0} 个 · 紧急提醒 ${metrics.urgentAlerts ?? 0} 个`);
+  setText('#healthSummary', `高风险任务 ${metrics.highRiskTasks ?? 0} 个 · Block/Escalate Review ${metrics.pendingReviews ?? 0} 条 · 紧急提醒 ${metrics.urgentAlerts ?? 0} 个`);
   setText('#metricHighRisk', metrics.highRiskTasks ?? 0);
   setText('#metricUrgentAlerts', `${metrics.urgentAlerts ?? 0} 个需要管理者处理`);
   setText('#metricCommits', metrics.commitsToday ?? 0);

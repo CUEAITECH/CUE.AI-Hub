@@ -133,20 +133,31 @@ export function scanRisks(store) {
 }
 
 export function buildMetrics(store, alerts = []) {
-  const today = new Date().toISOString().slice(0, 10);
+  // 用上海时区本地日期，避免 UTC 与 Asia/Shanghai 差一天
+  const todayShanghai = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
   const commitsToday = (store.activities || []).filter((activity) => {
-    return activity.type === 'commit' && String(activity.createdAt || '').startsWith(today);
+    const dateStr = String(activity.createdAt || activity.date || '');
+    // ISO 字符串转上海日期
+    const activityDate = dateStr
+      ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date(dateStr))
+      : '';
+    return activity.type === 'commit' && activityDate === todayShanghai;
   }).length;
   const workingTreeFiles = (store.activities || []).filter((activity) => activity.type === 'working_tree').length;
   const blockingReviews = (store.reviews || []).filter((review) => review.level === 'Block').length;
   const highRiskTasks = (store.tasks || []).filter((task) => task.risk === '高').length;
   const memberCount = Math.max((store.members || []).length, 1);
   const standupCount = new Set((store.standups || [])
-    .filter((standup) => standup.date === today)
+    .filter((standup) => standup.date === todayShanghai)
     .map((standup) => standup.owner)).size;
   const baseScore = Math.max(0, 100 - highRiskTasks * 12 - blockingReviews * 8 - workingTreeFiles * 2 - alerts.filter((alert) => alert.severity === 'P1').length * 6);
   const adjustment = Math.max(-5, Math.min(5, Number(store.healthAnalysis?.adjustment) || 0));
   const score = Math.max(0, Math.min(100, baseScore + adjustment));
+
+  // 待处理：Block 或 Escalate 才需要人工介入，Pass/Warning 不计入
+  const actionableReviews = (store.reviews || []).filter(
+    (review) => review.level === 'Block' || review.level === 'Escalate'
+  ).length;
 
   return {
     healthScore: score,
@@ -156,7 +167,7 @@ export function buildMetrics(store, alerts = []) {
     highRiskTasks,
     commitsToday,
     workingTreeFiles,
-    pendingReviews: (store.reviews || []).length,
+    pendingReviews: actionableReviews,
     standupResponseRate: `${Math.round((standupCount / memberCount) * 100)}%`,
     urgentAlerts: alerts.filter((alert) => alert.severity === 'P1').length
   };
