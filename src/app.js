@@ -173,7 +173,7 @@ function renderStage() {
   const stage = state.currentStage || {};
   const checklistStage = state.stageChecklist?.stage || {};
   const progress = Math.max(0, Math.min(100, Number(checklistStage.progress ?? stage.progress) || 0));
-  setText('#stageName', stage.name || 'CUE 项目中枢 MVP');
+  setText('#stageName', stage.name || 'Cue.AI 双设备课堂 MVP / TRTC 联调阶段');
   setText('#stageProgressText', `${progress}%`);
   setText('#meetingStageProgress', `阶段进度 ${progress}%`);
   setText('#stageSummary', `${stage.status || '进行中'} · 目标日期 ${stage.targetDate || '待确认'} · ${stage.updatedAt ? `更新于 ${new Date(stage.updatedAt).toLocaleString('zh-CN', { hour12: false })}` : '等待晚会报告更新'}`);
@@ -248,7 +248,7 @@ function renderRoadmap() {
   summaryEl.innerHTML = `
     <article>
       <span>当前副本</span>
-      <strong>${escapeHtml(stage.name || 'CUE 项目中枢 MVP')}</strong>
+      <strong>${escapeHtml(stage.name || 'Cue.AI 双设备课堂 MVP / TRTC 联调阶段')}</strong>
       <small>${escapeHtml(stage.status || '进行中')} · 目标 ${escapeHtml(stage.targetDate || '待确认')}</small>
     </article>
     <article>

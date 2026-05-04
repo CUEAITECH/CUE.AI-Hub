@@ -1,43 +1,52 @@
+export const defaultCurrentStage = {
+  id: 'stage_cue_ai_trtc_mvp',
+  name: 'Cue.AI 双设备课堂 MVP / TRTC 联调阶段',
+  targetDate: '2026-05-15',
+  progress: 0,
+  status: '进行中',
+  updatedAt: ''
+};
+
 export const defaultStageChecklist = [
   {
-    id: 'stage_repo_signal',
-    title: '真实仓库信号接入',
-    owner: '胡佳涛',
-    taskIds: ['task_git_webhook'],
-    keywords: ['github', 'commit', 'push', 'sync', 'webhook', '仓库', '同步'],
-    acceptance: '系统持续同步 CUEAITECH/Cue.AI 的 commit，并能把 Git 信号映射到成员和任务。'
-  },
-  {
-    id: 'stage_ai_review',
-    title: 'AI Review 阻断规则闭环',
-    owner: '罗子宽',
-    taskIds: ['task_ai_review'],
-    keywords: ['review', 'ai review', '阻断', '审阅', 'token', 'auth'],
-    acceptance: 'Cue.AI 提交进入 AI Review 队列，输出 Pass/Warning/Block/Escalate 和处理建议。'
-  },
-  {
-    id: 'stage_standup_assignment',
-    title: '站会与任务领取闭环',
-    owner: '林世棋',
-    taskIds: ['task_standup'],
-    keywords: ['standup', 'assignment', '领取', '站会', '请假', '任务'],
-    acceptance: '成员能提交站会、领取任务，晚会能对照昨日领取与今日 Git 证据。'
-  },
-  {
-    id: 'stage_auto_planning',
-    title: '阶段目标拆解与调整',
-    owner: '田家铭',
-    taskIds: ['task_auto_planning'],
-    keywords: ['plan', 'planning', '阶段', '目标', '排期', '拆解'],
-    acceptance: '系统能依据阶段目标生成任务，并在晚会后输出下一步调整目标。'
-  },
-  {
-    id: 'stage_wecom_command',
-    title: '企业微信项目指挥入口',
-    owner: '田家铭',
+    id: 'stage_trtc_full_loop',
+    title: 'TRTC 全链路联调',
+    owner: '全员',
     taskIds: [],
-    keywords: ['wecom', '企微', '企业微信', 'summary', 'risks'],
-    acceptance: '企业微信机器人可查询项目状态、风险摘要，并承接后续领取/站会写入能力。'
+    keywords: ['trtc', '全链路', '联调', '课堂', 'session', 'summary', 'sos', 'asr'],
+    acceptance: '跑通老师开课、学生加入、ASR 转写、SOP 推进、SOS 触发和 summary 生成的完整课堂链路。'
+  },
+  {
+    id: 'stage_backend_realtime',
+    title: '后端实时课堂链路',
+    owner: '后端/架构',
+    taskIds: [],
+    keywords: ['后端', 'session', 'usersig', 'asr', 'callback', '机器人', 'sop', 'sos', 'summary', '接口'],
+    acceptance: '完成课堂 Session、UserSig、TRTC ASR 机器人、回调处理、SOP 推进、SOS 和课后总结的后端闭环。'
+  },
+  {
+    id: 'stage_ipad_teacher',
+    title: 'iPad 老师端开课',
+    owner: 'iOS',
+    taskIds: [],
+    keywords: ['ipad', 'ios', '老师', '教师', 'txliteavsdk', 'trtc ios', '开课', '音频', '设备绑定'],
+    acceptance: 'iPad 老师端能登录、选择课程模块、创建课堂、进入 TRTC 房间并持续采集课堂音频。'
+  },
+  {
+    id: 'stage_student_teacher_clients',
+    title: '学生/教师端加入与提示',
+    owner: 'Web / iPhone',
+    taskIds: [],
+    keywords: ['web', 'join', '学生', 'iphone', '教师', '连接', '配对', 'sop节点', '下一环节', '课后总结'],
+    acceptance: '学生 Web 端可用房间码加入课堂，教师移动端可查看连接状态、SOP 进度、SOS 结果和课后总结。'
+  },
+  {
+    id: 'stage_content_demo_acceptance',
+    title: '内容 SOP 与 Demo 验收',
+    owner: '产品/内容',
+    taskIds: [],
+    keywords: ['数学', '内容', 'sop', '关键词', '话术', '模板', '验收', 'demo', '八步', '闭环'],
+    acceptance: '准备一门课的 SOP 内容包、关键词、SOS 话术和演示验收脚本，用于完整 Demo 验收。'
   }
 ];
 
@@ -162,10 +171,10 @@ export function buildStageChecklist(store) {
 
   return {
     stage: {
-      id: stage.id || 'stage_mvp',
-      name: stage.name || 'CUE 项目中枢 MVP',
-      targetDate: stage.targetDate || '',
-      status: stage.status || '进行中',
+      id: stage.id || defaultCurrentStage.id,
+      name: stage.name || defaultCurrentStage.name,
+      targetDate: stage.targetDate || defaultCurrentStage.targetDate,
+      status: stage.status || defaultCurrentStage.status,
       progress
     },
     checklist,

@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultStageChecklist } from './services/stageChecklist.js';
+import { defaultCurrentStage, defaultStageChecklist } from './services/stageChecklist.js';
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
@@ -43,14 +43,7 @@ function migrateStore(store) {
     reports: {},
     planAdjustments: [],
     docTasks: {},
-    currentStage: {
-      id: 'stage_mvp',
-      name: 'CUE 项目中枢 MVP',
-      targetDate: '2026-05-15',
-      progress: 0,
-      status: '进行中',
-      updatedAt: ''
-    },
+    currentStage: defaultCurrentStage,
     ...store
   };
 
@@ -121,16 +114,23 @@ function migrateStore(store) {
   next.eveningReports = next.eveningReports || {};
   next.reports = next.reports || {};
   next.planAdjustments = next.planAdjustments || [];
-  next.currentStage = {
-    id: 'stage_mvp',
-    name: 'CUE 项目中枢 MVP',
-    targetDate: '2026-05-15',
-    progress: 0,
-    status: '进行中',
-    checklist: defaultStageChecklist,
-    updatedAt: '',
-    ...(next.currentStage || {})
-  };
+  const currentStage = next.currentStage || {};
+  const isLegacyHubStage = currentStage.id === 'stage_mvp'
+    || currentStage.name === 'CUE 项目中枢 MVP'
+    || (currentStage.checklist || []).some((item) => item.id === 'stage_repo_signal');
+  next.currentStage = isLegacyHubStage
+    ? {
+        ...defaultCurrentStage,
+        progress: Number(currentStage.progress) || 0,
+        status: currentStage.status || defaultCurrentStage.status,
+        updatedAt: currentStage.updatedAt || '',
+        checklist: defaultStageChecklist
+      }
+    : {
+        ...defaultCurrentStage,
+        checklist: defaultStageChecklist,
+        ...currentStage
+      };
   next.currentStage.checklist = Array.isArray(next.currentStage.checklist) && next.currentStage.checklist.length
     ? next.currentStage.checklist
     : defaultStageChecklist;
