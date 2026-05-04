@@ -9,26 +9,37 @@
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <button class="brand" type="button" data-route="overview">
-          <span>CUE</span>
-          <small>项目中枢</small>
-        </button>
-        <nav class="nav" aria-label="主导航">
-          <button class="nav-item active" type="button" data-route="overview">总览</button>
-          <button class="nav-item" type="button" data-route="roadmap">路径图</button>
-          <button class="nav-item" type="button" data-route="meeting">晚会闭环</button>
-          <button class="nav-item" type="button" data-route="planning">AI 排期</button>
-          <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
-          <button class="nav-item" type="button" data-route="standup">异步站会</button>
-          <button class="nav-item" type="button" data-route="assignment">分工领取</button>
-          <button class="nav-item" type="button" data-route="report">日报&amp;晚报</button>
-          <button class="nav-item" type="button" data-route="automation">自动提醒</button>
-        </nav>
-        <div class="topbar-actions">
-          <span class="status-pill" id="syncStatus">本地 API 未连接</span>
-          <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
-          <button class="primary-action" type="button" data-action="sync">同步信号</button>
+        <div class="header-main">
+          <button class="brand" type="button" data-route="overview">
+            <span>CUE</span>
+            <small>项目中枢</small>
+          </button>
+          <div class="topbar-actions">
+            <span class="status-pill" id="syncStatus">本地 API 未连接</span>
+            <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
+            <button class="primary-action" type="button" data-action="sync">同步信号</button>
+          </div>
         </div>
+        <nav class="nav nav-groups" aria-label="主导航">
+          <div class="nav-group">
+            <span class="nav-label">指挥</span>
+            <button class="nav-item active" type="button" data-route="overview">总览</button>
+            <button class="nav-item" type="button" data-route="roadmap">路径图</button>
+            <button class="nav-item" type="button" data-route="meeting">晚会闭环</button>
+          </div>
+          <div class="nav-group">
+            <span class="nav-label">执行</span>
+            <button class="nav-item" type="button" data-route="planning">AI 排期</button>
+            <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
+            <button class="nav-item" type="button" data-route="standup">异步站会</button>
+            <button class="nav-item" type="button" data-route="assignment">分工领取</button>
+          </div>
+          <div class="nav-group">
+            <span class="nav-label">输出</span>
+            <button class="nav-item" type="button" data-route="report">日报&amp;晚报</button>
+            <button class="nav-item" type="button" data-route="automation">自动提醒</button>
+          </div>
+        </nav>
       </header>
 
       <main>
@@ -249,59 +260,105 @@
 
         <!-- AI 排期 -->
         <section class="view" id="planning">
-          <section class="panel planner-panel">
-            <div class="panel-head">
+          <section class="workspace-shell">
+            <div class="workspace-header">
               <div>
-                <span>AI 排期</span>
-                <h2>根据阶段目标自动布置任务</h2>
+                <span class="workspace-kicker">AI 排期</span>
+                <h2>把阶段目标拆成可执行的今日任务</h2>
+                <p>输入当前阶段目标，AI 先按路径图和仓库信号生成候选任务，再进入任务板领取和追踪。</p>
               </div>
-              <div class="panel-actions">
+              <div class="workspace-actions">
                 <button type="button" data-action="generate-plan">生成任务</button>
                 <button type="button" data-action="apply-plan">应用到任务板</button>
               </div>
             </div>
-            <textarea id="stageGoal" aria-label="阶段目标">5 月 15 日前完成 Cue.AI 双设备课堂 MVP：TRTC 全链路联调、后端实时课堂链路、iPad 老师端开课、学生/教师端加入与提示、内容 SOP 与 Demo 验收。</textarea>
-            <div class="plan-grid" id="planGrid"></div>
+
+            <div class="workspace-grid planning-workbench">
+              <article class="workspace-card">
+                <div class="workspace-card-head">
+                  <span>阶段输入</span>
+                  <strong>本轮目标</strong>
+                </div>
+                <textarea id="stageGoal" aria-label="阶段目标">5 月 15 日前完成 Cue.AI 双设备课堂 MVP：TRTC 全链路联调、后端实时课堂链路、iPad 老师端开课、学生/教师端加入与提示、内容 SOP 与 Demo 验收。</textarea>
+              </article>
+
+              <article class="workspace-card workspace-card-wide">
+                <div class="workspace-card-head">
+                  <span>生成结果</span>
+                  <strong>候选任务与分工</strong>
+                </div>
+                <div class="plan-grid" id="planGrid"></div>
+              </article>
+            </div>
           </section>
         </section>
 
         <!-- AI 审阅 -->
         <section class="view" id="reviews">
-          <section class="panel">
-            <div class="panel-head">
+          <section class="workspace-shell">
+            <div class="workspace-header">
               <div>
-                <span>AI 代码审阅</span>
-                <h2>每次提交和 PR 的自动审阅</h2>
+                <span class="workspace-kicker">AI 审阅</span>
+                <h2>让提交先过一遍交付和安全审阅</h2>
+                <p>审阅结果会进入风险队列，Block 项需要晚会确认负责人、修复方式和验收口径。</p>
               </div>
-              <button type="button" data-action="run-review">运行审阅</button>
+              <div class="workspace-actions">
+                <button type="button" data-action="run-review">运行审阅</button>
+              </div>
             </div>
-            <div class="review-form">
-              <input id="reviewTitle" type="text" value="feat: task_123 add webhook signature check" aria-label="审阅标题" />
-              <textarea id="reviewDiff" aria-label="审阅 diff">+ const token = process.env.GITHUB_TOKEN;
+
+            <div class="workspace-grid review-workbench">
+              <article class="workspace-card">
+                <div class="workspace-card-head">
+                  <span>审阅输入</span>
+                  <strong>提交标题与 Diff</strong>
+                </div>
+                <div class="review-form form-stack">
+                  <label>
+                    <span>提交标题</span>
+                    <input id="reviewTitle" type="text" value="feat: task_123 add webhook signature check" aria-label="审阅标题" />
+                  </label>
+                  <label>
+                    <span>变更 Diff</span>
+                    <textarea id="reviewDiff" aria-label="审阅 diff">+ const token = process.env.GITHUB_TOKEN;
 + console.log(token);
 + // TODO: add tests
 </textarea>
+                  </label>
+                </div>
+              </article>
+
+              <article class="workspace-card workspace-card-wide">
+                <div class="workspace-card-head">
+                  <span>审阅队列</span>
+                  <strong>最近审阅结果</strong>
+                </div>
+                <div class="review-list" id="reviewList"></div>
+              </article>
             </div>
-            <div class="review-list" id="reviewList"></div>
           </section>
         </section>
 
         <!-- 异步站会 -->
         <section class="view" id="standup">
-          <section class="panel">
-            <div class="panel-head">
+          <section class="workspace-shell">
+            <div class="workspace-header">
               <div>
-                <span>异步站会</span>
-                <h2>每日进度同步与自动汇总</h2>
+                <span class="workspace-kicker">异步站会</span>
+                <h2>把成员状态沉淀成晚会前情报</h2>
+                <p>成员提交昨日完成、今日计划和阻塞项，系统汇总出晚会需要处理的分工和风险。</p>
               </div>
-              <div class="panel-actions">
+              <div class="workspace-actions">
                 <button type="button" data-action="summarize-standup">AI 汇总站会</button>
               </div>
             </div>
 
             <div class="standup-layout">
-              <div class="standup-form-wrap">
-                <h3>提交今日站会</h3>
+              <article class="workspace-card standup-form-wrap">
+                <div class="workspace-card-head">
+                  <span>成员输入</span>
+                  <strong>提交今日站会</strong>
+                </div>
                 <form class="standup-form" id="standupForm">
                   <label>
                     <span>成员</span>
@@ -331,18 +388,24 @@
                   </label>
                   <button type="submit" class="submit-btn">提交站会</button>
                 </form>
-              </div>
+              </article>
 
-              <div class="standup-right">
+              <article class="workspace-card workspace-card-wide standup-right">
                 <div class="standup-summary-wrap">
-                  <h3>今日汇总 <small id="standupDate"></small></h3>
+                  <div class="workspace-card-head">
+                    <span>今日汇总 <small id="standupDate"></small></span>
+                    <strong>晚会处理重点</strong>
+                  </div>
                   <div id="standupSummary" class="standup-summary">点击"AI 汇总站会"生成今日总结。</div>
                 </div>
                 <div class="standup-list-wrap">
-                  <h3>今日站会记录 <span id="standupCount">0 人</span></h3>
+                  <div class="workspace-card-head">
+                    <span>提交记录</span>
+                    <strong>今日站会记录 <small id="standupCount">0 人</small></strong>
+                  </div>
                   <div id="standupList" class="standup-list"></div>
                 </div>
-              </div>
+              </article>
             </div>
           </section>
         </section>
