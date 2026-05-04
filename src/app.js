@@ -27,6 +27,22 @@ const state = {
 };
 
 let selectedTaskId = '';
+const _submitting = new Set();
+
+// 防重复提交：key 相同的调用在前一次完成前直接忽略
+function once(key, fn) {
+  return async (...args) => {
+    if (_submitting.has(key)) { toast('正在提交，请稍候…'); return; }
+    _submitting.add(key);
+    const btn = document.querySelector(`[data-action="${CSS.escape(key)}"]`);
+    if (btn) { btn.disabled = true; btn.dataset.origText = btn.textContent; btn.textContent = '提交中…'; }
+    try { await fn(...args); }
+    finally {
+      _submitting.delete(key);
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.origText || btn.textContent; }
+    }
+  };
+}
 
 const fallbackRules = [
   '任务临近截止但 12 小时无 commit 或 PR，先私聊负责人提醒。',
@@ -707,9 +723,12 @@ function renderAssignmentBrief(brief) {
   `;
 }
 
-function renderBriefBlock(brief) {
+function renderBriefBlock(brief, hasAssignment) {
   if (!brief) {
-    return '<div class="empty-state">这个任务还没有认领细则。先在“分工领取”里认领一次，系统会自动生成。</div>';
+    if (hasAssignment) {
+      return '<div class=”brief-generating”><span class=”brief-spinner”></span>任务细则生成中，稍等片刻后刷新页面…</div>';
+    }
+    return '<div class=”empty-state”>还没有认领记录，在分工领取页点击名字认领后自动生成。</div>';
   }
   const list = (items, ordered = false) => {
     const tag = ordered ? 'ol' : 'ul';
@@ -764,6 +783,7 @@ function renderTaskDetail() {
   const evidence = getTaskEvidence(task);
   const latestAssignment = evidence.assignments[0] || null;
   const brief = latestAssignment?.brief || null;
+  const hasAssignment = Boolean(latestAssignment);
   const progress = Number(task.progress) || 0;
   if (title) title.textContent = task.title;
   if (subtitle) {
@@ -787,7 +807,7 @@ function renderTaskDetail() {
 
     <article class="task-detail-card task-detail-main">
       <span>结构化任务规则</span>
-      ${renderBriefBlock(brief)}
+      ${renderBriefBlock(brief, hasAssignment)}
     </article>
 
     <article class="task-detail-card">
@@ -864,12 +884,13 @@ function renderAssignments() {
       assignableEl.innerHTML = `
         <div class="assignment-focus-note">
           <strong>今日建议领取</strong>
-          <span>从 ${activeTasks.length} 个 Cue.AI 当前阶段任务中筛出 ${focusedTasks.length} 个，优先展示卡点、风险和阶段路径相关任务。认领后会自动生成任务细则。</span>
+          <span>从 ${activeTasks.length} 个当前阶段任务中筛出 ${focusedTasks.length} 个，点名字直接认领。</span>
         </div>
         ${focusedTasks.map((task) => {
         const claimants = todayAssignments.filter((a) => a.taskId === task.id);
+        const claimedOwners = new Set(claimants.map((a) => a.owner));
         return `
-            <div class="assignable-task-row">
+          <div class="assignable-task-row">
             <div class="assignable-task-info">
               <div class="assignable-task-title">
                 <button class="task-link-btn" type="button" data-task-id="${escapeHtml(task.id)}">${escapeHtml(task.title)}</button>
@@ -878,17 +899,36 @@ function renderAssignments() {
               <div class="assignable-task-meta">
                 ${escapeHtml(task.owner)} · 进度 ${Number(task.progress) || 0}% · 截止 ${escapeHtml(task.due || '未设置')}
               </div>
-              ${claimants.length ? `<div class="assignable-claimants">已认领：${claimants.map((a) => `<span>${escapeHtml(a.owner)}</span>`).join('')}</div>` : ''}
             </div>
-            <button class="claim-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">认领</button>
+            <div class="claim-member-btns">
+              ${state.members.map((m) => `
+                <button class="claim-member-btn ${claimedOwners.has(m.name) ? 'claimed' : ''}"
+                  data-task-id="${escapeHtml(task.id)}"
+                  data-task-title="${escapeHtml(task.title)}"
+                  data-owner="${escapeHtml(m.name)}"
+                  ${claimedOwners.has(m.name) ? 'disabled title="已认领"' : ''}>
+                  ${escapeHtml(m.name)}${claimedOwners.has(m.name) ? ' ✓' : ''}
+                </button>`).join('')}
+            </div>
           </div>
         `;
       }).join('')}`;
 
-      assignableEl.querySelectorAll('.claim-btn').forEach((btn) => {
-        btn.addEventListener('click', () =>
-          claimTask(btn.dataset.taskId, btn.dataset.taskTitle).catch((e) => toast(e.message))
-        );
+      assignableEl.querySelectorAll('.claim-member-btn:not([disabled])').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (btn.disabled) return;
+          // 立即禁用 + 乐观显示已认领
+          btn.disabled = true;
+          btn.classList.add('claimed');
+          btn.textContent = `${btn.dataset.owner} ✓`;
+          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, btn.dataset.owner).catch((e) => {
+            // 失败时回滚按钮状态
+            btn.disabled = false;
+            btn.classList.remove('claimed');
+            btn.textContent = btn.dataset.owner;
+            toast(e.message);
+          });
+        });
       });
       assignableEl.querySelectorAll('.task-link-btn').forEach((btn) => {
         btn.addEventListener('click', () => openTaskDetail(btn.dataset.taskId));
@@ -1224,18 +1264,11 @@ async function summarizeStandup() {
 
 // ── 分工认领 ────────────────────────────────────────────────────
 
-async function claimTask(taskId, taskTitle) {
-  const memberNames = state.members.map((m) => m.name);
-  const ownerPrompt = memberNames.length
-    ? `认领人（${memberNames.join(' / ')}）：`
-    : '认领人姓名：';
-  const owner = window.prompt(ownerPrompt, memberNames[0] || '');
+async function claimTask(taskId, taskTitle, owner) {
   if (!owner) return;
-  const note = window.prompt('今日具体计划说明（可留空）：', '') || '';
-
   const payload = await api('/api/assignments', {
     method: 'POST',
-    body: JSON.stringify({ owner: owner.trim(), taskId, note })
+    body: JSON.stringify({ owner, taskId })
   });
   state.assignments = payload.assignments || state.assignments;
   renderAll();
@@ -1559,10 +1592,31 @@ function setRoute(route) {
   });
 }
 
+let _briefPollTimer = null;
+
 function openTaskDetail(taskId) {
   selectedTaskId = taskId || '';
   renderTaskDetail();
   setRoute('task-detail');
+  scheduleBriefPoll();
+}
+
+function scheduleBriefPoll() {
+  if (_briefPollTimer) clearTimeout(_briefPollTimer);
+  const task = state.tasks.find((t) => t.id === selectedTaskId);
+  if (!task) return;
+  const evidence = getTaskEvidence(task);
+  const latestAssignment = evidence.assignments[0] || null;
+  if (!latestAssignment || latestAssignment.brief) return; // 已有 brief，不轮询
+  _briefPollTimer = setTimeout(async () => {
+    try {
+      const data = await api('/api/state');
+      state.assignments = data.assignments || state.assignments;
+      state.tasks = data.tasks || state.tasks;
+      renderTaskDetail();
+      scheduleBriefPoll(); // 如果 brief 还没好继续轮询
+    } catch { /* ignore */ }
+  }, 4000);
 }
 
 function setReportTab(tab) {
@@ -1631,9 +1685,9 @@ function bindEvents() {
   document.querySelector('[data-action="generate-evening-report"]')?.addEventListener('click', () => {
     generateEveningReport().catch((e) => toast(e.message));
   });
-  document.querySelector('[data-action="create-assignment"]')?.addEventListener('click', () => {
-    createMeetingAssignment().catch((e) => toast(e.message));
-  });
+  document.querySelector('[data-action="create-assignment"]')?.addEventListener('click', once('create-assignment', () => (
+    createMeetingAssignment().catch((e) => toast(e.message))
+  )));
   document.querySelector('[data-action="submit-meeting-standup"]')?.addEventListener('click', () => {
     submitMeetingStandup().catch((e) => toast(e.message));
   });
@@ -1697,9 +1751,6 @@ function bindEvents() {
   // 分工页
   document.querySelector('[data-action="refresh-assignments"]').addEventListener('click', () => {
     refreshAssignments().catch((e) => toast(e.message));
-  });
-  document.querySelector('[data-action="claim-selected-task"]')?.addEventListener('click', () => {
-    claimSelectedTask().catch((e) => toast(e.message));
   });
   document.querySelector('[data-action="back-to-assignment"]')?.addEventListener('click', () => {
     setRoute('assignment');
