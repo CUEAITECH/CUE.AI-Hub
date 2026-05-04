@@ -79,8 +79,15 @@ const contentTypes = {
   '.svg': 'image/svg+xml'
 };
 
+function setCorsHeaders(res) {
+  res.setHeader('access-control-allow-origin', '*');
+  res.setHeader('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('access-control-allow-headers', 'content-type, x-cue-api-key');
+}
+
 function sendJson(res, status, data) {
   const body = JSON.stringify(data, null, 2);
+  setCorsHeaders(res);
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store'
@@ -1750,6 +1757,14 @@ const server = createServer(async (req, res) => {
 
   try {
     if (url.pathname.startsWith('/api/')) {
+      // 处理 CORS 预检请求
+      if (req.method === 'OPTIONS') {
+        setCorsHeaders(res);
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
       if (requiresApiKey(req, url) && !hasValidApiKey(req)) {
         sendError(res, 401, 'invalid api key', '写入或触发动作的 API 需要请求头 X-CUE-API-Key。');
         return;
