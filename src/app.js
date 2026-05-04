@@ -880,12 +880,13 @@ function renderAssignments() {
       assignableEl.innerHTML = `
         <div class="assignment-focus-note">
           <strong>今日建议领取</strong>
-          <span>从 ${activeTasks.length} 个 Cue.AI 当前阶段任务中筛出 ${focusedTasks.length} 个，优先展示卡点、风险和阶段路径相关任务。认领后会自动生成任务细则。</span>
+          <span>从 ${activeTasks.length} 个当前阶段任务中筛出 ${focusedTasks.length} 个，点名字直接认领。</span>
         </div>
         ${focusedTasks.map((task) => {
         const claimants = todayAssignments.filter((a) => a.taskId === task.id);
+        const claimedOwners = new Set(claimants.map((a) => a.owner));
         return `
-            <div class="assignable-task-row">
+          <div class="assignable-task-row">
             <div class="assignable-task-info">
               <div class="assignable-task-title">
                 <button class="task-link-btn" type="button" data-task-id="${escapeHtml(task.id)}">${escapeHtml(task.title)}</button>
@@ -894,17 +895,25 @@ function renderAssignments() {
               <div class="assignable-task-meta">
                 ${escapeHtml(task.owner)} · 进度 ${Number(task.progress) || 0}% · 截止 ${escapeHtml(task.due || '未设置')}
               </div>
-              ${claimants.length ? `<div class="assignable-claimants">已认领：${claimants.map((a) => `<span>${escapeHtml(a.owner)}</span>`).join('')}</div>` : ''}
             </div>
-            <button class="claim-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">认领</button>
+            <div class="claim-member-btns">
+              ${state.members.map((m) => `
+                <button class="claim-member-btn ${claimedOwners.has(m.name) ? 'claimed' : ''}"
+                  data-task-id="${escapeHtml(task.id)}"
+                  data-task-title="${escapeHtml(task.title)}"
+                  data-owner="${escapeHtml(m.name)}"
+                  ${claimedOwners.has(m.name) ? 'disabled title="已认领"' : ''}>
+                  ${escapeHtml(m.name)}${claimedOwners.has(m.name) ? ' ✓' : ''}
+                </button>`).join('')}
+            </div>
           </div>
         `;
       }).join('')}`;
 
-      assignableEl.querySelectorAll('.claim-btn').forEach((btn) => {
-        btn.addEventListener('click', () =>
-          claimTask(btn.dataset.taskId, btn.dataset.taskTitle).catch((e) => toast(e.message))
-        );
+      assignableEl.querySelectorAll('.claim-member-btn:not([disabled])').forEach((btn) => {
+        btn.addEventListener('click', once(`claim-${btn.dataset.taskId}-${btn.dataset.owner}`, () =>
+          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, btn.dataset.owner).catch((e) => toast(e.message))
+        ));
       });
       assignableEl.querySelectorAll('.task-link-btn').forEach((btn) => {
         btn.addEventListener('click', () => openTaskDetail(btn.dataset.taskId));
@@ -1240,18 +1249,11 @@ async function summarizeStandup() {
 
 // ── 分工认领 ────────────────────────────────────────────────────
 
-async function claimTask(taskId, taskTitle) {
-  const memberNames = state.members.map((m) => m.name);
-  const ownerPrompt = memberNames.length
-    ? `认领人（${memberNames.join(' / ')}）：`
-    : '认领人姓名：';
-  const owner = window.prompt(ownerPrompt, memberNames[0] || '');
+async function claimTask(taskId, taskTitle, owner) {
   if (!owner) return;
-  const note = window.prompt('今日具体计划说明（可留空）：', '') || '';
-
   const payload = await api('/api/assignments', {
     method: 'POST',
-    body: JSON.stringify({ owner: owner.trim(), taskId, note })
+    body: JSON.stringify({ owner, taskId })
   });
   state.assignments = payload.assignments || state.assignments;
   renderAll();
@@ -1714,9 +1716,6 @@ function bindEvents() {
   document.querySelector('[data-action="refresh-assignments"]').addEventListener('click', () => {
     refreshAssignments().catch((e) => toast(e.message));
   });
-  document.querySelector('[data-action="claim-selected-task"]')?.addEventListener('click', once('claim-selected-task', () => (
-    claimSelectedTask().catch((e) => toast(e.message))
-  )));
   document.querySelector('[data-action="back-to-assignment"]')?.addEventListener('click', () => {
     setRoute('assignment');
   });
