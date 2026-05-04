@@ -370,7 +370,9 @@ async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
   const existingActivityIds = new Set((beforeStore.activities || []).map((activity) => activity.id));
   const existingReviewIds = new Set((beforeStore.reviews || []).map((review) => review.id));
   const reviewCandidates = scan.activities.filter((activity) => (
-    activity.type === 'commit' && !existingReviewIds.has(`review_${activity.sha}`)
+    activity.type === 'commit'
+    && !existingReviewIds.has(`review_${activity.sha}`)
+    && String(activity.title || '').trim().length > 0
   ));
   const commitReviews = await Promise.all(
     reviewCandidates.map(async (activity) => ({
@@ -717,7 +719,7 @@ async function handleApi(req, res, url) {
 
     const commitReviews = await Promise.all(
       scan.activities
-        .filter((activity) => activity.type === 'commit')
+        .filter((activity) => activity.type === 'commit' && String(activity.title || '').trim().length > 0)
         .map(async (activity) => ({
           id: `review_${activity.sha}`,
           projectId: project.id,
