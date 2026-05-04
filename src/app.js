@@ -723,9 +723,12 @@ function renderAssignmentBrief(brief) {
   `;
 }
 
-function renderBriefBlock(brief) {
+function renderBriefBlock(brief, hasAssignment) {
   if (!brief) {
-    return '<div class="empty-state">这个任务还没有认领细则。先在“分工领取”里认领一次，系统会自动生成。</div>';
+    if (hasAssignment) {
+      return '<div class=”brief-generating”><span class=”brief-spinner”></span>任务细则生成中，稍等片刻后刷新页面…</div>';
+    }
+    return '<div class=”empty-state”>还没有认领记录，在分工领取页点击名字认领后自动生成。</div>';
   }
   const list = (items, ordered = false) => {
     const tag = ordered ? 'ol' : 'ul';
@@ -780,6 +783,7 @@ function renderTaskDetail() {
   const evidence = getTaskEvidence(task);
   const latestAssignment = evidence.assignments[0] || null;
   const brief = latestAssignment?.brief || null;
+  const hasAssignment = Boolean(latestAssignment);
   const progress = Number(task.progress) || 0;
   if (title) title.textContent = task.title;
   if (subtitle) {
@@ -803,7 +807,7 @@ function renderTaskDetail() {
 
     <article class="task-detail-card task-detail-main">
       <span>结构化任务规则</span>
-      ${renderBriefBlock(brief)}
+      ${renderBriefBlock(brief, hasAssignment)}
     </article>
 
     <article class="task-detail-card">
@@ -1588,10 +1592,31 @@ function setRoute(route) {
   });
 }
 
+let _briefPollTimer = null;
+
 function openTaskDetail(taskId) {
   selectedTaskId = taskId || '';
   renderTaskDetail();
   setRoute('task-detail');
+  scheduleBriefPoll();
+}
+
+function scheduleBriefPoll() {
+  if (_briefPollTimer) clearTimeout(_briefPollTimer);
+  const task = state.tasks.find((t) => t.id === selectedTaskId);
+  if (!task) return;
+  const evidence = getTaskEvidence(task);
+  const latestAssignment = evidence.assignments[0] || null;
+  if (!latestAssignment || latestAssignment.brief) return; // 已有 brief，不轮询
+  _briefPollTimer = setTimeout(async () => {
+    try {
+      const data = await api('/api/state');
+      state.assignments = data.assignments || state.assignments;
+      state.tasks = data.tasks || state.tasks;
+      renderTaskDetail();
+      scheduleBriefPoll(); // 如果 brief 还没好继续轮询
+    } catch { /* ignore */ }
+  }, 4000);
 }
 
 function setReportTab(tab) {
