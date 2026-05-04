@@ -27,6 +27,22 @@ const state = {
 };
 
 let selectedTaskId = '';
+const _submitting = new Set();
+
+// 防重复提交：key 相同的调用在前一次完成前直接忽略
+function once(key, fn) {
+  return async (...args) => {
+    if (_submitting.has(key)) { toast('正在提交，请稍候…'); return; }
+    _submitting.add(key);
+    const btn = document.querySelector(`[data-action="${CSS.escape(key)}"]`);
+    if (btn) { btn.disabled = true; btn.dataset.origText = btn.textContent; btn.textContent = '提交中…'; }
+    try { await fn(...args); }
+    finally {
+      _submitting.delete(key);
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.origText || btn.textContent; }
+    }
+  };
+}
 
 const fallbackRules = [
   '任务临近截止但 12 小时无 commit 或 PR，先私聊负责人提醒。',
@@ -1631,9 +1647,9 @@ function bindEvents() {
   document.querySelector('[data-action="generate-evening-report"]')?.addEventListener('click', () => {
     generateEveningReport().catch((e) => toast(e.message));
   });
-  document.querySelector('[data-action="create-assignment"]')?.addEventListener('click', () => {
-    createMeetingAssignment().catch((e) => toast(e.message));
-  });
+  document.querySelector('[data-action="create-assignment"]')?.addEventListener('click', once('create-assignment', () => (
+    createMeetingAssignment().catch((e) => toast(e.message))
+  )));
   document.querySelector('[data-action="submit-meeting-standup"]')?.addEventListener('click', () => {
     submitMeetingStandup().catch((e) => toast(e.message));
   });
@@ -1698,9 +1714,9 @@ function bindEvents() {
   document.querySelector('[data-action="refresh-assignments"]').addEventListener('click', () => {
     refreshAssignments().catch((e) => toast(e.message));
   });
-  document.querySelector('[data-action="claim-selected-task"]')?.addEventListener('click', () => {
-    claimSelectedTask().catch((e) => toast(e.message));
-  });
+  document.querySelector('[data-action="claim-selected-task"]')?.addEventListener('click', once('claim-selected-task', () => (
+    claimSelectedTask().catch((e) => toast(e.message))
+  )));
   document.querySelector('[data-action="back-to-assignment"]')?.addEventListener('click', () => {
     setRoute('assignment');
   });
