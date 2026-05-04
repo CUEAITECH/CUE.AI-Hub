@@ -254,7 +254,8 @@ export function buildOpenApiSpec(serverUrl) {
                     progress: { type: 'number' }
                   }
                 }},
-                result: { type: 'string', description: '可直接回复给用户的任务列表摘要' }
+                summary: { type: 'string', description: '可直接回复给用户的任务列表摘要' },
+                result: { type: 'string', description: '同 summary，兼容企业微信字段配置' }
               }
             }}}}
           }
@@ -274,6 +275,7 @@ export function buildOpenApiSpec(serverUrl) {
               properties: {
                 owner: { type: 'string', description: '认领人姓名，需是团队成员之一：田家铭、胡佳涛、罗子宽、林世棋' },
                 keyword: { type: 'string', description: '任务标题关键词，系统自动模糊匹配' },
+                taskKeyword: { type: 'string', description: '同 keyword，兼容企业微信字段配置' },
                 note: { type: 'string', description: '今日工作计划说明（可选）' }
               }
             }}}

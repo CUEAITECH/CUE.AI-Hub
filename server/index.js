@@ -1413,8 +1413,10 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     const lines = active.map((t, i) =>
       `${i + 1}. 【${t.risk}风险】${t.title}（${t.owner} · ${t.progress}% · 截止${t.due}）${t.claimedToday ? ' ✅已认领' : ''}`
     ).join('\n');
+    const summary = active.length ? `当前 ${active.length} 个进行中任务：\n${lines}` : '暂无进行中任务。';
     sendJson(res, 200, {
-      summary: active.length ? `当前 ${active.length} 个进行中任务：\n${lines}` : '暂无进行中任务。',
+      summary,
+      result: summary,
       tasks: active
     });
     return true;
@@ -1424,7 +1426,7 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
   if (req.method === 'POST' && url.pathname === '/api/wecom/claim') {
     const { json } = await readBody(req);
     const owner = String(json?.owner || '').trim();
-    const keyword = String(json?.taskKeyword || json?.taskTitle || '').trim();
+    const keyword = String(json?.taskKeyword || json?.taskTitle || json?.keyword || '').trim();
     if (!owner || !keyword) {
       sendJson(res, 200, { result: '❌ 请提供认领人姓名和任务关键词，例如：owner=田家铭 taskKeyword=TRTC' });
       return true;
