@@ -33,6 +33,7 @@
             <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
             <button class="nav-item" type="button" data-route="standup">异步站会</button>
             <button class="nav-item" type="button" data-route="assignment">分工领取</button>
+            <button class="nav-item nav-item-hidden" type="button" data-route="task-detail">任务详情</button>
           </div>
           <div class="nav-group">
             <span class="nav-label">输出</span>
@@ -460,6 +461,23 @@
                 </div>
               </div>
             </div>
+          </section>
+        </section>
+
+        <!-- 任务详情 -->
+        <section class="view" id="task-detail">
+          <section class="workspace-shell task-detail-shell">
+            <div class="workspace-header task-detail-header">
+              <div>
+                <span class="workspace-kicker">任务工作台</span>
+                <h2 id="taskDetailTitle">选择一个任务</h2>
+                <p id="taskDetailSubtitle">从任务看板或分工领取进入，查看任务细则、完成证据、验收指标和 AI 下一步操作。</p>
+              </div>
+              <div class="workspace-actions">
+                <button type="button" data-action="back-to-assignment">返回分工</button>
+              </div>
+            </div>
+            <div class="task-detail-grid" id="taskDetailContent"></div>
           </section>
         </section>
 
