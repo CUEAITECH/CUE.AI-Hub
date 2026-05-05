@@ -317,33 +317,14 @@
               </article>
             </div>
 
-            <!-- 手动触发审阅 + 历史记录 -->
-            <div class="workspace-grid review-workbench">
-              <article class="workspace-card">
-                <div class="workspace-card-head">
-                  <span>手动审阅</span>
-                  <strong>提交标题与 Diff</strong>
-                </div>
-                <div class="review-form form-stack">
-                  <label>
-                    <span>提交标题</span>
-                    <input id="reviewTitle" type="text" placeholder="feat: task_123 add webhook signature check" aria-label="审阅标题" />
-                  </label>
-                  <label>
-                    <span>变更 Diff（可选）</span>
-                    <textarea id="reviewDiff" aria-label="审阅 diff" placeholder="粘贴 git diff 内容，留空则只审阅标题..."></textarea>
-                  </label>
-                </div>
-              </article>
-
-              <article class="workspace-card workspace-card-wide">
-                <div class="workspace-card-head">
-                  <span>审阅历史</span>
-                  <strong>最近审阅结果</strong>
-                </div>
-                <div class="review-list" id="reviewList"></div>
-              </article>
-            </div>
+            <!-- 审阅历史（折叠） -->
+            <details class="review-history-details">
+              <summary class="review-history-summary">
+                <span>审阅历史</span>
+                <span class="review-history-hint">点击展开最近 AI 审阅记录</span>
+              </summary>
+              <div class="review-list" id="reviewList"></div>
+            </details>
           </section>
         </section>
 

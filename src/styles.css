@@ -2096,6 +2096,31 @@ select:focus {
 .btn-sm.btn-warn { border-color: var(--red, #f87171); color: var(--red, #f87171); }
 .btn-sm:hover    { opacity: 0.8; }
 
+.review-history-details {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.review-history-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel-2);
+  list-style: none;
+  user-select: none;
+}
+.review-history-summary::-webkit-details-marker { display: none; }
+.review-history-summary::before { content: '▶'; font-size: 10px; color: var(--text-dim); transition: transform .2s; }
+details[open] .review-history-summary::before { transform: rotate(90deg); }
+.review-history-hint { font-size: 12px; font-weight: 400; color: var(--text-dim); }
+.review-history-details .review-list { padding: 12px 16px; }
+
 .review-decided {
   font-size: 12px;
   color: var(--text-dim);
