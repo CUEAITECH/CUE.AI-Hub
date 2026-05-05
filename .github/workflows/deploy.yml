@@ -22,6 +22,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} "which rsync || yum install -y rsync || apt-get install -y rsync"
           rsync -az --delete \
             --exclude='.git' \
             --exclude='server/data/db.json' \
