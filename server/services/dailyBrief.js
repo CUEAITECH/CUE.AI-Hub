@@ -20,11 +20,11 @@ function parseWindowDate(dateText, hour) {
   return new Date(`${dateText}T${String(hour).padStart(2, '0')}:00:00+08:00`);
 }
 
-function inMeetingWindow(value, dateText) {
+function inMeetingWindow(value, dateText, endAt = new Date()) {
   const createdAt = new Date(value);
   if (Number.isNaN(createdAt.getTime())) return false;
   const previousDate = addDays(dateText, -1);
-  return createdAt >= parseWindowDate(previousDate, 18) && createdAt <= parseWindowDate(dateText, 18);
+  return createdAt >= parseWindowDate(previousDate, 18) && createdAt <= endAt;
 }
 
 function taskLabel(task) {
@@ -59,16 +59,16 @@ function groupActivitiesByOwner(activities) {
   }, {});
 }
 
-function buildReconciliation(store, dateText) {
+function buildReconciliation(store, dateText, endAt = new Date()) {
   const previousDate = addDays(dateText, -1);
   const assignments = (store.assignments || []).filter((item) => item.date === previousDate);
   const fallbackAssignments = assignments.length
     ? assignments
     : (store.assignments || []).filter((item) => item.date === dateText);
   const activities = (store.activities || []).filter((activity) => (
-    activity.type === 'commit' && inMeetingWindow(activity.createdAt, dateText)
+    activity.type === 'commit' && inMeetingWindow(activity.createdAt, dateText, endAt)
   ));
-  const reviews = (store.reviews || []).filter((review) => inMeetingWindow(review.createdAt, dateText));
+  const reviews = (store.reviews || []).filter((review) => inMeetingWindow(review.createdAt, dateText, endAt));
   const byOwner = groupActivitiesByOwner(activities);
 
   const rows = fallbackAssignments.map((assignment) => {
@@ -151,8 +151,16 @@ function formatTable(rows, columns) {
   return [head, split, ...body].join('\n');
 }
 
-function buildReportMarkdown(store, dateText, reconciliation, nextTargets, stageProgress) {
-  const windowText = `${reconciliation.previousDate} 18:00 - ${dateText} 18:00`;
+function buildReportMarkdown(store, dateText, reconciliation, nextTargets, stageProgress, endAt = new Date()) {
+  const endText = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: timezone,
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(endAt).replace(/\//g, '-');
+  const windowText = `${reconciliation.previousDate} 18:00 - ${endText}`;
   const blockReviews = reconciliation.reviews.filter((review) => review.level === 'Block');
   const warningReviews = reconciliation.reviews.filter((review) => review.level === 'Warning');
   const unassignedCommits = reconciliation.activities.filter((activity) => {
@@ -259,11 +267,11 @@ export function normalizeStandup(input) {
   };
 }
 
-export function buildEveningReport(store, dateText = todayText()) {
-  const reconciliation = buildReconciliation(store, dateText);
+export function buildEveningReport(store, dateText = todayText(), endAt = new Date()) {
+  const reconciliation = buildReconciliation(store, dateText, endAt);
   const nextTargets = buildNextTargets(store, reconciliation, dateText);
   const stageProgress = calculateStageProgress(store.tasks || []);
-  const report = buildReportMarkdown(store, dateText, reconciliation, nextTargets, stageProgress);
+  const report = buildReportMarkdown(store, dateText, reconciliation, nextTargets, stageProgress, endAt);
 
   return {
     id: `evening_${dateText}`,
@@ -271,7 +279,7 @@ export function buildEveningReport(store, dateText = todayText()) {
     generatedAt: new Date().toISOString(),
     window: {
       from: `${reconciliation.previousDate}T18:00:00+08:00`,
-      to: `${dateText}T18:00:00+08:00`
+      to: endAt.toISOString()
     },
     summary: {
       assignmentCount: reconciliation.assignments.length,

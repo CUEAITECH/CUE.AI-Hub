@@ -150,6 +150,13 @@ function getDateParam(url) {
   return url.searchParams.get('date') || todayText();
 }
 
+function addDaysText(dateText, days) {
+  const [year, month, day] = String(dateText).split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function formatShanghaiTime(value) {
   if (!value) return '暂无';
   const date = new Date(value);
@@ -278,18 +285,26 @@ const EVENING_SYSTEM_PROMPT = `你是 CUE Project Hub 的晚报 AI，专为技�
  */
 async function generateEveningReport(date) {
   const store = await loadStore();
+  const generatedAt = new Date();
+  const windowStart = new Date(`${addDaysText(date, -1)}T18:00:00+08:00`);
 
   // 1. 快照：保存生成时刻的提交和分工，供后续对照分析使用（不受后续新 commit 影响）
   const snapshotCommits = (store.activities || []).filter(
-    (a) => a.type === 'commit' && String(a.createdAt || a.date || '').slice(0, 10) === date
+    (a) => {
+      const createdAt = new Date(a.createdAt || a.date || '');
+      return a.type === 'commit' && createdAt >= windowStart && createdAt <= generatedAt;
+    }
   );
   const snapshotAssignments = (store.assignments || []).filter((a) => a.date === date);
   const dateReviews = (store.reviews || []).filter(
-    (r) => (r.createdAt || '').slice(0, 10) === date
+    (r) => {
+      const createdAt = new Date(r.createdAt || '');
+      return createdAt >= windowStart && createdAt <= generatedAt;
+    }
   );
 
   // 2. 规则引擎：生成结构化晚报（对账表、nextTargets、进度更新）
-  const structuredReport = buildEveningReport(store, date);
+  const structuredReport = buildEveningReport(store, date, generatedAt);
 
   // 3. LLM 增强文本（prompt caching 应用于 EVENING_SYSTEM_PROMPT）
   const commitLines = snapshotCommits.length
@@ -356,13 +371,51 @@ ${unfinishedLines}`);
 
 // ─── Commit 触发计划调整建议 ──────────────────────────────────────────────────
 async function generatePlanAdjustment(activities, store) {
-  const SYSTEM = `你是 CUE Project Hub 的计划调整 AI。根据最新的 GitHub 提交记录，结合当前任务状态，判断是否需要调整任务计划，并输出简短的调整建议（Markdown，不超过 200 字）。如果不需要调整，输出"无需调整"。`;
+  const SYSTEM = `你是 CUE Project Hub 的 AI PM。根据最新 GitHub commit 和当前任务状态，判断是否需要调整开发计划。
+必须输出 JSON，不要输出 Markdown。格式：
+{
+  "needed": true,
+  "scope": "minor|major|progress",
+  "summary": "一句话说明",
+  "suggestion": "不超过 200 字的具体计划调整",
+  "impact": "影响范围",
+  "requiresApprovalReason": "如为 major，说明为什么需要人工审批"
+}
+分类规则：
+- progress：只同步进度、补充证据、确认任务推进，可自动执行。
+- minor：小范围拆分、补充验收标准、调整当天跟进项，可自动执行。
+- major：改变阶段目标、延期、转派关键负责人、调整里程碑或影响多人排期，必须人工审批。
+- 不需要调整时输出 {"needed": false}。`;
   const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成').slice(0, 10);
   const commitSummary = activities.map((a) => `- ${a.owner}: ${a.title} (${a.repo || ''})`).join('\n');
   const taskSummary = activeTasks.map((t) => `- [${t.status}] ${t.title}（${t.owner}）进度${t.progress}%`).join('\n');
   const text = await callClaude(SYSTEM, `最新提交：\n${commitSummary}\n\n当前任务：\n${taskSummary}`);
-  if (!text || text.includes('无需调整')) return null;
-  return text;
+  const parsed = parseJsonOutput(text);
+  if (parsed && parsed.needed === false) return null;
+  const scope = ['major', 'minor', 'progress'].includes(parsed?.scope) ? parsed.scope : inferAdjustmentScope(text, activities);
+  return {
+    scope,
+    mode: scope === 'major' ? 'approval' : 'auto',
+    status: scope === 'major' ? 'pending_approval' : 'auto_applied',
+    summary: parsed?.summary || (scope === 'progress' ? '同步 commit 进度信号' : '根据 commit 调整开发计划'),
+    suggestion: parsed?.suggestion || text || '',
+    impact: parsed?.impact || summarizeAdjustmentImpact(scope, activities),
+    requiresApprovalReason: parsed?.requiresApprovalReason || (scope === 'major' ? '涉及阶段目标、负责人或排期变化，需要人工确认。' : ''),
+    costReason: `本轮 ${activities.length} 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。`
+  };
+}
+
+function inferAdjustmentScope(text, activities = []) {
+  const raw = `${text || ''} ${activities.map((a) => a.title || '').join(' ')}`;
+  if (/延期|里程碑|阶段目标|转派|负责人|排期|范围|降级|上线|发布|阻塞/i.test(raw)) return 'major';
+  if (/进度|完成|提交|同步|证据/i.test(raw)) return 'progress';
+  return 'minor';
+}
+
+function summarizeAdjustmentImpact(scope, activities = []) {
+  if (scope === 'major') return '可能影响阶段目标、负责人或排期。';
+  if (scope === 'progress') return '只更新任务进度信号和 commit 证据。';
+  return `影响 ${activities.length || 1} 条 commit 对应的当天跟进项。`;
 }
 
 async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
@@ -436,6 +489,26 @@ async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
   });
 
   const alerts = scanRisks(nextStore);
+  const newActivities = lightweightActivities.filter((activity) => !existingActivityIds.has(activity.id));
+  if (newActivities.length > 0) {
+    generatePlanAdjustment(newActivities, nextStore).then((adjustment) => {
+      if (!adjustment) return;
+      updateStore((draft) => {
+        draft.planAdjustments = draft.planAdjustments || [];
+        draft.planAdjustments.unshift({
+          id: createId('adjust'),
+          date: todayText(),
+          trigger: newActivities.map((activity) => activity.title).join('; '),
+          triggerCount: newActivities.length,
+          source: 'github-sync',
+          ...adjustment,
+          createdAt: new Date().toISOString()
+        });
+        draft.planAdjustments = draft.planAdjustments.slice(0, 50);
+        return draft;
+      });
+    }).catch((err) => console.error('[PlanAdjust/GitHubSync]', err.message));
+  }
   return {
     project: nextStore.projects.find((item) => item.id === project.id),
     source: 'github-api',
@@ -1301,15 +1374,17 @@ AI 建议：${review.suggestion || '无'}`;
 
     // 异步生成计划调整建议（不阻塞响应）
     if (activities.length > 0) {
-      generatePlanAdjustment(activities, nextStore).then((suggestion) => {
-        if (suggestion) {
+      generatePlanAdjustment(activities, nextStore).then((adjustment) => {
+        if (adjustment) {
           updateStore((draft) => {
             draft.planAdjustments = draft.planAdjustments || [];
             draft.planAdjustments.unshift({
               id: createId('adjust'),
               date: new Date().toISOString().slice(0, 10),
               trigger: activities.map((a) => a.title).join('; '),
-              suggestion,
+              triggerCount: activities.length,
+              source: 'github-webhook',
+              ...adjustment,
               createdAt: new Date().toISOString()
             });
             draft.planAdjustments = draft.planAdjustments.slice(0, 50);
@@ -1776,6 +1851,36 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     const store = await loadStore();
     const adjustments = (store.planAdjustments || []).slice(0, 20);
     sendJson(res, 200, { adjustments });
+    return true;
+  }
+
+  // POST /api/plan-adjustments/:id/decision — 人工审批大的开发计划调整
+  if (req.method === 'POST' && url.pathname.startsWith('/api/plan-adjustments/') && url.pathname.endsWith('/decision')) {
+    const id = decodeURIComponent(url.pathname.split('/')[3] || '');
+    const { json } = await readBody(req);
+    const decision = String(json?.decision || '').trim();
+    if (!['approved', 'rejected'].includes(decision)) {
+      sendError(res, 400, 'decision must be approved or rejected');
+      return true;
+    }
+    const decidedAt = new Date().toISOString();
+    const nextStore = await updateStore((draft) => {
+      const index = (draft.planAdjustments || []).findIndex((item) => item.id === id);
+      if (index < 0) return draft;
+      draft.planAdjustments[index] = {
+        ...draft.planAdjustments[index],
+        status: decision,
+        decidedAt,
+        decisionNote: String(json?.note || '').trim()
+      };
+      return draft;
+    });
+    const adjustment = (nextStore.planAdjustments || []).find((item) => item.id === id);
+    if (!adjustment) {
+      sendError(res, 404, 'plan adjustment not found');
+      return true;
+    }
+    sendJson(res, 200, { adjustment, adjustments: nextStore.planAdjustments || [] });
     return true;
   }
 
