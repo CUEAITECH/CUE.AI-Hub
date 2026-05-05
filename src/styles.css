@@ -122,8 +122,7 @@ button {
   border-color: rgba(16, 16, 16, 0.08);
 }
 
-.nav-menu:hover > .nav-primary,
-.nav-menu:focus-within > .nav-primary {
+.nav-menu:hover > .nav-primary {
   color: var(--text);
   background: rgba(16, 16, 16, 0.06);
   border-color: rgba(16, 16, 16, 0.08);
@@ -156,8 +155,7 @@ button {
   height: 9px;
 }
 
-.nav-menu:hover .nav-submenu,
-.nav-menu:focus-within .nav-submenu {
+.nav-menu:hover .nav-submenu {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
@@ -1084,31 +1082,357 @@ select:focus {
   font-style: normal;
 }
 
-.meeting-toolbar {
+.meeting-command {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 16px;
-  align-items: end;
+  gap: 14px;
 }
 
-.meeting-toolbar label,
-.form-grid {
-  display: grid;
+.meeting-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.meeting-hero h2 {
+  margin-top: 6px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.meeting-hero p {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.meeting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
-.meeting-toolbar label span,
-.meeting-toolbar small {
+.meeting-actions button,
+.meeting-panel-head button,
+.card-head-right button {
+  border: 1px solid var(--text);
+  border-radius: 8px;
+  background: var(--text);
+  color: #fff;
+  padding: 9px 12px;
+  font-weight: 650;
+}
+
+.meeting-kpis {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.meeting-kpis div {
+  display: grid;
+  gap: 4px;
+  min-height: 70px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.meeting-kpis span {
   color: var(--muted);
   font-size: 12px;
 }
 
-.form-grid {
-  margin-bottom: 14px;
+.meeting-kpis b {
+  font-size: 20px;
+  line-height: 1.2;
 }
 
-.form-grid textarea {
-  min-height: 86px;
+.meeting-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.8fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.meeting-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.meeting-panel-main {
+  grid-column: 1;
+}
+
+.meeting-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.meeting-panel-head div {
+  display: grid;
+  gap: 4px;
+}
+
+.meeting-panel-head span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.meeting-panel-head strong {
+  font-size: 17px;
+}
+
+.meeting-panel-head small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.meeting-reconcile-list,
+.meeting-attendance-list,
+.meeting-target-list,
+.meeting-assignment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.meeting-reconcile-row,
+.meeting-attendance-row,
+.meeting-target-row,
+.meeting-owner-assignments {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.meeting-reconcile-row {
+  grid-template-columns: minmax(0, 1fr) 140px;
+  align-items: center;
+}
+
+.meeting-reconcile-row div,
+.meeting-target-row div,
+.meeting-attendance-row div {
+  display: grid;
+  gap: 3px;
+}
+
+.meeting-reconcile-row span,
+.meeting-attendance-row span,
+.meeting-target-row span,
+.meeting-assignment-row small,
+.meeting-assignment-row p {
+  color: var(--muted);
+}
+
+.meeting-reconcile-status {
+  text-align: right;
+}
+
+.meeting-reconcile-status .ok { color: var(--green); }
+.meeting-reconcile-status .warn { color: var(--amber); }
+.meeting-reconcile-status .danger { color: var(--red); }
+
+.meeting-attendance-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.meeting-attendance-row small {
+  grid-column: 1 / -1;
+  color: var(--dim);
+}
+
+.meeting-attendance-row.is-present b { color: var(--green); }
+.meeting-attendance-row.is-late b { color: var(--amber); }
+.meeting-attendance-row.is-missing b { color: var(--red); }
+
+.meeting-target-row p {
+  margin-top: 2px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.meeting-claim-form {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) minmax(180px, 0.7fr);
+  gap: 8px;
+}
+
+.meeting-assignment-row {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(18, 18, 18, 0.08);
+}
+
+.ai-pm-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.ai-pm-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 18px;
+  align-items: stretch;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-pm-hero h2 {
+  margin-top: 6px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.ai-pm-hero p {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.ai-pm-policy,
+.ai-pm-summary div,
+.ai-pm-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.ai-pm-policy {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.ai-pm-policy span,
+.ai-pm-summary span,
+.ai-pm-panel-head span,
+.ai-pm-item small,
+.ai-pm-trigger small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ai-pm-policy small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.ai-pm-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ai-pm-summary div {
+  display: grid;
+  gap: 5px;
+  min-height: 72px;
+  padding: 12px;
+}
+
+.ai-pm-summary b {
+  font-size: 22px;
+}
+
+.ai-pm-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.ai-pm-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.ai-pm-panel-main {
+  grid-column: 1;
+}
+
+.ai-pm-panel-head,
+.ai-pm-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-pm-panel-head div {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-pm-panel-head strong {
+  font-size: 17px;
+}
+
+.ai-pm-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-pm-item,
+.ai-pm-trigger {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.ai-pm-major {
+  border-color: rgba(154, 100, 0, 0.3);
+}
+
+.ai-pm-item-head span {
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ai-pm-item p,
+.ai-pm-trigger span {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.ai-pm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-pm-actions button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.ai-pm-actions button:hover:not(:disabled) {
+  border-color: var(--text);
 }
 
 .assignment-item,
@@ -1147,14 +1471,14 @@ select:focus {
 }
 
 .report-box {
-  min-height: 420px;
-  max-height: 720px;
+  min-height: 280px;
+  max-height: 560px;
   overflow: auto;
   margin: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #0c131c;
-  color: var(--text);
+  background: #101010;
+  color: #f4f4ef;
   padding: 16px;
   white-space: pre-wrap;
   line-height: 1.65;
@@ -1451,8 +1775,33 @@ select:focus {
   .project-card,
   .activity-item,
   .meeting-toolbar,
-  .report-summary {
+  .report-summary,
+  .meeting-kpis,
+  .meeting-grid,
+  .meeting-claim-form,
+  .meeting-reconcile-row,
+  .ai-pm-hero,
+  .ai-pm-summary,
+  .ai-pm-grid {
     grid-template-columns: 1fr;
+  }
+
+  .meeting-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .meeting-actions {
+    justify-content: flex-start;
+  }
+
+  .meeting-panel-main,
+  .ai-pm-panel-main {
+    grid-column: auto;
+  }
+
+  .meeting-reconcile-status {
+    text-align: left;
   }
 
   .project-card dl {
@@ -2030,7 +2379,7 @@ select:focus {
 }
 .btn-meeting-summary:hover { opacity: 0.88; }
 
-/* ── 全宽卡片（会前报告、日报、规则列表） ── */
+/* ── 全宽卡片（日报、规则列表） ── */
 .workspace-card-full {
   grid-column: 1 / -1;
 }
@@ -2038,11 +2387,6 @@ select:focus {
 .workspace-card-solo {
   grid-column: 1 / -1;
   min-height: 0;
-}
-
-/* ── 晚会工作台：两列等宽 + 会前报告全宽 ── */
-.meeting-workbench {
-  grid-template-columns: 1fr 1fr;
 }
 
 /* ── 卡片头部右侧多按钮区 ── */
