@@ -1617,22 +1617,11 @@ async function pushRisksManual() {
 // ── 通用 ──────────────────────────────────────────────────────
 
 async function runReview() {
-  const title = document.querySelector('#reviewTitle').value;
-  const diff = document.querySelector('#reviewDiff').value;
-  const payload = await api('/api/reviews', {
-    method: 'POST',
-    body: JSON.stringify({
-      repo: 'CUEAITECH/Cue.AI',
-      title,
-      owner: 'AI Reviewer',
-      diff,
-      files: ['server/index.js', 'src/app.js']
-    })
-  });
-  state.reviews = payload.reviews || [];
-  await refreshRisks();
-  renderAll();
-  toast(`AI Review 完成：${payload.review.level} · ${payload.review.score}`);
+  const payload = await api('/api/risks/scan', { method: 'POST', body: '{}' });
+  state.alerts = payload.alerts || [];
+  state.metrics = payload.metrics || state.metrics;
+  await loadReviewQueue();
+  toast('已触发 GitHub 同步和审阅扫描');
 }
 
 async function refreshRisks() {
