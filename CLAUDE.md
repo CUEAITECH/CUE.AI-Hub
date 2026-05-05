@@ -127,6 +127,10 @@ AI Review 输出固定四级：`Pass` / `Warning` / `Block` / `Escalate`。LLM �
 
 遵循 `.github/CUE_AI_GITHUB_RULES.md` 定义的前缀：`feat:` / `fix:` / `docs:` / `refactor:` / `merge:`。标题必须说明业务意图，不能写 `update`、`fix bug`、`改一下`。
 
+CI 规则（`.github/workflows/cue-github-policy.yml`）强制要求：
+- 描述部分**至少 8 个字符**（含中文字符），否则 commit-policy 检查失败
+- 合并到 main 的 merge commit 必须用 `merge:` 前缀，不能用 `fix:` / `refactor:`
+
 ## 团队成员
 
 | 中文名 | GitHub 匹配模式 |
