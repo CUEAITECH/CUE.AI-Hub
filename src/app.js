@@ -1094,11 +1094,10 @@ async function loadState() {
   state.stageChecklist = payload.stageChecklist || null;
   setText('#syncStatus', '本地 API 已连接');
 
-  // 并行加载站会、配置、今日分工、计划调整建议
-  const [standupPayload, config, assignPayload, adjustPayload, eveningPayload, checklistPayload] = await Promise.all([
+  // 并行加载站会、配置、计划调整建议（assignments 已在 /api/state 全量返回，不重复拉）
+  const [standupPayload, config, adjustPayload, eveningPayload, checklistPayload] = await Promise.all([
     api('/api/standups').catch(() => ({ standups: [] })),
     api('/api/config').catch(() => ({})),
-    api('/api/assignments').catch(() => ({ assignments: [] })),
     api('/api/plan-adjustments').catch(() => ({ adjustments: [] })),
     api('/api/reports/evening').catch(() => ({ report: null })),
     api('/api/stage/checklist').catch(() => null)
@@ -1106,7 +1105,6 @@ async function loadState() {
 
   state.standups = standupPayload.standups || [];
   state.config = config;
-  state.assignments = assignPayload.assignments || [];
   state.planAdjustments = adjustPayload.adjustments || [];
   state.stageChecklist = checklistPayload || state.stageChecklist;
   if (eveningPayload.report) {
