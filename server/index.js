@@ -1272,18 +1272,16 @@ AI 建议：${review.suggestion || '无'}`;
     const pending = allReviews.filter(
       (r) => (r.level === 'Block' || r.level === 'Escalate') && !r.humanDecision
     );
-    // 最近 48h 内、非 Pass 的 review（Warning 也需要关注）
-    const cutoff = Date.now() - 48 * 3600 * 1000;
+    // 所有未决 Warning 都保留到人工处理，不因页面刷新或时间窗口消失
     const recent = allReviews.filter((r) => {
       if (r.humanDecision) return false;
       if (r.level === 'Block' || r.level === 'Escalate') return false; // already in pending
       if (r.level === 'Pass') return false;
-      const ts = new Date(r.createdAt || 0).getTime();
-      return ts >= cutoff;
+      return true;
     });
     const queue = [
       ...pending.sort((a, b) => (b.level === 'Block') - (a.level === 'Block')),
-      ...recent.slice(0, 10)
+      ...recent.slice(0, 30)
     ];
     sendJson(res, 200, {
       queue,
