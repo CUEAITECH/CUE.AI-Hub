@@ -17,7 +17,7 @@ jobs:
           SERVER_USER: ${{ secrets.SERVER_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          echo "$SSH_KEY" > /tmp/deploy_key
+          printf '%s\n' "$SSH_KEY" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           rsync -az --delete \
             --exclude='.git' \
