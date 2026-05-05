@@ -23,10 +23,13 @@ const state = {
   riskAnalyses: [],
   healthAnalysis: null,
   stageChecklist: null,
+  reviewQueue: [],
   config: { githubEnabled: false, apiKeyRequiredForWrites: false, wecomEnabled: false, llmEnabled: false }
 };
 
 let selectedTaskId = '';
+let selectedRiskId = '';
+let activeRiskTab = 'P1';
 const _submitting = new Set();
 
 // 防重复提交：key 相同的调用在前一次完成前直接忽略
@@ -295,7 +298,7 @@ function renderStage() {
       <span>${metrics.done || 0}/${metrics.total || checklist.length} 完成 · ${metrics.missingEvidence || 0} 项缺证据</span>
     </div>
     <div class="stage-checklist-grid">
-      ${checklist.map((item) => `
+      ${checklist.slice(0, 3).map((item) => `
         <article class="stage-check-item stage-check-${escapeHtml(item.status)}">
           <div class="stage-check-top">
             <b>${escapeHtml(item.title)}</b>
@@ -307,8 +310,12 @@ function renderStage() {
           ${item.gaps?.length ? `<em>${item.gaps.map(escapeHtml).join(' / ')}</em>` : '<em>证据链完整</em>'}
         </article>
       `).join('')}
+      ${checklist.length > 3 ? '<button class="text-link-btn" type="button" data-route="roadmap">查看完整阶段路线</button>' : ''}
     </div>
   `;
+  checklistEl.querySelectorAll('[data-route]').forEach((button) => {
+    button.addEventListener('click', () => setRoute(button.dataset.route));
+  });
 }
 
 function roadmapStatusIcon(status) {
@@ -431,44 +438,42 @@ function renderTasks() {
     return;
   }
 
+  const overviewTasks = [...state.tasks]
+    .sort((a, b) => {
+      const riskWeight = { 高: 3, 中: 2, 低: 1 };
+      return (riskWeight[b.risk] || 0) - (riskWeight[a.risk] || 0)
+        || new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
+    })
+    .slice(0, 5);
+
   table.innerHTML = `
-    <div class="task-row task-row-head" aria-hidden="true">
-      <span>任务</span>
-      <span>负责人</span>
-      <span>今日领取</span>
-      <span>风险</span>
-      <span>截止</span>
-      <span>进度</span>
-      <span>操作</span>
-    </div>
-    ${state.tasks.map((task) => {
+    ${overviewTasks.map((task) => {
       const claimants = getTaskAssignments(task.id);
       const isDone = task.status === '已完成';
       return `
-        <div class="task-row">
+        <div class="task-row overview-task-row">
           <div>
             <strong>${escapeHtml(task.title)}</strong>
             <span>${escapeHtml(task.signal)}</span>
           </div>
-          <span>${escapeHtml(task.owner)}</span>
-          <div class="task-claim-cell">
-            ${claimants.length
-              ? `<div class="task-claimants">${claimants.map((item) => `<span>${escapeHtml(item.owner)} · ${escapeHtml(item.status || '进行中')}</span>`).join('')}</div>`
-              : '<small>未领取</small>'}
-            ${!isDone ? `<button class="claim-inline-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">领取</button>` : ''}
+          <div class="overview-task-meta">
+            <span>${escapeHtml(task.owner || '未指定')}</span>
+            <span class="risk-badge risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
+            <span>${escapeHtml(task.due || '未设置')}</span>
           </div>
-          <span class="risk-badge risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
-          <span>${escapeHtml(task.due || '未设置')}</span>
           <div class="progress" aria-label="${escapeHtml(task.title)} 进度 ${Number(task.progress) || 0}%">
             <i style="width: ${Number(task.progress) || 0}%"></i>
           </div>
+          <small>${claimants.length ? `今日领取：${claimants.map((item) => item.owner).join('、')}` : '今日未领取'}</small>
           <div class="task-row-actions">
             <button class="icon-btn detail-btn" data-task-id="${escapeHtml(task.id)}" aria-label="查看任务详情">↗</button>
             <button class="icon-btn edit-btn" data-task-id="${escapeHtml(task.id)}" aria-label="编辑任务">✏️</button>
+            ${!isDone ? `<button class="claim-inline-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">领取</button>` : ''}
           </div>
         </div>
       `;
     }).join('')}
+    ${state.tasks.length > 5 ? '<button class="text-link-btn" type="button" data-route="assignment">查看全部任务领取</button>' : ''}
   `;
 
   table.querySelectorAll('.detail-btn').forEach((btn) => {
@@ -482,6 +487,9 @@ function renderTasks() {
     btn.addEventListener('click', () =>
       claimTask(btn.dataset.taskId, btn.dataset.taskTitle).catch((e) => toast(e.message))
     );
+  });
+  table.querySelectorAll('[data-route]').forEach((btn) => {
+    btn.addEventListener('click', () => setRoute(btn.dataset.route));
   });
 }
 
@@ -523,7 +531,7 @@ function renderActivities() {
   const list = document.querySelector('#activityList');
   const projectActivities = state.activities
     .filter((activity) => activity.projectId === 'cue_ai_classroom')
-    .slice(0, 8);
+    .slice(0, 5);
 
   if (!projectActivities.length) {
     list.innerHTML = '<div class="empty-state">点击"同步 GitHub 远端"后，这里会展示最近 commit 和工作区改动。</div>';
@@ -544,13 +552,25 @@ function renderActivities() {
 
 function renderRisks() {
   const list = document.querySelector('#riskList');
-  if (!state.alerts.length) {
+  const tabs = document.querySelectorAll('.risk-tab');
+  tabs.forEach((tab) => {
+    const severity = tab.dataset.riskTab;
+    const count = state.alerts.filter((alert) => alert.severity === severity).length;
+    tab.textContent = `${severity} ${count}`;
+    tab.classList.toggle('active', severity === activeRiskTab);
+  });
+
+  const alerts = state.alerts.filter((alert) => alert.severity === activeRiskTab);
+  if (!alerts.length) {
     list.innerHTML = '<div class="empty-state">当前没有需要升级的风险。</div>';
+    renderRiskDetail();
     return;
   }
 
-  list.innerHTML = state.alerts.map((alert) => `
-    <div class="risk-item risk-${escapeHtml(alert.severity)}">
+  list.innerHTML = alerts.map((alert, index) => {
+    const riskId = getRiskId(alert);
+    return `
+    <button class="risk-item risk-${escapeHtml(alert.severity)}" type="button" data-risk-id="${escapeHtml(riskId)}">
       <b>${escapeHtml(alert.severity)}</b>
       <div>
         <strong>${escapeHtml(alert.title)}</strong>
@@ -558,8 +578,64 @@ function renderRisks() {
         ${alert.aiAnalysis?.reason ? `<p class="ai-analysis-line">AI：${escapeHtml(alert.aiAnalysis.reason)} · ${escapeHtml(alert.aiAnalysis.action || '待确认动作')}</p>` : ''}
         <small>提醒对象：${escapeHtml(alert.target)}</small>
       </div>
-    </div>
-  `).join('');
+    </button>
+  `;
+  }).join('');
+
+  list.querySelectorAll('.risk-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      selectedRiskId = item.dataset.riskId;
+      renderRiskDetail();
+      setRoute('risk-detail');
+    });
+  });
+  if (!selectedRiskId || !state.alerts.some((alert) => getRiskId(alert) === selectedRiskId)) {
+    selectedRiskId = getRiskId(alerts[0]);
+  }
+  renderRiskDetail();
+}
+
+function getRiskId(alert) {
+  return alert.id || `${alert.severity || 'risk'}_${alert.title || ''}_${alert.target || ''}`.replace(/\s+/g, '_');
+}
+
+function renderRiskDetail() {
+  const title = document.querySelector('#riskDetailTitle');
+  const subtitle = document.querySelector('#riskDetailSubtitle');
+  const content = document.querySelector('#riskDetailContent');
+  if (!content) return;
+  const alert = state.alerts.find((item) => getRiskId(item) === selectedRiskId) || state.alerts.find((item) => item.severity === activeRiskTab) || null;
+  if (!alert) {
+    if (title) title.textContent = '暂无风险';
+    if (subtitle) subtitle.textContent = '当前级别没有风险项。';
+    content.innerHTML = '<div class="empty-state">当前没有需要处理的风险。</div>';
+    return;
+  }
+  selectedRiskId = getRiskId(alert);
+  if (title) title.textContent = `${alert.severity} · ${alert.title}`;
+  if (subtitle) subtitle.textContent = `提醒对象：${alert.target || '未指定'} · ${alert.createdAt ? formatDateTime(alert.createdAt) : '等待处理'}`;
+  content.innerHTML = `
+    <article class="risk-detail-card">
+      <span>风险说明</span>
+      <p>${escapeHtml(alert.detail || '暂无详情。')}</p>
+    </article>
+    <article class="risk-detail-card">
+      <span>AI 判断</span>
+      <p>${escapeHtml(alert.aiAnalysis?.reason || '暂无 AI 分析。')}</p>
+      <p>${escapeHtml(alert.aiAnalysis?.action || '建议确认负责人、截止时间和下一次检查点。')}</p>
+    </article>
+    <article class="risk-detail-card">
+      <span>处理动作</span>
+      <div class="risk-detail-actions">
+        <button type="button" data-route="assignment">去分工领取</button>
+        <button type="button" data-route="reviews">去 AI 审阅</button>
+        <button type="button" data-action="scan-risks">重新扫描</button>
+      </div>
+    </article>
+  `;
+  content.querySelectorAll('[data-route]').forEach((button) => {
+    button.addEventListener('click', () => setRoute(button.dataset.route));
+  });
 }
 
 function renderMembers() {
@@ -601,6 +677,7 @@ let _selectedReviewId = null;
 function renderReviewQueue(queue) {
   const container = document.querySelector('#reviewQueue');
   if (!container) return;
+  state.reviewQueue = queue || [];
   if (!queue || !queue.length) {
     container.innerHTML = '<div class="empty-state">暂无需要人工确认的审阅项 ✅</div>';
     return;
@@ -627,10 +704,29 @@ function renderReviewQueue(queue) {
 
 async function loadReviewQueue() {
   const container = document.querySelector('#reviewQueue');
-  if (container) container.innerHTML = '<div class="empty-state">加载中...</div>';
+  const cached = readCachedReviewQueue();
+  if (cached.length) renderReviewQueue(cached);
+  else if (container) container.innerHTML = '<div class="empty-state">加载中...</div>';
   const data = await api('/api/reviews/queue');
   renderReviewQueue(data.queue || []);
+  writeCachedReviewQueue(data.queue || []);
   if (data.pendingCount) toast(`待处理 Block/Escalate：${data.pendingCount} 条`);
+}
+
+function readCachedReviewQueue() {
+  try {
+    return JSON.parse(sessionStorage.getItem('cueReviewQueue') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedReviewQueue(queue) {
+  try {
+    sessionStorage.setItem('cueReviewQueue', JSON.stringify(queue || []));
+  } catch {
+    // ignore storage failures
+  }
 }
 
 async function openReviewDetail(reviewId) {
@@ -1926,6 +2022,7 @@ function setRoute(route) {
     roadmap: 'command',
     'ai-pm': 'command',
     meeting: 'command',
+    'risk-detail': 'overview',
     planning: 'execution',
     reviews: 'execution',
     standup: 'execution',
@@ -2013,6 +2110,13 @@ function bindEvents() {
   }));
   document.querySelector('[data-action="scan-risks"]').addEventListener('click', () => {
     syncSignals().catch((e) => toast(e.message));
+  });
+  document.querySelectorAll('.risk-tab').forEach((button) => {
+    button.addEventListener('click', () => {
+      activeRiskTab = button.dataset.riskTab || 'P1';
+      selectedRiskId = '';
+      renderRisks();
+    });
   });
   document.querySelector('[data-action="run-review"]').addEventListener('click', () => {
     runReview().catch((e) => toast(e.message));
@@ -2132,8 +2236,10 @@ function bindEvents() {
 
 bindEvents();
 renderRules();
+renderReviewQueue(readCachedReviewQueue());
 loadState().catch((error) => {
   setText('#syncStatus', '本地 API 未启动');
+  renderRisks();
   renderMeeting();
   toast(`请先运行 npm run dev：${error.message}`);
 });
