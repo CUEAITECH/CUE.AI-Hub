@@ -286,7 +286,7 @@
               <div>
                 <span class="workspace-kicker">AI 审阅</span>
                 <h2>让提交先过一遍交付和安全审阅</h2>
-                <p>审阅结果会进入风险队列，Block/Escalate 项需人工确认后才能推进到晚会闭环。</p>
+                <p>Block / Escalate 项需人工确认，选定解决方案后可直接建任务跟进。</p>
               </div>
               <div class="workspace-actions">
                 <button type="button" data-action="load-review-queue">刷新待办</button>
@@ -294,21 +294,34 @@
               </div>
             </div>
 
-            <!-- 人工审阅待办 -->
-            <article class="workspace-card workspace-card-solo">
-              <div class="workspace-card-head">
-                <span>人工待办</span>
-                <strong>Block · Escalate · Warning 待确认</strong>
-              </div>
-              <div id="reviewQueue" class="review-queue">
-                <div class="empty-state">点击「刷新待办」加载需人工确认的审阅项</div>
-              </div>
-            </article>
+            <!-- 人工待办：左侧队列 + 右侧详情 -->
+            <div class="review-split-layout">
+              <article class="workspace-card review-queue-col">
+                <div class="workspace-card-head">
+                  <span>人工待办</span>
+                  <strong>Block · Escalate 需确认</strong>
+                </div>
+                <div id="reviewQueue" class="review-queue">
+                  <div class="empty-state">点击「刷新待办」加载需人工确认的审阅项</div>
+                </div>
+              </article>
 
+              <article class="workspace-card review-detail-col" id="reviewDetailPanel">
+                <div class="workspace-card-head">
+                  <span>审阅详情</span>
+                  <strong id="reviewDetailHeadTitle">从左侧选择待办项</strong>
+                </div>
+                <div id="reviewDetailContent" class="review-detail-empty">
+                  <div class="empty-state">选择左侧一个待办提交，查看完整审阅信息并做出决策。</div>
+                </div>
+              </article>
+            </div>
+
+            <!-- 手动触发审阅 + 历史记录 -->
             <div class="workspace-grid review-workbench">
               <article class="workspace-card">
                 <div class="workspace-card-head">
-                  <span>审阅输入</span>
+                  <span>手动审阅</span>
                   <strong>提交标题与 Diff</strong>
                 </div>
                 <div class="review-form form-stack">
@@ -325,7 +338,7 @@
 
               <article class="workspace-card workspace-card-wide">
                 <div class="workspace-card-head">
-                  <span>审阅队列</span>
+                  <span>审阅历史</span>
                   <strong>最近审阅结果</strong>
                 </div>
                 <div class="review-list" id="reviewList"></div>

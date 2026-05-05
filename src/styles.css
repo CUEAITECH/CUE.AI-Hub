@@ -2102,6 +2102,96 @@ select:focus {
   font-style: italic;
 }
 
+/* ── 审阅详情拆分面板 ── */
+.review-split-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .review-split-layout { grid-template-columns: 1fr; }
+}
+.review-queue-col .review-queue { max-height: 560px; overflow-y: auto; }
+.review-queue-item { cursor: pointer; transition: background 0.15s; }
+.review-queue-item:hover { background: var(--panel-3, #2a2a2a); }
+.review-queue-item.selected { background: var(--panel-3, #2a2a2a); border-left-width: 4px; }
+.review-detail-col { min-height: 320px; }
+.review-detail-empty { padding: 24px; }
+
+/* 详情内容区 */
+.review-detail-body { display: flex; flex-direction: column; gap: 16px; padding: 4px 0; }
+.review-detail-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.review-meta-chip {
+  font-size: 11px; padding: 3px 8px; border-radius: 4px;
+  background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--line);
+}
+.review-meta-chip a { color: inherit; text-decoration: underline; }
+.review-level-badge {
+  font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 4px;
+}
+.review-level-badge.level-block    { background: rgba(248,113,113,.15); color: #f87171; }
+.review-level-badge.level-escalate { background: rgba(251,146,60,.15);  color: #fb923c; }
+.review-level-badge.level-warning  { background: rgba(250,204,21,.15);  color: #ca8a04; }
+.review-level-badge.level-pass     { background: rgba(34,197,94,.15);   color: #22c55e; }
+
+.review-section-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-dim); margin-bottom: 6px;
+}
+.review-findings { display: flex; flex-direction: column; gap: 5px; }
+.review-finding-item {
+  font-size: 13px; padding: 6px 10px; border-radius: 6px;
+  background: var(--panel-2); color: var(--text); border-left: 3px solid var(--red, #f87171);
+}
+.review-suggestion {
+  font-size: 13px; padding: 8px 12px; border-radius: 6px;
+  background: var(--panel-2); color: var(--text); border-left: 3px solid var(--accent);
+}
+
+/* Diff 折叠 */
+.review-diff-toggle {
+  font-size: 12px; color: var(--accent); background: none; border: none;
+  cursor: pointer; padding: 0; text-decoration: underline;
+}
+.review-diff-block {
+  font-family: monospace; font-size: 11px; max-height: 240px; overflow-y: auto;
+  background: var(--panel-2); border-radius: 6px; padding: 10px 12px;
+  white-space: pre-wrap; word-break: break-all; color: var(--text-dim);
+  border: 1px solid var(--line);
+}
+.review-diff-block .diff-add { color: #4ade80; }
+.review-diff-block .diff-del { color: #f87171; }
+
+/* 解决方案卡片 */
+.review-solutions { display: flex; flex-direction: column; gap: 8px; }
+.review-solution-card {
+  padding: 10px 14px; border-radius: 8px; border: 2px solid var(--line);
+  background: var(--panel-2); cursor: pointer; transition: border-color 0.15s;
+}
+.review-solution-card:hover   { border-color: var(--accent); }
+.review-solution-card.selected { border-color: var(--accent); background: var(--panel-3, #2a2a2a); }
+.review-solution-card.recommended::before {
+  content: '推荐 · '; font-size: 11px; color: var(--accent); font-weight: 600;
+}
+.review-solution-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.review-solution-detail { font-size: 12px; color: var(--text-dim); }
+.review-solution-effort { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+/* 决策区 */
+.review-decision-area {
+  padding: 14px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel-2); display: flex; flex-direction: column; gap: 10px;
+}
+.review-decision-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.review-assignee-select {
+  padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--panel-3, var(--panel-2)); color: var(--text); font-size: 13px;
+}
+.btn-resolve-pass  { background: rgba(34,197,94,.12); color: #22c55e; border-color: #22c55e; }
+.btn-resolve-fix   { background: rgba(248,113,113,.12); color: #f87171; border-color: #f87171; }
+.btn-resolve-pass:hover, .btn-resolve-fix:hover { opacity: 0.8; }
+
 /* ── 快速认领成员按钮 ── */
 .claim-member-btns {
   display: flex;

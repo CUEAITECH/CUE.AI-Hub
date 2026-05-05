@@ -564,6 +564,8 @@ function renderReviews() {
   `).join('');
 }
 
+let _selectedReviewId = null;
+
 function renderReviewQueue(queue) {
   const container = document.querySelector('#reviewQueue');
   if (!container) return;
@@ -575,21 +577,17 @@ function renderReviewQueue(queue) {
   container.innerHTML = queue.map((review) => {
     const levelClass = `review-${String(review.level || '').toLowerCase()}`;
     const decided = review.humanDecision;
+    const isSelected = review.id === _selectedReviewId;
     return `
-    <div class="review-queue-item ${levelClass}" data-review-id="${escapeHtml(review.id)}">
+    <div class="review-queue-item ${levelClass}${isSelected ? ' selected' : ''}" data-review-id="${escapeHtml(review.id)}" data-action="open-review-detail">
       <div class="review-queue-info">
         <strong>${escapeHtml(review.title)}</strong>
         <span>${escapeHtml(review.owner || '未知')} · ${escapeHtml(getReviewLevelLabel(review.level))} · 分数 ${Number(review.score) || 0}</span>
-        ${(review.findings || []).length ? `<p class="review-suggestion">${escapeHtml(review.findings.join('；'))}</p>` : ''}
       </div>
       <div class="review-queue-actions">
         ${decided
           ? `<span class="review-decided">${escapeHtml(decisionLabel[decided] || decided)}</span>`
-          : `
-          <button class="btn-sm btn-ok" data-action="review-ack" data-id="${escapeHtml(review.id)}">已确认</button>
-          <button class="btn-sm btn-warn" data-action="review-fix" data-id="${escapeHtml(review.id)}">需修复</button>
-          <button class="btn-sm" data-action="review-exempt" data-id="${escapeHtml(review.id)}">豁免</button>
-          `}
+          : `<span class="review-level-badge level-${String(review.level||'').toLowerCase()}">${escapeHtml(getReviewLevelLabel(review.level))}</span>`}
       </div>
     </div>`;
   }).join('');
@@ -603,13 +601,162 @@ async function loadReviewQueue() {
   if (data.pendingCount) toast(`待处理 Block/Escalate：${data.pendingCount} 条`);
 }
 
-async function submitHumanReview(id, decision) {
-  await api(`/api/reviews/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ humanDecision: decision })
+async function openReviewDetail(reviewId) {
+  _selectedReviewId = reviewId;
+  // 高亮选中项
+  document.querySelectorAll('#reviewQueue .review-queue-item').forEach((el) => {
+    el.classList.toggle('selected', el.dataset.reviewId === reviewId);
   });
+
+  const panel = document.querySelector('#reviewDetailContent');
+  const headTitle = document.querySelector('#reviewDetailHeadTitle');
+  if (!panel) return;
+  panel.innerHTML = '<div class="empty-state">加载中...</div>';
+
+  const { review, diff } = await api(`/api/reviews/${encodeURIComponent(reviewId)}`);
+  if (headTitle) headTitle.textContent = (review.shortSha || reviewId.slice(-7)) + ' · ' + (review.title || '').slice(0, 40);
+
+  const levelLower = String(review.level || '').toLowerCase();
+  const decided = review.humanDecision;
+  const membersOptions = (state.members || []).map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
+
+  const diffHtml = diff
+    ? diff.split('\n').map((line) => {
+        if (line.startsWith('+')) return `<span class="diff-add">${escapeHtml(line)}</span>`;
+        if (line.startsWith('-')) return `<span class="diff-del">${escapeHtml(line)}</span>`;
+        return escapeHtml(line);
+      }).join('\n')
+    : null;
+
+  panel.innerHTML = `
+    <div class="review-detail-body">
+      <div class="review-detail-meta">
+        <span class="review-level-badge level-${levelLower}">${escapeHtml(getReviewLevelLabel(review.level))}</span>
+        <span class="review-meta-chip">分数 ${Number(review.score) || 0}/100</span>
+        <span class="review-meta-chip">作者：${escapeHtml(review.owner || review.actor || '未知')}</span>
+        ${review.shortSha ? `<span class="review-meta-chip">${escapeHtml(review.shortSha)}</span>` : ''}
+        ${review.commitUrl ? `<span class="review-meta-chip"><a href="${escapeHtml(review.commitUrl)}" target="_blank">查看 GitHub ↗</a></span>` : ''}
+        <span class="review-meta-chip">${new Date(review.createdAt || Date.now()).toLocaleString('zh-CN', { hour12: false })}</span>
+      </div>
+
+      <div>
+        <div class="review-section-label">提交标题</div>
+        <div class="review-suggestion">${escapeHtml(review.title || '—')}</div>
+      </div>
+
+      ${(review.files || []).length ? `
+      <div>
+        <div class="review-section-label">变更文件（${review.files.length} 个）</div>
+        <div class="review-suggestion" style="font-size:12px">${review.files.slice(0,8).map(escapeHtml).join('<br>')}</div>
+      </div>` : ''}
+
+      <div>
+        <div class="review-section-label">AI 发现的问题</div>
+        <div class="review-findings">
+          ${(review.findings || ['无明显问题']).map((f) => `<div class="review-finding-item">${escapeHtml(f)}</div>`).join('')}
+        </div>
+      </div>
+
+      ${review.suggestion ? `
+      <div>
+        <div class="review-section-label">AI 建议</div>
+        <div class="review-suggestion">${escapeHtml(review.suggestion)}</div>
+      </div>` : ''}
+
+      ${diffHtml ? `
+      <div>
+        <div class="review-section-label">
+          Diff
+          <button class="review-diff-toggle" onclick="this.parentElement.nextElementSibling.style.display=this.parentElement.nextElementSibling.style.display==='none'?'block':'none';this.textContent=this.textContent.includes('展开')?'收起 diff':'展开 diff'">展开 diff</button>
+        </div>
+        <div class="review-diff-block" style="display:none"><pre>${diffHtml}</pre></div>
+      </div>` : ''}
+
+      ${decided ? `
+      <div class="review-decision-area">
+        <div style="font-size:13px;color:var(--text-dim)">已处理：${{ acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免（通过）' }[decided] || decided}</div>
+        ${review.humanNote ? `<div style="font-size:12px;color:var(--text-dim)">备注：${escapeHtml(review.humanNote)}</div>` : ''}
+        ${review.resolvedTaskId ? `<div style="font-size:12px;color:var(--accent)">已建任务：${escapeHtml(review.resolvedTaskId)}</div>` : ''}
+      </div>` : `
+      <div>
+        <div class="review-section-label">
+          解决方案
+          <button class="btn-sm" id="btnLoadSolutions" onclick="loadReviewSolutions('${escapeHtml(reviewId)}')">AI 生成方案</button>
+        </div>
+        <div id="solutionsContainer"><div style="font-size:13px;color:var(--text-dim)">点击「AI 生成方案」获取 2-3 个具体解决方案</div></div>
+      </div>
+
+      <div class="review-decision-area" id="reviewDecisionArea">
+        <div class="review-section-label">做出决策</div>
+        <div class="review-decision-row">
+          <button class="btn-sm btn-resolve-pass" onclick="resolveReview('${escapeHtml(reviewId)}','pass')">✓ 通过（无需解决）</button>
+        </div>
+        <div class="review-decision-row" id="fixDecisionRow" style="display:none">
+          <span style="font-size:13px">负责人：</span>
+          <select class="review-assignee-select" id="reviewAssignee">
+            ${membersOptions}
+          </select>
+          <button class="btn-sm btn-resolve-fix" id="btnCreateTask" onclick="resolveReview('${escapeHtml(reviewId)}','needs-fix')">建任务跟进</button>
+        </div>
+      </div>`}
+    </div>`;
+}
+
+let _selectedSolution = null;
+
+async function loadReviewSolutions(reviewId) {
+  const btn = document.querySelector('#btnLoadSolutions');
+  if (btn) { btn.disabled = true; btn.textContent = '生成中...'; }
+  const container = document.querySelector('#solutionsContainer');
+  if (container) container.innerHTML = '<div style="font-size:13px;color:var(--text-dim)">AI 正在分析...</div>';
+
+  const { solutions } = await api(`/api/reviews/${encodeURIComponent(reviewId)}/solutions`, { method: 'POST' });
+  _selectedSolution = null;
+
+  if (container) {
+    container.innerHTML = `<div class="review-solutions">${solutions.map((s, i) => `
+      <div class="review-solution-card${s.recommended ? ' recommended' : ''}" data-solution-idx="${i}" onclick="selectSolution(this, ${i})">
+        <div class="review-solution-title">${escapeHtml(s.title)}</div>
+        <div class="review-solution-detail">${escapeHtml(s.detail)}</div>
+        <div class="review-solution-effort">预计工作量：${escapeHtml(s.effort || '未知')}</div>
+      </div>`).join('')}
+    </div>`;
+    container.dataset.solutions = JSON.stringify(solutions);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'AI 生成方案'; }
+}
+
+function selectSolution(el, idx) {
+  document.querySelectorAll('.review-solution-card').forEach((c) => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const solutions = JSON.parse(document.querySelector('#solutionsContainer')?.dataset.solutions || '[]');
+  _selectedSolution = solutions[idx] || null;
+  const fixRow = document.querySelector('#fixDecisionRow');
+  if (fixRow) fixRow.style.display = 'flex';
+}
+
+async function resolveReview(reviewId, decision) {
+  if (decision === 'needs-fix' && !_selectedSolution) {
+    toast('请先选择一个解决方案'); return;
+  }
+  const assignee = document.querySelector('#reviewAssignee')?.value || '';
+  const payload = {
+    decision,
+    solution: _selectedSolution?.detail || '',
+    solutionTitle: _selectedSolution?.title || '',
+    assignee
+  };
+  const result = await api(`/api/reviews/${encodeURIComponent(reviewId)}/resolve`, {
+    method: 'POST', body: JSON.stringify(payload)
+  });
+  toast(decision === 'pass' ? '已通过（无需解决）' : `已建任务：${result.task?.title || '跟进任务'}`);
+  _selectedSolution = null;
   await loadReviewQueue();
-  toast(`已标记：${{ acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免' }[decision]}`);
+  await openReviewDetail(reviewId);
+  if (result.task) {
+    state.tasks = [result.task, ...state.tasks];
+    renderTasks();
+  }
 }
 
 function renderRules() {
@@ -1681,14 +1828,12 @@ function bindEvents() {
   document.querySelector('[data-action="load-review-queue"]').addEventListener('click', () => {
     loadReviewQueue().catch((e) => toast(e.message));
   });
-  // 人工审阅决策（事件委托到 reviewQueue 容器）
+  // 人工审阅队列：点击条目打开详情面板
   document.querySelector('#reviewQueue').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    const id = btn.dataset.id;
-    const actionMap = { 'review-ack': 'acknowledged', 'review-fix': 'needs-fix', 'review-exempt': 'exempted' };
-    const decision = actionMap[btn.dataset.action];
-    if (decision && id) submitHumanReview(id, decision).catch((err) => toast(err.message));
+    const item = e.target.closest('[data-action="open-review-detail"]');
+    if (item && item.dataset.reviewId) {
+      openReviewDetail(item.dataset.reviewId).catch((err) => toast(err.message));
+    }
   });
   document.querySelector('[data-action="add-task"]').addEventListener('click', () => {
     createTaskFromPrompt().catch((e) => toast(e.message));

@@ -28,7 +28,7 @@ import { reviewChange } from './services/reviewer.js';
 import { buildMetrics, scanRisks } from './services/riskEngine.js';
 import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhook.js';
 import { scanLocalGitProject } from './services/localGit.js';
-import { scanGitHubProject, hasGitHubConfig } from './services/githubApi.js';
+import { scanGitHubProject, hasGitHubConfig, fetchCommitDetail } from './services/githubApi.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
 import { buildStageChecklist } from './services/stageChecklist.js';
 import {
@@ -388,6 +388,12 @@ async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
       id: `review_${activity.sha}`,
       projectId: project.id,
       activityId: activity.id,
+      sha: activity.sha,
+      shortSha: activity.shortSha,
+      commitUrl: activity.url,
+      actor: activity.actor,
+      files: activity.files || [],
+      humanDecision: null,
       ...await reviewChange({
         repo: activity.repo,
         title: activity.title,
@@ -1061,6 +1067,127 @@ async function handleApi(req, res, url) {
     });
     if (!updated) { sendError(res, 404, 'review not found'); return true; }
     sendJson(res, 200, { review: updated });
+    return true;
+  }
+
+  // GET /api/reviews/:id — 单条审阅详情（含 commit diff）
+  if (req.method === 'GET' && url.pathname.match(/^\/api\/reviews\/[^/]+$/) && url.pathname !== '/api/reviews/queue') {
+    const id = decodeURIComponent(url.pathname.split('/').pop());
+    const store = await loadStore();
+    const review = (store.reviews || []).find((r) => r.id === id);
+    if (!review) { sendError(res, 404, 'review not found'); return true; }
+
+    let diff = null;
+    const sha = review.sha || (review.id.startsWith('review_') ? review.id.slice(7) : null);
+    if (sha && review.repo) {
+      const [repoOwner, repoName] = review.repo.split('/');
+      if (repoOwner && repoName) {
+        try {
+          const detail = await fetchCommitDetail(repoOwner, repoName, sha);
+          diff = (detail?.files || [])
+            .slice(0, 10)
+            .map((f) => `--- ${f.filename}\n${f.patch || '(binary or no patch)'}`)
+            .join('\n\n');
+        } catch { /* 无法获取 diff，静默跳过 */ }
+      }
+    }
+    sendJson(res, 200, { review, diff });
+    return true;
+  }
+
+  // POST /api/reviews/:id/solutions — AI 生成 2-3 个解决方案
+  if (req.method === 'POST' && url.pathname.match(/^\/api\/reviews\/[^/]+\/solutions$/)) {
+    const id = decodeURIComponent(url.pathname.split('/').slice(-2)[0]);
+    const store = await loadStore();
+    const review = (store.reviews || []).find((r) => r.id === id);
+    if (!review) { sendError(res, 404, 'review not found'); return true; }
+
+    if (review.solutions) {
+      sendJson(res, 200, { solutions: review.solutions });
+      return true;
+    }
+
+    const systemPrompt = `你是资深代码审阅专家。根据 AI 代码审阅的问题，给出 2-3 个具体可执行的解决方案。
+每个方案必须包含：
+- title: 方案标题（10字以内）
+- detail: 具体操作步骤（50-100字）
+- effort: 预计工作量（轻量/中等/较大）
+- recommended: 是否为推荐方案（true/false，只能有一个true）
+
+返回 JSON 数组格式。`;
+    const userPrompt = `提交：${review.title}
+作者：${review.owner}
+审阅结论：${review.level}
+AI 发现的问题：
+${(review.findings || []).map((f, i) => `${i + 1}. ${f}`).join('\n')}
+AI 建议：${review.suggestion || '无'}`;
+
+    const raw = await callClaude(systemPrompt, userPrompt);
+    const solutions = parseJsonOutput(raw);
+    const finalSolutions = Array.isArray(solutions) ? solutions.slice(0, 3) : [
+      { title: '立即修复', detail: '根据 AI 发现的问题逐项修复，提交新的 commit 并重新触发审阅。', effort: '中等', recommended: true },
+      { title: '豁免处理', detail: '评估后认为该问题不影响生产，记录豁免理由并在下次迭代中优化。', effort: '轻量', recommended: false }
+    ];
+
+    await updateStore((draft) => {
+      const idx = (draft.reviews || []).findIndex((r) => r.id === id);
+      if (idx >= 0) draft.reviews[idx].solutions = finalSolutions;
+      return draft;
+    });
+
+    sendJson(res, 200, { solutions: finalSolutions });
+    return true;
+  }
+
+  // POST /api/reviews/:id/resolve — 最终决策（通过 or 选方案建任务）
+  if (req.method === 'POST' && url.pathname.match(/^\/api\/reviews\/[^/]+\/resolve$/)) {
+    const id = decodeURIComponent(url.pathname.split('/').slice(-2)[0]);
+    const { json } = await readBody(req);
+    const store = await loadStore();
+    const review = (store.reviews || []).find((r) => r.id === id);
+    if (!review) { sendError(res, 404, 'review not found'); return true; }
+
+    const { decision, solution, solutionTitle, assignee } = json || {};
+    if (!['pass', 'needs-fix'].includes(decision)) {
+      sendError(res, 400, 'decision must be pass or needs-fix');
+      return true;
+    }
+
+    let createdTask = null;
+    if (decision === 'needs-fix' && solution) {
+      createdTask = {
+        id: createId('task'),
+        title: `[审阅修复] ${solutionTitle || review.title.slice(0, 30)}`,
+        description: `来源：AI 代码审阅 ${review.shortSha || review.id}\n提交：${review.title}\n作者：${review.owner}\n\n选定方案：${solution}`,
+        owner: assignee || review.owner || '未分配',
+        status: '进行中',
+        risk: review.level === 'Escalate' ? '高' : '中',
+        progress: 0,
+        reviewId: id,
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    let updatedReview;
+    await updateStore((draft) => {
+      const idx = (draft.reviews || []).findIndex((r) => r.id === id);
+      if (idx >= 0) {
+        updatedReview = {
+          ...draft.reviews[idx],
+          humanDecision: decision === 'pass' ? 'exempted' : 'needs-fix',
+          humanNote: solution || '',
+          humanAt: new Date().toISOString(),
+          resolvedTaskId: createdTask?.id || null
+        };
+        draft.reviews[idx] = updatedReview;
+      }
+      if (createdTask) {
+        draft.tasks = [createdTask, ...(draft.tasks || [])];
+      }
+      return draft;
+    });
+
+    sendJson(res, 200, { review: updatedReview, task: createdTask });
     return true;
   }
 
