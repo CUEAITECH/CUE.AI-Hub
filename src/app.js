@@ -1737,8 +1737,26 @@ function setRoute(route) {
   document.querySelectorAll('.view').forEach((view) => {
     view.classList.toggle('active', view.id === route);
   });
+  const parentByRoute = {
+    overview: 'overview',
+    roadmap: 'command',
+    meeting: 'command',
+    planning: 'execution',
+    reviews: 'execution',
+    standup: 'execution',
+    assignment: 'execution',
+    'task-detail': 'execution',
+    report: 'output',
+    automation: 'output'
+  };
+  const activeParent = parentByRoute[route] || route;
   document.querySelectorAll('.nav-item').forEach((item) => {
-    item.classList.toggle('active', item.dataset.route === route);
+    const isRouteActive = item.dataset.route === route;
+    const isParentActive = item.classList.contains('nav-primary') && item.closest('[data-nav-parent]')?.dataset.navParent === activeParent;
+    item.classList.toggle('active', isRouteActive || isParentActive);
+    if (item.classList.contains('nav-primary') && item.hasAttribute('aria-expanded')) {
+      item.setAttribute('aria-expanded', String(isParentActive));
+    }
   });
 }
 

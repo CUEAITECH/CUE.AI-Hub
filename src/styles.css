@@ -46,8 +46,6 @@ button {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: grid;
-  gap: 0;
   padding: 0 28px;
   border-bottom: 1px solid var(--line);
   background: rgba(247, 247, 242, 0.88);
@@ -60,13 +58,13 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  border-bottom: 1px solid rgba(18, 18, 18, 0.08);
 }
 
 .brand {
   display: inline-flex;
   align-items: baseline;
   gap: 10px;
+  flex: 0 0 auto;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -85,24 +83,15 @@ button {
 .nav {
   display: flex;
   align-items: center;
-  gap: 18px;
-  min-height: 48px;
-  overflow-x: auto;
-}
-
-.nav-group {
-  display: flex;
-  align-items: center;
   gap: 6px;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-height: 44px;
+  overflow: visible;
 }
 
-.nav-label {
-  color: var(--dim);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.nav-menu {
+  position: relative;
+  flex: 0 0 auto;
 }
 
 .nav-item-hidden {
@@ -121,6 +110,11 @@ button {
   transition: 140ms ease;
 }
 
+.nav-primary {
+  min-width: 64px;
+  font-weight: 650;
+}
+
 .nav-item:hover,
 .nav-item.active {
   color: var(--text);
@@ -128,10 +122,58 @@ button {
   border-color: rgba(16, 16, 16, 0.08);
 }
 
+.nav-menu:hover > .nav-primary,
+.nav-menu:focus-within > .nav-primary {
+  color: var(--text);
+  background: rgba(16, 16, 16, 0.06);
+  border-color: rgba(16, 16, 16, 0.08);
+}
+
+.nav-submenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 148px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(247, 247, 242, 0.96);
+  box-shadow: 0 14px 36px rgba(16, 16, 16, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: 140ms ease;
+}
+
+.nav-submenu::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -9px;
+  height: 9px;
+}
+
+.nav-menu:hover .nav-submenu,
+.nav-menu:focus-within .nav-submenu {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.nav-submenu .nav-item {
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 0 0 auto;
 }
 
 .status-pill {
@@ -1361,18 +1403,22 @@ select:focus {
 
 @media (max-width: 980px) {
   .topbar {
-    padding: 14px 18px;
+    padding: 0 18px;
   }
 
   .header-main {
-    min-height: auto;
-    padding-bottom: 12px;
+    min-height: 60px;
+    gap: 10px;
   }
 
   .nav {
-    width: 100%;
-    padding-top: 10px;
-    overflow-x: auto;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  .brand small,
+  .status-pill {
+    display: none;
   }
 
   main {
