@@ -289,29 +289,18 @@ function renderStage() {
   const checklist = state.stageChecklist?.checklist || [];
   const metrics = state.stageChecklist?.metrics || {};
   if (!checklist.length) {
-    checklistEl.innerHTML = '<div class="empty-state">暂无阶段对照清单。</div>';
+    checklistEl.innerHTML = '<div class="stage-compact-empty">暂无阶段对照清单</div>';
     return;
   }
+  const blocked = checklist.filter((item) => item.status === '阻塞' || item.status === '高风险').length;
+  const missingEvidence = Number(metrics.missingEvidence) || 0;
   checklistEl.innerHTML = `
-    <div class="stage-checklist-head">
-      <strong>开发阶段对照清单</strong>
-      <span>${metrics.done || 0}/${metrics.total || checklist.length} 完成 · ${metrics.missingEvidence || 0} 项缺证据</span>
+    <div class="stage-compact-stats" aria-label="阶段摘要">
+      <span><b>${metrics.done || 0}/${metrics.total || checklist.length}</b> 完成</span>
+      <span><b>${missingEvidence}</b> 缺证据</span>
+      <span><b>${blocked}</b> 阻塞/高风险</span>
     </div>
-    <div class="stage-checklist-grid">
-      ${checklist.slice(0, 3).map((item) => `
-        <article class="stage-check-item stage-check-${escapeHtml(item.status)}">
-          <div class="stage-check-top">
-            <b>${escapeHtml(item.title)}</b>
-            <span>${escapeHtml(item.status)}</span>
-          </div>
-          <p>${escapeHtml(item.acceptance)}</p>
-          <div class="stage-check-progress"><i style="width:${Number(item.progress) || 0}%"></i></div>
-          <small>负责人：${escapeHtml(item.owner || '未指定')} · 任务 ${item.linkedTasks?.length || 0} · 提交 ${item.evidence?.commits?.length || 0} · Review ${item.evidence?.reviews?.length || 0}</small>
-          ${item.gaps?.length ? `<em>${item.gaps.map(escapeHtml).join(' / ')}</em>` : '<em>证据链完整</em>'}
-        </article>
-      `).join('')}
-      ${checklist.length > 3 ? '<button class="text-link-btn" type="button" data-route="roadmap">查看完整阶段路线</button>' : ''}
-    </div>
+    <button class="text-link-btn" type="button" data-route="roadmap">查看完整阶段路线</button>
   `;
   checklistEl.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => setRoute(button.dataset.route));
@@ -452,7 +441,7 @@ function renderTasks() {
       const isDone = task.status === '已完成';
       return `
         <div class="task-row overview-task-row">
-          <div>
+          <div class="overview-task-main">
             <strong>${escapeHtml(task.title)}</strong>
             <span>${escapeHtml(task.signal)}</span>
           </div>
@@ -460,11 +449,8 @@ function renderTasks() {
             <span>${escapeHtml(task.owner || '未指定')}</span>
             <span class="risk-badge risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
             <span>${escapeHtml(task.due || '未设置')}</span>
+            <span>${claimants.length ? `已领 ${claimants.length}` : '未领'}</span>
           </div>
-          <div class="progress" aria-label="${escapeHtml(task.title)} 进度 ${Number(task.progress) || 0}%">
-            <i style="width: ${Number(task.progress) || 0}%"></i>
-          </div>
-          <small>${claimants.length ? `今日领取：${claimants.map((item) => item.owner).join('、')}` : '今日未领取'}</small>
           <div class="task-row-actions">
             <button class="icon-btn detail-btn" data-task-id="${escapeHtml(task.id)}" aria-label="查看任务详情">↗</button>
             <button class="icon-btn edit-btn" data-task-id="${escapeHtml(task.id)}" aria-label="编辑任务">✏️</button>
@@ -543,55 +529,37 @@ function renderActivities() {
       <b>${activity.type === 'commit' ? escapeHtml(activity.shortSha || 'commit') : '未提交'}</b>
       <div>
         <strong>${escapeHtml(activity.title)}</strong>
-        <span>${escapeHtml(activity.owner || activity.actor)} · ${escapeHtml(activity.files?.slice(0, 3).join('、') || '无文件列表')}</span>
+        <span>${escapeHtml(activity.owner || activity.actor)} · ${formatDateTime(activity.createdAt)}</span>
       </div>
-      <small>${activity.createdAt ? new Date(activity.createdAt).toLocaleString('zh-CN', { hour12: false }) : ''}</small>
     </div>
   `).join('');
 }
 
 function renderRisks() {
   const list = document.querySelector('#riskList');
-  const tabs = document.querySelectorAll('.risk-tab');
-  tabs.forEach((tab) => {
-    const severity = tab.dataset.riskTab;
-    const count = state.alerts.filter((alert) => alert.severity === severity).length;
-    tab.textContent = `${severity} ${count}`;
-    tab.classList.toggle('active', severity === activeRiskTab);
-  });
-
-  const alerts = state.alerts.filter((alert) => alert.severity === activeRiskTab);
-  if (!alerts.length) {
-    list.innerHTML = '<div class="empty-state">当前没有需要升级的风险。</div>';
-    renderRiskDetail();
-    return;
-  }
-
-  list.innerHTML = alerts.map((alert, index) => {
-    const riskId = getRiskId(alert);
+  const levels = ['P1', 'P2', 'P3'];
+  const labels = { P1: '必须今天处理', P2: '需要跟进', P3: '持续观察' };
+  list.innerHTML = levels.map((severity) => {
+    const alerts = state.alerts.filter((alert) => alert.severity === severity);
+    const ownerCount = new Set(alerts.map((alert) => alert.target).filter(Boolean)).size;
     return `
-    <button class="risk-item risk-${escapeHtml(alert.severity)}" type="button" data-risk-id="${escapeHtml(riskId)}">
-      <b>${escapeHtml(alert.severity)}</b>
-      <div>
-        <strong>${escapeHtml(alert.title)}</strong>
-        <p>${escapeHtml(alert.detail)}</p>
-        ${alert.aiAnalysis?.reason ? `<p class="ai-analysis-line">AI：${escapeHtml(alert.aiAnalysis.reason)} · ${escapeHtml(alert.aiAnalysis.action || '待确认动作')}</p>` : ''}
-        <small>提醒对象：${escapeHtml(alert.target)}</small>
-      </div>
-    </button>
-  `;
+      <button class="risk-summary-card risk-summary-${severity}" type="button" data-risk-level="${severity}">
+        <span>${escapeHtml(severity)}</span>
+        <strong>${alerts.length}</strong>
+        <small>${escapeHtml(labels[severity])} · ${ownerCount} 个对象</small>
+      </button>
+    `;
   }).join('');
 
-  list.querySelectorAll('.risk-item').forEach((item) => {
+  list.querySelectorAll('.risk-summary-card').forEach((item) => {
     item.addEventListener('click', () => {
-      selectedRiskId = item.dataset.riskId;
+      activeRiskTab = item.dataset.riskLevel;
+      const firstAlert = state.alerts.find((alert) => alert.severity === activeRiskTab);
+      selectedRiskId = firstAlert ? getRiskId(firstAlert) : '';
       renderRiskDetail();
       setRoute('risk-detail');
     });
   });
-  if (!selectedRiskId || !state.alerts.some((alert) => getRiskId(alert) === selectedRiskId)) {
-    selectedRiskId = getRiskId(alerts[0]);
-  }
   renderRiskDetail();
 }
 
@@ -640,6 +608,7 @@ function renderRiskDetail() {
 
 function renderMembers() {
   const list = document.querySelector('#memberList');
+  if (!list) return;
   list.innerHTML = state.members.map((member) => `
     <div class="member-item">
       <div>

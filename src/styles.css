@@ -211,6 +211,7 @@ main {
 
 .dashboard-grid {
   grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
 }
 
 .hero > div:first-child,
@@ -242,14 +243,17 @@ main {
 .dashboard-title-card {
   grid-column: span 7;
   padding: 22px;
+  min-height: 160px;
 }
 
 .dashboard-health {
   grid-column: span 2;
+  min-height: 160px;
 }
 
 .dashboard-stage {
   grid-column: span 3;
+  min-height: 160px;
 }
 
 .dashboard-grid .metric-card {
@@ -530,17 +534,44 @@ h1 {
 }
 
 .task-table.compact .task-row {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
   min-height: 0;
+}
+
+.overview-task-row {
+  padding: 10px 12px;
+}
+
+.overview-task-main {
+  min-width: 0;
+}
+
+.overview-task-main strong,
+.activity-list.compact .activity-item strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-task-main span,
+.activity-list.compact .activity-item span {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overview-task-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
   color: var(--muted);
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .overview-task-row small {
@@ -762,6 +793,9 @@ h1 {
 
 .activity-list.compact .activity-item {
   grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  padding: 10px 12px;
 }
 
 .activity-list.compact .activity-item small {
@@ -786,7 +820,7 @@ h1 {
 
 .activity-item > div {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -822,9 +856,7 @@ h1 {
 }
 
 .risk-tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 10px;
+  display: none;
 }
 
 .risk-tab {
@@ -840,6 +872,48 @@ h1 {
   background: var(--text);
   border-color: var(--text);
   color: #fff;
+}
+
+.risk-overview-panel .risk-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.risk-summary-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+}
+
+.risk-summary-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.risk-summary-card strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.risk-summary-card small {
+  color: var(--dim);
+  line-height: 1.35;
+}
+
+.risk-summary-P1 {
+  border-color: rgba(180, 35, 24, 0.22);
+}
+
+.risk-summary-P2 {
+  border-color: rgba(154, 100, 0, 0.22);
 }
 
 .risk-detail-grid {
@@ -933,7 +1007,7 @@ select:focus {
 }
 
 .stage-panel .panel-head {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .stage-panel b,
@@ -942,12 +1016,21 @@ select:focus {
   font-size: 22px;
 }
 
+.stage-panel h2 {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 19px;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .stage-progress {
-  height: 12px;
+  height: 9px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(16, 16, 16, 0.08);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .stage-progress i {
@@ -958,7 +1041,30 @@ select:focus {
 }
 
 .stage-checklist {
-  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.stage-compact-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.stage-compact-stats span {
+  color: var(--dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.stage-compact-stats b {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.stage-compact-empty {
+  color: var(--dim);
 }
 
 .stage-checklist-head {
@@ -1930,6 +2036,7 @@ select:focus {
   }
 
   .hero,
+  .dashboard-grid,
   .split-grid,
   .overview-sync-grid,
   .overview-work-grid,
@@ -1956,6 +2063,7 @@ select:focus {
 
   .project-card,
   .activity-item,
+  .risk-overview-panel .risk-list,
   .meeting-toolbar,
   .report-summary,
   .meeting-kpis,
