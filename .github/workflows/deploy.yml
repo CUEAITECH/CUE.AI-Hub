@@ -10,29 +10,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
       - name: Deploy via rsync
         env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          echo "$SSH_KEY" | tr -d ' \n\r' | base64 -d > /tmp/deploy_key
-          chmod 600 /tmp/deploy_key
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
           rsync -az --delete \
             --exclude='.git' \
             --exclude='server/data/db.json' \
             --exclude='.env' \
             --exclude='node_modules' \
-            -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no" \
+            -e "ssh -o StrictHostKeyChecking=no" \
             ./ ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/
 
       - name: Restart PM2
         env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no \
+          ssh -o StrictHostKeyChecking=no \
             ${SERVER_USER}@${SERVER_HOST} \
             "pm2 restart cue-project-hub --update-env"
