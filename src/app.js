@@ -142,7 +142,14 @@ function getReviewLevelLabel(level) {
 
 function getTodayAssignments() {
   const today = getTodayText();
-  return (state.assignments || []).filter((assignment) => assignment.date === today);
+  const all = state.assignments || [];
+  const todayItems = all.filter((a) => a.date === today);
+  if (todayItems.length > 0) return todayItems;
+  // 今天还没有认领时，回退显示昨天未完成的认领（晚会前的过渡期）
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const yesterday = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+  return all.filter((a) => a.date === yesterday && a.status !== '已完成');
 }
 
 function getTaskAssignments(taskId) {
@@ -1307,7 +1314,7 @@ async function markAssignmentDone(id) {
 async function cancelAssignment(id) {
   if (!window.confirm('确认取消认领？')) return;
   const payload = await api(`/api/assignments/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  state.assignments = (payload.assignments || []).filter((a) => a.date === getTodayText());
+  state.assignments = payload.assignments || state.assignments;
   renderAll();
   toast('已取消认领');
 }
