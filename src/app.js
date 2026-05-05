@@ -453,7 +453,6 @@ function renderTasks() {
           </div>
           <div class="task-row-actions">
             <button class="icon-btn detail-btn" data-task-id="${escapeHtml(task.id)}" aria-label="查看任务详情">↗</button>
-            <button class="icon-btn edit-btn" data-task-id="${escapeHtml(task.id)}" aria-label="编辑任务">✏️</button>
             ${!isDone ? `<button class="claim-inline-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">领取</button>` : ''}
           </div>
         </div>
@@ -464,10 +463,6 @@ function renderTasks() {
 
   table.querySelectorAll('.detail-btn').forEach((btn) => {
     btn.addEventListener('click', () => openTaskDetail(btn.dataset.taskId));
-  });
-  // 绑定编辑按钮
-  table.querySelectorAll('.edit-btn').forEach((btn) => {
-    btn.addEventListener('click', () => openTaskModal(btn.dataset.taskId));
   });
   table.querySelectorAll('.claim-inline-btn').forEach((btn) => {
     btn.addEventListener('click', () =>
@@ -491,24 +486,25 @@ function renderCueAiProject() {
   const githubUrl = project.githubFullRepo
     ? `https://github.com/${project.githubFullRepo}`
     : null;
-  const sourceLabel = project.githubOwner ? '🔗 GitHub 远端' : '💾 本地 Git';
+  const sourceLabel = project.githubOwner ? 'GitHub 远端' : '本地 Git';
+  const repoLabel = project.githubFullRepo || project.repository || '待同步';
+  const syncText = project.lastSyncAt
+    ? formatDateTime(project.lastSyncAt, { year: 'numeric' })
+    : '待同步';
 
   panel.innerHTML = `
-    <div class="project-card">
+    <div class="project-card project-card-dashboard">
       <div>
         <strong>${escapeHtml(project.name)}</strong>
-        <span>${escapeHtml(project.summary)}</span>
+        <span>${escapeHtml(repoLabel)}</span>
       </div>
-      <dl>
-        <div><dt>来源</dt><dd>${sourceLabel}</dd></div>
-        <div><dt>仓库</dt><dd>${githubUrl
-          ? `<a href="${escapeHtml(githubUrl)}" target="_blank" rel="noopener" class="repo-link">${escapeHtml(project.githubFullRepo)}</a>`
-          : escapeHtml(project.repository)}</dd></div>
-        <div><dt>分支</dt><dd>${escapeHtml(project.branch || '待同步')}</dd></div>
-        <div><dt>状态</dt><dd>${escapeHtml(project.status || '待同步')}</dd></div>
-        <div><dt>近期 commits</dt><dd>${Number(project.commitCount) || 0}</dd></div>
-      </dl>
-      <small>${project.lastSyncAt ? `上次同步 ${new Date(project.lastSyncAt).toLocaleString('zh-CN', { hour12: false })}` : '还没有同步过，点击"同步 GitHub 远端"拉取远端数据'}</small>
+      <div class="project-dashboard-stats">
+        <span><b>${Number(project.commitCount) || 0}</b><small>近期 commits</small></span>
+        <span><b>${escapeHtml(project.branch || 'main')}</b><small>分支</small></span>
+        <span><b>${escapeHtml(project.status || sourceLabel)}</b><small>状态</small></span>
+        <span><b>${escapeHtml(syncText)}</b><small>上次同步</small></span>
+      </div>
+      ${githubUrl ? `<a href="${escapeHtml(githubUrl)}" target="_blank" rel="noopener" class="text-link-btn">打开仓库</a>` : ''}
     </div>
   `;
 }

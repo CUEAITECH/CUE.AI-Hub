@@ -212,6 +212,7 @@ main {
 .dashboard-grid {
   grid-template-columns: repeat(12, minmax(0, 1fr));
   align-items: start;
+  grid-auto-flow: dense;
 }
 
 .hero > div:first-child,
@@ -243,28 +244,55 @@ main {
 .dashboard-title-card {
   grid-column: span 7;
   padding: 22px;
-  min-height: 160px;
+  height: 168px;
 }
 
 .dashboard-health {
   grid-column: span 2;
-  min-height: 160px;
+  height: 168px;
 }
 
 .dashboard-stage {
   grid-column: span 3;
-  min-height: 160px;
+  height: 168px;
 }
 
 .dashboard-grid .metric-card {
   grid-column: span 3;
+  height: 132px;
 }
 
 .dashboard-repo,
 .dashboard-activity,
-.dashboard-tasks,
 .dashboard-risks {
   grid-column: span 6;
+  overflow: hidden;
+}
+
+.dashboard-repo,
+.dashboard-activity {
+  height: 368px;
+}
+
+.dashboard-tasks {
+  grid-column: span 6;
+  height: 376px;
+  overflow: hidden;
+}
+
+.dashboard-risks {
+  height: 376px;
+}
+
+.dashboard-title-card,
+.dashboard-health,
+.dashboard-stage,
+.dashboard-grid .metric-card,
+.dashboard-repo,
+.dashboard-activity,
+.dashboard-tasks,
+.dashboard-risks {
+  min-width: 0;
 }
 
 .eyebrow,
@@ -298,6 +326,33 @@ h1 {
   color: var(--muted);
   font-size: 15px;
   line-height: 1.6;
+}
+
+.dashboard-title-card h1,
+.dashboard-title-card p,
+.health-card small,
+.metric-card small,
+.stage-panel small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-title-card p,
+.health-card small,
+.metric-card small,
+.stage-panel small {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+}
+
+.dashboard-title-card p,
+.health-card small,
+.stage-panel small {
+  -webkit-line-clamp: 2;
+}
+
+.metric-card small {
+  -webkit-line-clamp: 1;
 }
 
 .health-card {
@@ -366,6 +421,11 @@ h1 {
   padding: 20px;
 }
 
+.dashboard-grid .panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .metric-card strong {
   display: block;
   margin: 8px 0 2px;
@@ -382,6 +442,12 @@ h1 {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.dashboard-grid .panel-head {
+  flex: 0 0 auto;
+  min-height: 48px;
+  margin-bottom: 14px;
 }
 
 .panel-actions {
@@ -534,12 +600,13 @@ h1 {
 }
 
 .task-table.compact .task-row {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) 190px 76px;
   gap: 10px;
   min-height: 0;
 }
 
 .overview-task-row {
+  height: 48px;
   padding: 10px 12px;
 }
 
@@ -566,12 +633,42 @@ h1 {
 
 .overview-task-meta {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   justify-content: flex-end;
+  overflow: hidden;
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.overview-task-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-task-meta span:first-child {
+  max-width: 48px;
+}
+
+.task-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.task-table.compact,
+.activity-list.compact,
+.risk-overview-panel .risk-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.activity-list.compact {
+  gap: 8px;
 }
 
 .overview-task-row small {
@@ -621,12 +718,6 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-}
-
-.task-row-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
 }
 
 .task-link-btn {
@@ -724,8 +815,8 @@ h1 {
 }
 
 .cue-ai-panel .panel-head {
-  align-items: flex-start;
-  flex-direction: column;
+  align-items: center;
+  flex-direction: row;
 }
 
 .cue-ai-panel .btn-group {
@@ -735,6 +826,8 @@ h1 {
 }
 
 .cue-ai-project {
+  flex: 1 1 auto;
+  min-height: 0;
   margin-bottom: 12px;
 }
 
@@ -751,6 +844,13 @@ h1 {
   align-items: start;
 }
 
+.project-card-dashboard {
+  height: 100%;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  overflow: hidden;
+}
+
 .cue-ai-project.compact .project-card dl {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -763,6 +863,47 @@ h1 {
 .project-card > div:first-child span,
 .project-card small {
   color: var(--muted);
+}
+
+.project-card-dashboard > div:first-child,
+.project-card-dashboard > div:first-child span {
+  min-width: 0;
+}
+
+.project-card-dashboard > div:first-child span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-self: stretch;
+}
+
+.project-dashboard-stats span {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.project-dashboard-stats b {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-dashboard-stats small {
+  margin-top: 3px;
+  font-size: 11px;
 }
 
 .project-card dl {
@@ -794,8 +935,9 @@ h1 {
 .activity-list.compact .activity-item {
   grid-template-columns: 64px minmax(0, 1fr);
   gap: 10px;
+  height: 44px;
   min-height: 0;
-  padding: 10px 12px;
+  padding: 7px 10px;
 }
 
 .activity-list.compact .activity-item small {
@@ -807,7 +949,7 @@ h1 {
   display: inline-flex;
   width: fit-content;
   border-radius: 999px;
-  padding: 5px 9px;
+  padding: 4px 8px;
   background: rgba(16, 16, 16, 0.06);
   color: var(--blue);
   font-size: 12px;
@@ -883,7 +1025,7 @@ h1 {
   display: grid;
   gap: 5px;
   min-width: 0;
-  min-height: 112px;
+  height: 116px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1044,6 +1186,10 @@ select:focus {
   display: grid;
   gap: 8px;
   margin-top: 9px;
+}
+
+.dashboard-stage .text-link-btn {
+  margin-top: 0;
 }
 
 .stage-compact-stats {
@@ -2100,6 +2246,36 @@ select:focus {
 
   .plan-summary {
     grid-column: auto;
+  }
+
+  .dashboard-title-card,
+  .dashboard-health,
+  .dashboard-stage,
+  .dashboard-grid .metric-card,
+  .dashboard-repo,
+  .dashboard-activity,
+  .dashboard-tasks,
+  .dashboard-risks {
+    height: auto;
+  }
+
+  .project-dashboard-stats,
+  .task-table.compact .task-row {
+    grid-template-columns: 1fr;
+  }
+
+  .task-table.compact .task-row {
+    gap: 8px;
+  }
+
+  .overview-task-row,
+  .activity-list.compact .activity-item {
+    height: auto;
+  }
+
+  .overview-task-meta,
+  .task-row-actions {
+    justify-content: flex-start;
   }
 }
 
