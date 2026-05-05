@@ -142,14 +142,21 @@ function getReviewLevelLabel(level) {
 
 function getTodayAssignments() {
   const today = getTodayText();
+  return (state.assignments || []).filter((a) => a.date === today);
+}
+
+// 近期认领：今天 + 昨天未完成（用于分工面板展示）
+function getRecentAssignments() {
   const all = state.assignments || [];
-  const todayItems = all.filter((a) => a.date === today);
-  if (todayItems.length > 0) return todayItems;
-  // 今天还没有认领时，回退显示昨天未完成的认领（晚会前的过渡期）
+  const today = getTodayText();
   const d = new Date();
   d.setDate(d.getDate() - 1);
   const yesterday = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
-  return all.filter((a) => a.date === yesterday && a.status !== '已完成');
+  const todaySet = new Set(all.filter((a) => a.date === today).map((a) => `${a.owner}|${a.taskId}`));
+  const yesterdayCarryover = all.filter(
+    (a) => a.date === yesterday && a.status !== '已完成' && !todaySet.has(`${a.owner}|${a.taskId}`)
+  );
+  return [...all.filter((a) => a.date === today), ...yesterdayCarryover];
 }
 
 function getTaskAssignments(taskId) {
@@ -841,15 +848,16 @@ function renderAssignments() {
   setOptions('#assignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
   setOptions('#assignmentTask', focusedTasks.length ? focusedTasks : activeTasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
 
-  // 今日认领情况（按成员分组）
+  // 近期认领情况（今天 + 昨天未完成的延续）
+  const recentAssignments = getRecentAssignments();
   const summaryEl = document.querySelector('#assignmentSummary');
   if (summaryEl) {
-    if (!todayAssignments.length) {
+    if (!recentAssignments.length) {
       summaryEl.innerHTML = '<div class="empty-state">今日暂无认领记录。</div>';
     } else {
       // 按 owner 分组
       const byOwner = {};
-      for (const a of todayAssignments) {
+      for (const a of recentAssignments) {
         if (!byOwner[a.owner]) byOwner[a.owner] = [];
         byOwner[a.owner].push(a);
       }
@@ -860,6 +868,7 @@ function renderAssignments() {
             <div class="assign-item assign-${escapeHtml(a.status || '进行中')}">
               <span class="assign-title">${escapeHtml(a.taskTitle || '未知任务')}</span>
               <span class="assign-status-badge">${escapeHtml(a.status || '进行中')}</span>
+              ${a.date !== today ? `<span class="assign-carryover-badge">续 ${a.date}</span>` : ''}
               ${a.note ? `<small class="assign-note">${escapeHtml(a.note)}</small>` : ''}
               ${renderAssignmentBrief(a.brief)}
               <div class="assign-actions">

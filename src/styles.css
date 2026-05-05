@@ -1883,6 +1883,7 @@ select:focus {
 }
 .assign-item.assign-已完成 .assign-status-badge { background: rgba(15, 122, 85, 0.08); color: var(--green); }
 .assign-item.assign-未完成 .assign-status-badge { background: rgba(180, 35, 24, 0.08); color: var(--red); }
+.assign-carryover-badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(120,80,200,0.1); color: #8b5cf6; flex-shrink: 0; }
 .assign-note { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
 .assign-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .assignment-brief {
