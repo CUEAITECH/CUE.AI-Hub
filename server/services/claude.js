@@ -41,10 +41,22 @@ export async function callClaude(systemPrompt, userPrompt) {
 
 export function parseJsonOutput(text) {
   if (!text) return null;
-  const match = text.match(/```(?:json)?\s*([\s\S]+?)```/);
-  try {
-    return JSON.parse((match ? match[1] : text).trim());
-  } catch {
-    return null;
+  // 1. 优先提取 markdown 代码块
+  const codeBlock = text.match(/```(?:json)?\s*([\s\S]+?)```/);
+  if (codeBlock) {
+    try { return JSON.parse(codeBlock[1].trim()); } catch { /* 继续尝试 */ }
   }
+  // 2. 尝试直接解析全文
+  try { return JSON.parse(text.trim()); } catch { /* 继续尝试 */ }
+  // 3. 提取第一个完整 JSON 对象 {...}
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  if (objMatch) {
+    try { return JSON.parse(objMatch[0]); } catch { /* 继续尝试 */ }
+  }
+  // 4. 提取第一个 JSON 数组 [...]
+  const arrMatch = text.match(/\[[\s\S]*\]/);
+  if (arrMatch) {
+    try { return JSON.parse(arrMatch[0]); } catch { /* 继续尝试 */ }
+  }
+  return null;
 }
