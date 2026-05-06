@@ -250,11 +250,13 @@ main {
 .dashboard-health {
   grid-column: span 2;
   height: 168px;
+  justify-content: center;
 }
 
 .dashboard-stage {
   grid-column: span 3;
   height: 168px;
+  cursor: pointer;
 }
 
 .dashboard-grid .metric-card {
@@ -281,7 +283,7 @@ main {
 }
 
 .dashboard-risks {
-  height: 376px;
+  height: fit-content;
 }
 
 .dashboard-title-card,
@@ -622,15 +624,6 @@ h1 {
   white-space: nowrap;
 }
 
-.overview-task-main span,
-.activity-list.compact .activity-item span {
-  display: block;
-  overflow: hidden;
-  margin-top: 2px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .overview-task-meta {
   display: flex;
   flex-wrap: nowrap;
@@ -837,6 +830,8 @@ h1 {
   gap: 16px;
   align-items: center;
   padding: 16px;
+  color: inherit;
+  text-decoration: none;
 }
 
 .cue-ai-project.compact .project-card {
@@ -846,9 +841,17 @@ h1 {
 
 .project-card-dashboard {
   height: 100%;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr;
   gap: 12px;
   overflow: hidden;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.project-card-dashboard:hover,
+.dashboard-stage:hover {
+  border-color: rgba(16, 16, 16, 0.24);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .cue-ai-project.compact .project-card dl {
@@ -934,7 +937,7 @@ h1 {
 
 .activity-list.compact .activity-item {
   grid-template-columns: 64px minmax(0, 1fr);
-  gap: 10px;
+  gap: 8px;
   height: 44px;
   min-height: 0;
   padding: 7px 10px;
@@ -964,6 +967,30 @@ h1 {
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.activity-line {
+  display: flex !important;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.activity-list.compact .activity-line strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.activity-list.compact .activity-line span {
+  flex: 0 0 auto;
+  display: block;
+  overflow: hidden;
+  max-width: 160px;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .activity-item span,
@@ -1019,14 +1046,15 @@ h1 {
 .risk-overview-panel .risk-list {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  flex: 0 0 auto;
 }
 
 .risk-summary-card {
   display: grid;
-  gap: 5px;
+  gap: 3px;
   min-width: 0;
-  height: 116px;
-  padding: 14px;
+  height: 82px;
+  padding: 11px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -1041,7 +1069,7 @@ h1 {
 }
 
 .risk-summary-card strong {
-  font-size: 34px;
+  font-size: 28px;
   line-height: 1;
 }
 
@@ -1165,6 +1193,10 @@ select:focus {
   line-height: 1.25;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.dashboard-stage #stageSummary {
+  display: none;
 }
 
 .stage-progress {

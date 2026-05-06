@@ -265,7 +265,6 @@ function getFocusedAssignmentTasks(limit = 8) {
 function renderMetrics() {
   const metrics = state.metrics || {};
   setText('#healthScore', metrics.healthScore ?? 0);
-  setText('#healthSummary', `高风险任务 ${metrics.highRiskTasks ?? 0} 个 · Block/Escalate Review ${metrics.pendingReviews ?? 0} 条 · 紧急提醒 ${metrics.urgentAlerts ?? 0} 个`);
   setText('#metricHighRisk', metrics.highRiskTasks ?? 0);
   setText('#metricUrgentAlerts', `${metrics.urgentAlerts ?? 0} 个需要管理者处理`);
   setText('#metricCommits', metrics.commitsToday ?? 0);
@@ -300,11 +299,7 @@ function renderStage() {
       <span><b>${missingEvidence}</b> 缺证据</span>
       <span><b>${blocked}</b> 阻塞/高风险</span>
     </div>
-    <button class="text-link-btn" type="button" data-route="roadmap">查看完整阶段路线</button>
   `;
-  checklistEl.querySelectorAll('[data-route]').forEach((button) => {
-    button.addEventListener('click', () => setRoute(button.dataset.route));
-  });
 }
 
 function roadmapStatusIcon(status) {
@@ -443,13 +438,11 @@ function renderTasks() {
         <div class="task-row overview-task-row">
           <div class="overview-task-main">
             <strong>${escapeHtml(task.title)}</strong>
-            <span>${escapeHtml(task.signal)}</span>
           </div>
           <div class="overview-task-meta">
-            <span>${escapeHtml(task.owner || '未指定')}</span>
+            <span>${claimants.length ? escapeHtml(claimants.map((item) => item.owner).join('、')) : '未领'}</span>
             <span class="risk-badge risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
             <span>${escapeHtml(task.due || '未设置')}</span>
-            <span>${claimants.length ? `已领 ${claimants.length}` : '未领'}</span>
           </div>
           <div class="task-row-actions">
             <button class="icon-btn detail-btn" data-task-id="${escapeHtml(task.id)}" aria-label="查看任务详情">↗</button>
@@ -493,7 +486,7 @@ function renderCueAiProject() {
     : '待同步';
 
   panel.innerHTML = `
-    <div class="project-card project-card-dashboard">
+    <a class="project-card project-card-dashboard" href="${githubUrl ? escapeHtml(githubUrl) : '#'}" ${githubUrl ? 'target="_blank" rel="noopener"' : 'aria-disabled="true"'}>
       <div>
         <strong>${escapeHtml(project.name)}</strong>
         <span>${escapeHtml(repoLabel)}</span>
@@ -504,8 +497,7 @@ function renderCueAiProject() {
         <span><b>${escapeHtml(project.status || sourceLabel)}</b><small>状态</small></span>
         <span><b>${escapeHtml(syncText)}</b><small>上次同步</small></span>
       </div>
-      ${githubUrl ? `<a href="${escapeHtml(githubUrl)}" target="_blank" rel="noopener" class="text-link-btn">打开仓库</a>` : ''}
-    </div>
+    </a>
   `;
 }
 
@@ -523,7 +515,7 @@ function renderActivities() {
   list.innerHTML = projectActivities.map((activity) => `
     <div class="activity-item activity-${escapeHtml(activity.type)}">
       <b>${activity.type === 'commit' ? escapeHtml(activity.shortSha || 'commit') : '未提交'}</b>
-      <div>
+      <div class="activity-line">
         <strong>${escapeHtml(activity.title)}</strong>
         <span>${escapeHtml(activity.owner || activity.actor)} · ${formatDateTime(activity.createdAt)}</span>
       </div>
