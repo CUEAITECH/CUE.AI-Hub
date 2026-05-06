@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultCurrentStage, defaultStageChecklist, normalizeStageName } from './services/stageChecklist.js';
@@ -7,6 +7,7 @@ const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
 const seedPath = join(dataDir, 'seed.json');
 const dbPath = join(dataDir, 'db.json');
+const backupPath = join(dataDir, 'db.backup.json');
 const cueAiRepo = 'CUEAITECH/Cue.AI';
 const legacyCueAiRepoAliases = new Set([
   'OmniNexus-Edu-copilot',
@@ -176,6 +177,8 @@ export async function loadStore() {
 
 export async function saveStore(nextStore) {
   cache = nextStore;
+  // 写入前先备份，保留上一个版本供紧急恢复
+  try { await copyFile(dbPath, backupPath); } catch { /* db.json 不存在时跳过 */ }
   await writeJson(dbPath, cache);
   return cache;
 }

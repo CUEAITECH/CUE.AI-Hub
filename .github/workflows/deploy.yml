@@ -26,6 +26,7 @@ jobs:
           rsync -az --delete \
             --exclude='.git' \
             --exclude='server/data/db.json' \
+            --exclude='server/data/db.backup.json' \
             --exclude='.env' \
             --exclude='node_modules' \
             -e "ssh -o StrictHostKeyChecking=no" \
