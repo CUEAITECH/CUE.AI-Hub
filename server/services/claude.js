@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022';
 let _client = null;
 
 function getClient() {
