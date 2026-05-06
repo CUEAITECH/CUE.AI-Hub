@@ -4,7 +4,7 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。�
 
 **公网地址：** https://hub.cueai.top  
 **跟踪仓库：** `CUEAITECH/Cue.AI`（产品仓库）  
-**自身代码：** `CUEAITECH/CUE-Project-Hub`
+**自身代码：** `CUEAITECH/CUE.AI-Hub`
 
 ---
 
@@ -92,7 +92,7 @@ pm2 start server/index.js --name cue-project-hub  # 生产
 |--------|------|
 | `SERVER_HOST` | 服务器公网 IP |
 | `SERVER_USER` | SSH 用户名 |
-| `DEPLOY_PATH` | 部署路径，如 `/opt/CUE-Project-Hub` |
+| `DEPLOY_PATH` | 部署路径，如 `/opt/CUE.AI-Hub` |
 | `HANGZHOU_SERVER` | 服务器 SSH 私钥（原始 PEM 格式） |
 
 ---

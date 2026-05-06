@@ -14,7 +14,7 @@ const legacyCueAiRepoAliases = new Set([
   'dirtortian/OmniNexus-Edu-copilot',
   'CUEAITECH/OmniNexus-Edu-copilot'
 ]);
-const legacyHubReviewRepos = new Set(['cue-project-hub', 'cue-project-hub-api', 'CUEAITECH/CUE-Project-Hub']);
+const legacyHubReviewRepos = new Set(['cue-project-hub', 'cue-project-hub-api', 'CUEAITECH/CUE-Project-Hub', 'CUEAITECH/CUE.AI-Hub']);
 const seedDemoReviewIds = new Set(['review_001', 'review_002', 'review_003']);
 
 let cache = null;
