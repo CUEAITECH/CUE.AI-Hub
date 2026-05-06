@@ -277,6 +277,7 @@ function getFocusedAssignmentTasks(limit = 8) {
     .map((task) => {
       const claimed = todayAssignments.some((assignment) => assignment.taskId === task.id);
       const score = [
+        task.reviewId ? 100 : 0,        // 打回审阅修复任务最优先
         claimed ? 80 : 0,
         isCueAiTask(task) ? 70 : 0,
         stageTaskIds.has(task.id) ? 60 : 0,
@@ -1138,7 +1139,7 @@ function renderAssignments() {
   const dateEl = document.querySelector('#assignmentDate');
   if (dateEl) dateEl.textContent = today;
   const activeTasks = getAssignableTaskPool();
-  const focusedTasks = getFocusedAssignmentTasks(activeTasks.length); // 全部排序，不截断
+  const focusedTasks = getFocusedAssignmentTasks(10);
   setOptions('#assignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
   setOptions('#assignmentTask', focusedTasks.length ? focusedTasks : activeTasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
 
@@ -1194,7 +1195,7 @@ function renderAssignments() {
       assignableEl.innerHTML = `
         <div class="assignment-focus-note">
           <strong>可认领任务</strong>
-          <span>共 ${activeTasks.length} 个进行中任务，按优先级排序，点名字直接认领。</span>
+          <span>共 ${activeTasks.length} 个进行中任务，展示前 ${focusedTasks.length} 个，打回修复优先置顶。</span>
         </div>
         ${focusedTasks.map((task) => {
         const claimants = todayAssignments.filter((a) => a.taskId === task.id);
