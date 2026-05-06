@@ -810,7 +810,18 @@ async function openReviewDetail(reviewId) {
           解决方案
           <button class="btn-sm" id="btnLoadSolutions" onclick="loadReviewSolutions('${escapeHtml(reviewId)}')">AI 生成方案</button>
         </div>
-        <div id="solutionsContainer"><div style="font-size:13px;color:var(--text-dim)">点击「AI 生成方案」获取 2-3 个具体解决方案</div></div>
+        <div id="solutionsContainer">${(() => {
+          const cached = _reviewDetailCache[reviewId]?.solutions;
+          if (cached?.length) {
+            return `<div class="review-solutions">${cached.map((s, i) => `
+              <div class="review-solution-card${s.recommended ? ' recommended' : ''}" data-solution-idx="${i}" onclick="selectSolution(this,${i})">
+                <div class="review-solution-title">${escapeHtml(s.title)}</div>
+                <div class="review-solution-detail">${escapeHtml(s.detail)}</div>
+                <div class="review-solution-effort">预计工作量：${escapeHtml(s.effort||'未知')}</div>
+              </div>`).join('')}</div>`;
+          }
+          return '<div style="font-size:13px;color:var(--text-dim)">点击「AI 生成方案」获取 2-3 个具体解决方案</div>';
+        })()}</div>
       </div>
 
       <div class="review-decision-area" id="reviewDecisionArea">
@@ -827,6 +838,13 @@ async function openReviewDetail(reviewId) {
         </div>
       </div>`}
     </div>`;
+
+  // 恢复缓存的 solutions dataset，确保 selectSolution 能读取
+  const cachedSols = _reviewDetailCache[reviewId]?.solutions;
+  if (cachedSols?.length) {
+    const sc = document.querySelector('#solutionsContainer');
+    if (sc) sc.dataset.solutions = JSON.stringify(cachedSols);
+  }
 }
 
 let _selectedSolution = null;
@@ -841,6 +859,8 @@ async function loadReviewSolutions(reviewId) {
     const data = await api(`/api/reviews/${encodeURIComponent(reviewId)}/solutions`, { method: 'POST' });
     const solutions = data?.solutions || [];
     _selectedSolution = null;
+    // 存进缓存，重新打开时恢复
+    if (_reviewDetailCache[reviewId]) _reviewDetailCache[reviewId].solutions = solutions;
 
     if (container) {
       if (!solutions.length) {
