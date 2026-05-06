@@ -362,6 +362,7 @@ function renderRoadmap() {
   const stage = state.stageChecklist?.stage || state.currentStage || {};
   const metrics = state.stageChecklist?.metrics || {};
   const checklist = state.stageChecklist?.checklist || [];
+  const phases = state.stageChecklist?.phases || [];
   const activeTasks = (state.tasks || []).filter((task) => task.status !== '已完成');
   const todayClaims = getTodayAssignments();
 
@@ -395,24 +396,59 @@ function renderRoadmap() {
     </article>
   `;
 
-  laneEl.innerHTML = checklist.map((item, index) => {
-    const statusClass = roadmapStatusClass(item.status);
-    const progress = Math.max(0, Math.min(100, Number(item.progress) || 0));
-    return `
-      <article class="roadmap-node roadmap-${statusClass}">
-        <div class="roadmap-node-index">${index + 1}</div>
-        <div class="roadmap-node-body">
-          <div class="roadmap-node-top">
-            <b>${escapeHtml(item.title)}</b>
-            <span>${roadmapStatusIcon(item.status)}</span>
+  // 按阶段分组渲染节点
+  const nodesByPhase = Object.fromEntries(phases.map((p) => [p.id, []]));
+  const unphased = [];
+  checklist.forEach((item, index) => {
+    if (item.phaseId && nodesByPhase[item.phaseId]) {
+      nodesByPhase[item.phaseId].push({ ...item, _globalIndex: index });
+    } else {
+      unphased.push({ ...item, _globalIndex: index });
+    }
+  });
+
+  function renderPhaseNodes(nodes) {
+    return nodes.map((item) => {
+      const statusClass = roadmapStatusClass(item.status);
+      const progress = Math.max(0, Math.min(100, Number(item.progress) || 0));
+      return `
+        <article class="roadmap-node roadmap-${statusClass}">
+          <div class="roadmap-node-index">${item._globalIndex + 1}</div>
+          <div class="roadmap-node-body">
+            <div class="roadmap-node-top">
+              <b>${escapeHtml(item.title)}</b>
+              <span>${roadmapStatusIcon(item.status)}</span>
+            </div>
+            <p>${escapeHtml(item.acceptance || '')}</p>
+            <div class="roadmap-node-progress"><i style="width:${progress}%"></i></div>
+            <small>${escapeHtml(item.owner || '未指定')} · ${progress}% · ${escapeHtml(item.status)}</small>
           </div>
-          <p>${escapeHtml(item.acceptance || '')}</p>
-          <div class="roadmap-node-progress"><i style="width:${progress}%"></i></div>
-          <small>${escapeHtml(item.owner || '未指定')} · ${progress}% · ${escapeHtml(item.status)}</small>
-        </div>
-      </article>
-    `;
-  }).join('');
+        </article>`;
+    }).join('');
+  }
+
+  if (phases.length) {
+    laneEl.innerHTML = phases.map((phase, phaseIndex) => {
+      const nodes = nodesByPhase[phase.id] || [];
+      const phaseStatusClass = roadmapStatusClass(phase.status || '待开始');
+      return `
+        <section class="roadmap-phase roadmap-phase-${phaseIndex + 1}">
+          <div class="roadmap-phase-header roadmap-phase-header-${phaseIndex + 1}">
+            <div class="roadmap-phase-title">
+              <span class="roadmap-phase-index">P${phaseIndex + 1}</span>
+              <strong>${escapeHtml(phase.title)}</strong>
+              <span class="roadmap-phase-status roadmap-${phaseStatusClass}">${roadmapStatusIcon(phase.status)} ${escapeHtml(phase.status || '待开始')}</span>
+            </div>
+            ${phase.progress != null ? `<div class="roadmap-phase-progress"><i style="width:${phase.progress}%"></i></div>` : ''}
+          </div>
+          <div class="roadmap-phase-nodes">
+            ${nodes.length ? renderPhaseNodes(nodes) : '<p class="muted-line" style="padding:8px 12px">暂无节点</p>'}
+          </div>
+        </section>`;
+    }).join('') + (unphased.length ? `<section class="roadmap-phase roadmap-phase-other"><div class="roadmap-phase-header">其他</div><div class="roadmap-phase-nodes">${renderPhaseNodes(unphased)}</div></section>` : '');
+  } else {
+    laneEl.innerHTML = renderPhaseNodes(checklist.map((item, i) => ({ ...item, _globalIndex: i })));
+  }
 
   detailEl.innerHTML = checklist.map((item) => {
     const statusClass = roadmapStatusClass(item.status);

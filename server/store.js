@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultCurrentStage, defaultStageChecklist, normalizeStageName } from './services/stageChecklist.js';
+import { defaultCurrentStage, defaultPhases, defaultStageChecklist, normalizeStageName } from './services/stageChecklist.js';
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
@@ -144,6 +144,16 @@ function migrateStore(store) {
   next.currentStage.checklist = Array.isArray(next.currentStage.checklist) && next.currentStage.checklist.length
     ? next.currentStage.checklist
     : defaultStageChecklist;
+  // 补全 phases：旧数据没有时补默认值；补全节点缺失的 phaseId
+  if (!Array.isArray(next.currentStage.phases) || !next.currentStage.phases.length) {
+    next.currentStage.phases = defaultPhases;
+  }
+  const phaseIds = new Set(next.currentStage.phases.map((p) => p.id));
+  next.currentStage.checklist = next.currentStage.checklist.map((node, i) => {
+    if (node.phaseId && phaseIds.has(node.phaseId)) return node;
+    const defaultNode = defaultStageChecklist.find((d) => d.id === node.id);
+    return { ...node, phaseId: defaultNode?.phaseId || next.currentStage.phases[Math.min(i, next.currentStage.phases.length - 1)].id };
+  });
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
     acceptance: task.acceptance === 'PR diff 可输出 Pass、Warning、Block、Escalate 四级结论。'

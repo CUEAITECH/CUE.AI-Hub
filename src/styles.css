@@ -1410,6 +1410,80 @@ select:focus {
   opacity: 0.18;
 }
 
+/* ── 阶段分组 ─────────────────────────────────────────────── */
+.roadmap-phase {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.roadmap-phase-header {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.roadmap-phase-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.roadmap-phase-index {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: .6;
+  letter-spacing: .04em;
+}
+.roadmap-phase-status {
+  font-size: 11px;
+  margin-left: auto;
+}
+.roadmap-phase-progress {
+  height: 3px;
+  background: rgba(0,0,0,.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.roadmap-phase-progress i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: currentColor;
+  transition: width .3s;
+}
+.roadmap-phase-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+}
+.roadmap-phase-nodes .roadmap-node {
+  background: var(--surface);
+}
+
+/* 阶段背景色 — 1:蓝 2:绿 3:紫 4:橙 5:玫 */
+.roadmap-phase-1 { --phase-bg: #e8f0fe; --phase-accent: #4a90d9; }
+.roadmap-phase-2 { --phase-bg: #e6f4ea; --phase-accent: #34a853; }
+.roadmap-phase-3 { --phase-bg: #f3e8fd; --phase-accent: #8e44ad; }
+.roadmap-phase-4 { --phase-bg: #fef3e2; --phase-accent: #e67e22; }
+.roadmap-phase-5 { --phase-bg: #fde8ef; --phase-accent: #c0392b; }
+.roadmap-phase-header-1,
+.roadmap-phase-header-2,
+.roadmap-phase-header-3,
+.roadmap-phase-header-4,
+.roadmap-phase-header-5 {
+  background: var(--phase-bg);
+  color: var(--phase-accent);
+  border-bottom: 1px solid var(--border);
+}
+@media (prefers-color-scheme: dark) {
+  .roadmap-phase-1 { --phase-bg: #1a2642; --phase-accent: #7baee8; }
+  .roadmap-phase-2 { --phase-bg: #16301e; --phase-accent: #5cbf7a; }
+  .roadmap-phase-3 { --phase-bg: #261535; --phase-accent: #b97de3; }
+  .roadmap-phase-4 { --phase-bg: #2e1e0a; --phase-accent: #e8944a; }
+  .roadmap-phase-5 { --phase-bg: #2e1016; --phase-accent: #e0607a; }
+}
+
 .roadmap-node {
   position: relative;
   display: grid;

@@ -1,3 +1,9 @@
+export const defaultPhases = [
+  { id: 'phase_backend', title: '后端基础', status: '进行中' },
+  { id: 'phase_integration', title: '多端联调', status: '待开始' },
+  { id: 'phase_acceptance', title: '验收上线', status: '待开始' }
+];
+
 export const defaultCurrentStage = {
   id: 'stage_cue_ai_trtc_mvp',
   name: 'Cue.AI 双设备课堂 MVP / TRTC 联调阶段',
@@ -5,7 +11,8 @@ export const defaultCurrentStage = {
   targetDate: '2026-05-15',
   progress: 0,
   status: '进行中',
-  updatedAt: ''
+  updatedAt: '',
+  phases: defaultPhases
 };
 
 export function normalizeStageShortName(value, fallback = defaultCurrentStage.shortName) {
@@ -34,15 +41,8 @@ export function normalizeStageName(stage = {}) {
 
 export const defaultStageChecklist = [
   {
-    id: 'stage_trtc_full_loop',
-    title: 'TRTC 全链路联调',
-    owner: '全员',
-    taskIds: [],
-    keywords: ['trtc', '全链路', '联调', '课堂', 'session', 'summary', 'sos', 'asr'],
-    acceptance: '跑通老师开课、学生加入、ASR 转写、SOP 推进、SOS 触发和 summary 生成的完整课堂链路。'
-  },
-  {
     id: 'stage_backend_realtime',
+    phaseId: 'phase_backend',
     title: '后端实时课堂链路',
     owner: '后端/架构',
     taskIds: [],
@@ -51,6 +51,7 @@ export const defaultStageChecklist = [
   },
   {
     id: 'stage_ipad_teacher',
+    phaseId: 'phase_integration',
     title: 'iPad 老师端开课',
     owner: 'iOS',
     taskIds: [],
@@ -58,7 +59,17 @@ export const defaultStageChecklist = [
     acceptance: 'iPad 老师端能登录、选择课程模块、创建课堂、进入 TRTC 房间并持续采集课堂音频。'
   },
   {
+    id: 'stage_trtc_full_loop',
+    phaseId: 'phase_integration',
+    title: 'TRTC 全链路联调',
+    owner: '全员',
+    taskIds: [],
+    keywords: ['trtc', '全链路', '联调', '课堂', 'session', 'summary', 'sos', 'asr'],
+    acceptance: '跑通老师开课、学生加入、ASR 转写、SOP 推进、SOS 触发和 summary 生成的完整课堂链路。'
+  },
+  {
     id: 'stage_student_teacher_clients',
+    phaseId: 'phase_integration',
     title: '学生/教师端加入与提示',
     owner: 'Web / iPhone',
     taskIds: [],
@@ -67,6 +78,7 @@ export const defaultStageChecklist = [
   },
   {
     id: 'stage_content_demo_acceptance',
+    phaseId: 'phase_acceptance',
     title: '内容 SOP 与 Demo 验收',
     owner: '产品/内容',
     taskIds: [],
@@ -229,6 +241,20 @@ export function buildStageChecklist(store) {
   const blockedCount = checklist.filter((item) => item.status === '阻塞' || item.status === '高风险').length;
   const missingEvidenceCount = checklist.filter((item) => item.gaps.length > 0).length;
 
+  // 推断每个 phase 的状态（有阻塞→阻塞，全完成→已完成，有推进中→进行中，否则待开始）
+  const rawPhases = Array.isArray(stage.phases) && stage.phases.length ? stage.phases : defaultPhases;
+  const phases = rawPhases.map((phase) => {
+    const nodes = checklist.filter((item) => item.phaseId === phase.id);
+    if (!nodes.length) return { ...phase };
+    const allDone = nodes.every((n) => n.status === '已完成');
+    const anyBlocked = nodes.some((n) => n.status === '阻塞');
+    const anyRisk = nodes.some((n) => n.status === '高风险');
+    const anyActive = nodes.some((n) => n.status === '推进中');
+    const derivedStatus = allDone ? '已完成' : anyBlocked ? '阻塞' : anyRisk ? '高风险' : anyActive ? '进行中' : phase.status || '待开始';
+    const phaseProgress = Math.round(nodes.reduce((s, n) => s + n.progress, 0) / nodes.length);
+    return { ...phase, status: derivedStatus, progress: phaseProgress, nodeCount: nodes.length };
+  });
+
   return {
     stage: {
       id: stage.id || defaultCurrentStage.id,
@@ -238,6 +264,7 @@ export function buildStageChecklist(store) {
       status: stage.status || defaultCurrentStage.status,
       progress
     },
+    phases,
     checklist,
     metrics: {
       total: checklist.length,
