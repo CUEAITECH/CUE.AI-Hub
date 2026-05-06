@@ -2285,6 +2285,12 @@ function bindEvents() {
 bindEvents();
 renderRules();
 renderReviewQueue(readCachedReviewQueue());
+
+// ES module 内函数不自动暴露到 window，内联 onclick 需要手动挂载
+window.loadReviewSolutions = loadReviewSolutions;
+window.resolveReview = resolveReview;
+window.selectSolution = selectSolution;
+window.openReviewDetail = openReviewDetail;
 loadState().catch((error) => {
   setText('#syncStatus', '本地 API 未启动');
   renderRisks();
