@@ -263,9 +263,7 @@ function isCueAiTask(task) {
 }
 
 function getAssignableTaskPool() {
-  const activeTasks = (state.tasks || []).filter((task) => task.status !== '已完成');
-  const cueAiTasks = activeTasks.filter(isCueAiTask);
-  return cueAiTasks.length ? cueAiTasks : activeTasks;
+  return (state.tasks || []).filter((task) => task.status !== '已完成');
 }
 
 function getFocusedAssignmentTasks(limit = 8) {
