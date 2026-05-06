@@ -75,6 +75,23 @@ function mdToHtml(text) {
     .replace(/\n/g, '<br>');
 }
 
+function renderStageUpdateMeta(stageUpdate = {}) {
+  if (!stageUpdate || typeof stageUpdate !== 'object') return '';
+  const items = [];
+  if (stageUpdate.shortName) items.push(`阶段 ${stageUpdate.shortName}`);
+  if (stageUpdate.status) items.push(`状态 ${stageUpdate.status}`);
+  if (Number.isFinite(Number(stageUpdate.progressDelta)) && Number(stageUpdate.progressDelta) !== 0) {
+    const delta = Number(stageUpdate.progressDelta);
+    items.push(`进度 ${delta > 0 ? '+' : ''}${delta}%`);
+  }
+  if (Array.isArray(stageUpdate.checklist) && stageUpdate.checklist.length) {
+    items.push(`路径节点 ${stageUpdate.checklist.length} 个`);
+  }
+  return items.length
+    ? `<div class="ai-pm-stage-update">${items.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}</div>`
+    : '';
+}
+
 async function api(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
   const needsApiKey = state.config?.apiKeyRequiredForWrites
@@ -276,7 +293,7 @@ function renderStage() {
   const stage = state.currentStage || {};
   const checklistStage = state.stageChecklist?.stage || {};
   const progress = Math.max(0, Math.min(100, Number(checklistStage.progress ?? stage.progress) || 0));
-  setText('#stageName', stage.name || 'Cue.AI 双设备课堂 MVP / TRTC 联调阶段');
+  setText('#stageName', stage.shortName || checklistStage.shortName || stage.name || 'MVP / TRTC 联调');
   setText('#stageProgressText', `${progress}%`);
   setText('#meetingStageProgress', `阶段进度 ${progress}%`);
   setText('#stageSummary', `${stage.status || '进行中'} · 目标日期 ${stage.targetDate || '待确认'} · ${stage.updatedAt ? `更新于 ${new Date(stage.updatedAt).toLocaleString('zh-CN', { hour12: false })}` : '等待晚会报告更新'}`);
@@ -1235,6 +1252,7 @@ function renderAiPm() {
         <span>${escapeHtml(item.status === 'approved' ? '已批准' : item.status === 'rejected' ? '已拒绝' : '待审批')}</span>
       </div>
       <p>${escapeHtml(item.suggestion || '')}</p>
+      ${renderStageUpdateMeta(item.stageUpdate)}
       <small>${escapeHtml(item.requiresApprovalReason || item.impact || '影响阶段目标、负责人或排期，需要人工审批。')}</small>
       <div class="ai-pm-actions">
         <button type="button" data-action="approve-plan-adjustment" data-adjust-id="${escapeHtml(item.id)}" ${item.status === 'approved' || item.status === 'rejected' ? 'disabled' : ''}>批准</button>
@@ -1250,6 +1268,7 @@ function renderAiPm() {
         <span>${escapeHtml(item.scope === 'progress' ? '进度' : '自动')}</span>
       </div>
       <p>${escapeHtml(item.suggestion || '')}</p>
+      ${renderStageUpdateMeta(item.stageUpdate)}
       <small>${escapeHtml(item.costReason || item.impact || '')}</small>
     </div>
   `).join('') : '<div class="empty-state">暂无自动调整记录。新 commit 到达后，AI PM 会批量判断并自动记录小调整。</div>';
@@ -1833,9 +1852,17 @@ async function decidePlanAdjustment(id, decision) {
     method: 'POST',
     body: JSON.stringify({ decision })
   });
+  const nextState = await api('/api/state');
   state.planAdjustments = payload.adjustments || state.planAdjustments;
+  state.currentStage = nextState.currentStage || state.currentStage;
+  state.stageChecklist = nextState.stageChecklist || state.stageChecklist;
+  state.metrics = nextState.metrics || state.metrics;
+  state.alerts = nextState.alerts || state.alerts;
   renderPlanAdjustments();
   renderAiPm();
+  renderStage();
+  renderRoadmap();
+  renderRisks();
   toast(decision === 'approved' ? 'AI PM 大调整已批准' : 'AI PM 大调整已拒绝');
 }
 
@@ -1915,6 +1942,7 @@ async function syncCueAiGit(options = {}) {
   state.eveningReports = nextState.eveningReports || {};
   state.currentStage = nextState.currentStage || {};
   state.metrics = payload.metrics || nextState.metrics || {};
+  state.planAdjustments = nextState.planAdjustments || state.planAdjustments;
   state.stageChecklist = nextState.stageChecklist || state.stageChecklist;
   renderAll();
   const srcLabel = payload.source === 'github-api' ? 'GitHub 远端' : '本地 Git';

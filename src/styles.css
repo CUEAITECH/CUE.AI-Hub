@@ -283,7 +283,7 @@ main {
 }
 
 .dashboard-risks {
-  height: fit-content;
+  height: 376px;
 }
 
 .dashboard-title-card,
@@ -1187,12 +1187,12 @@ select:focus {
 }
 
 .stage-panel h2 {
-  display: -webkit-box;
+  display: block;
   overflow: hidden;
   font-size: 19px;
   line-height: 1.25;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-stage #stageSummary {
@@ -1878,6 +1878,22 @@ select:focus {
 .ai-pm-trigger span {
   color: var(--muted);
   line-height: 1.55;
+}
+
+.ai-pm-stage-update {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-pm-stage-update span {
+  border: 1px solid rgba(18, 18, 18, 0.1);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .ai-pm-actions {
