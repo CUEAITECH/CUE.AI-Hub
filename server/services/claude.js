@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-5';
+// 懒读取：ES module import 先于 .env 加载执行，所以不能在模块顶层取值
+function getModel() { return process.env.CLAUDE_MODEL || 'claude-sonnet-4-5'; }
 let _client = null;
 
 function getClient() {
@@ -21,7 +22,7 @@ export async function callClaude(systemPrompt, userPrompt) {
   if (!client) return null;
   try {
     const response = await client.messages.create({
-      model: MODEL,
+      model: getModel(),
       max_tokens: 4096,
       system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }]
