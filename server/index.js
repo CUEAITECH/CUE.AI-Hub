@@ -1020,12 +1020,10 @@ async function handleApi(req, res, url) {
     const docs = await fetchProjectDocs(owner, repo);
     if (!docs.length) { sendJson(res, 200, { imported: 0, message: 'docs/ 目录无计划文档' }); return true; }
 
-    // 并行：解析任务 + 提炼阶段划分
-    const [parsedTasks, parsedPhases] = await Promise.all([
-      parseDocsForTasks(docs),
-      parsePhasesFromDocs(docs)
-    ]);
+    const parsedTasks = await parseDocsForTasks(docs);
     if (!parsedTasks.length) { sendJson(res, 200, { imported: 0, message: 'LLM 未解析出任务（无 API key 或文档无可执行任务）' }); return true; }
+    // phases 在任务解析后执行，兜底时可用 parsedTasks 按文档归组
+    const parsedPhases = await parsePhasesFromDocs(docs, parsedTasks);
     const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
     const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
 
@@ -1141,7 +1139,8 @@ async function handleApi(req, res, url) {
         ? { owner: project.githubFullRepo.split('/')[0], repo: project.githubFullRepo.split('/')[1] }
         : { owner: project.githubOwner || '', repo: project.repository || '' };
       const docs = await fetchProjectDocs(owner, repo);
-      const [parsedTasks, parsedPhases] = await Promise.all([parseDocsForTasks(docs), parsePhasesFromDocs(docs)]);
+      const parsedTasks = await parseDocsForTasks(docs);
+      const parsedPhases = await parsePhasesFromDocs(docs, parsedTasks);
       const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
       const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
       let imported = 0;

@@ -156,27 +156,52 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
 - 如文档中看不出明确阶段划分，根据任务性质自行合理归纳`;
 
 /**
- * 从文档内容用 LLM 提炼开发阶段划分
+ * 从文档内容用 LLM 提炼开发阶段划分；LLM 失败时按 sourceDoc 文档名兜底归组
+ * @param {Array<{path, name, content}>} docs
+ * @param {Array} parsedTasks - 已解析的候选任务（兜底用）
  */
-export async function parsePhasesFromDocs(docs) {
-  if (!docs.length) return null;
-  const userPrompt = docs.map((d) => `=== ${d.path} ===\n${d.content.slice(0, 2000)}`).join('\n\n');
-  const raw = await callClaude(PHASES_SYSTEM_PROMPT, userPrompt);
-  if (!raw) return null;
-  try {
-    const parsed = parseJsonOutput(raw);
-    if (!Array.isArray(parsed) || !parsed.length) return null;
-    return parsed
-      .filter((p) => p.id && p.title)
-      .slice(0, 5)
-      .map((p) => ({
-        id: String(p.id).replace(/[^\w-]/g, '_').slice(0, 32),
-        title: String(p.title).slice(0, 20),
-        status: ['待开始', '进行中', '已完成'].includes(p.status) ? p.status : '待开始'
-      }));
-  } catch {
-    return null;
+export async function parsePhasesFromDocs(docs, parsedTasks = []) {
+  // 1. 尝试 LLM 提炼
+  if (docs.length) {
+    const userPrompt = docs.map((d) => `=== ${d.path} ===\n${d.content.slice(0, 2000)}`).join('\n\n');
+    const raw = await callClaude(PHASES_SYSTEM_PROMPT, userPrompt);
+    if (raw) {
+      try {
+        const parsed = parseJsonOutput(raw);
+        if (Array.isArray(parsed) && parsed.length) {
+          const result = parsed
+            .filter((p) => p.id && p.title)
+            .slice(0, 5)
+            .map((p) => ({
+              id: String(p.id).replace(/[^\w-]/g, '_').slice(0, 32),
+              title: String(p.title).slice(0, 20),
+              status: ['待开始', '进行中', '已完成'].includes(p.status) ? p.status : '待开始'
+            }));
+          if (result.length) return result;
+        }
+      } catch { /* 降级 */ }
+    }
   }
+
+  // 2. 兜底：按 sourceDoc 文档名自动归组
+  if (parsedTasks.length) {
+    const docNames = [...new Set(parsedTasks.map((t) => t.sourceDoc).filter(Boolean))];
+    if (docNames.length) {
+      return docNames.slice(0, 5).map((docPath, i) => {
+        const name = docPath.replace(/^docs\//, '').replace(/\.md$/, '').trim();
+        const doneCount = parsedTasks.filter((t) => t.sourceDoc === docPath && t.status === 'completed').length;
+        const total = parsedTasks.filter((t) => t.sourceDoc === docPath).length;
+        const status = doneCount === total ? '已完成' : doneCount > 0 ? '进行中' : '待开始';
+        return {
+          id: `phase_doc_${i + 1}`,
+          title: name.slice(0, 20),
+          status
+        };
+      });
+    }
+  }
+
+  return null;
 }
 
 function priorityRank(task) {
