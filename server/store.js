@@ -43,6 +43,7 @@ function migrateStore(store) {
     eveningReports: {},
     reports: {},
     planAdjustments: [],
+    roadmapReviews: [],
     docTasks: {},
     semanticLinks: {},
     riskAnalyses: [],

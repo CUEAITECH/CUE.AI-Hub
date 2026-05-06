@@ -418,6 +418,39 @@ async function generatePlanAdjustment(activities, store) {
   };
 }
 
+async function generatePlanAlternatives(item) {
+  if (!isAvailable()) return [];
+  const SYSTEM = `你是 CUE Project Hub 的 AI PM，负责为需要人工审批的大计划调整提供备选方案。
+根据已提出的主方案，生成 2 个方向不同的备选方案（保守 / 激进）。
+输出 JSON 数组，不输出其他文字：
+[
+  {
+    "title": "方案标题（10字以内）",
+    "approach": "具体调整思路（100字以内）",
+    "impact": "影响范围（50字以内）",
+    "risk": "高|中|低",
+    "stageUpdate": {
+      "shortName": "中文最多14字",
+      "status": "进行中|高风险|阻塞",
+      "progressDelta": 0,
+      "checklist": []
+    }
+  }
+]`;
+  const userPrompt = `主方案：${item.suggestion || ''}\n原因：${item.requiresApprovalReason || ''}\n影响：${item.impact || ''}`;
+  const text = await callClaude(SYSTEM, userPrompt);
+  const parsed = parseJsonOutput(text);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.slice(0, 2).map((opt, i) => ({
+    id: i + 2,
+    title: String(opt.title || `备选方案${i + 2}`).slice(0, 20),
+    approach: String(opt.approach || '').slice(0, 200),
+    impact: String(opt.impact || '').slice(0, 100),
+    risk: ['高', '中', '低'].includes(opt.risk) ? opt.risk : '中',
+    stageUpdate: opt.stageUpdate || null
+  }));
+}
+
 function normalizePlanStageUpdate(stageUpdate, scope, activities = []) {
   const input = stageUpdate && typeof stageUpdate === 'object' ? stageUpdate : {};
   const fallbackShortName = inferStageShortNameFromActivities(activities);
@@ -1933,6 +1966,26 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     return true;
   }
 
+  // POST /api/plan-adjustments/:id/alternatives — 懒加载备选方案
+  if (req.method === 'POST' && url.pathname.startsWith('/api/plan-adjustments/') && url.pathname.endsWith('/alternatives')) {
+    const id = decodeURIComponent(url.pathname.split('/')[3] || '');
+    const store = await loadStore();
+    const item = (store.planAdjustments || []).find((a) => a.id === id);
+    if (!item) { sendError(res, 404, 'not found'); return true; }
+    if (item.alternatives?.length) {
+      sendJson(res, 200, { alternatives: item.alternatives });
+      return true;
+    }
+    const alternatives = await generatePlanAlternatives(item);
+    await updateStore((draft) => {
+      const idx = (draft.planAdjustments || []).findIndex((a) => a.id === id);
+      if (idx >= 0) draft.planAdjustments[idx].alternatives = alternatives;
+      return draft;
+    });
+    sendJson(res, 200, { alternatives });
+    return true;
+  }
+
   // POST /api/plan-adjustments/:id/decision — 人工审批大的开发计划调整
   if (req.method === 'POST' && url.pathname.startsWith('/api/plan-adjustments/') && url.pathname.endsWith('/decision')) {
     const id = decodeURIComponent(url.pathname.split('/')[3] || '');
@@ -1946,12 +1999,17 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     const nextStore = await updateStore((draft) => {
       const index = (draft.planAdjustments || []).findIndex((item) => item.id === id);
       if (index < 0) return draft;
+      // 若传入 selectedAlternative，用其 stageUpdate 覆盖主方案
+      const base = draft.planAdjustments[index];
+      const alt = json?.selectedAlternative;
       const nextAdjustment = {
-        ...draft.planAdjustments[index],
+        ...base,
         status: decision,
         decidedAt,
         decisionNote: String(json?.note || '').trim(),
-        appliedAt: decision === 'approved' && draft.planAdjustments[index].stageUpdate ? decidedAt : draft.planAdjustments[index].appliedAt
+        selectedAlternativeTitle: alt?.title || null,
+        stageUpdate: (decision === 'approved' && alt?.stageUpdate) ? normalizePlanStageUpdate(alt.stageUpdate, 'major') : base.stageUpdate,
+        appliedAt: decision === 'approved' && (alt?.stageUpdate || base.stageUpdate) ? decidedAt : base.appliedAt
       };
       let nextDraft = draft;
       if (decision === 'approved') {

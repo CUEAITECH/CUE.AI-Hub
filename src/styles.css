@@ -1916,6 +1916,40 @@ select:focus {
   border-color: var(--text);
 }
 
+.ai-pm-alternatives {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-pm-alt-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+.ai-pm-alt-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-pm-alt-head strong { font-size: 13px; }
+.ai-pm-alt-card p { margin: 0; font-size: 13px; color: var(--text); }
+.ai-pm-alt-card small { color: var(--text-muted); font-size: 12px; }
+.ai-pm-alt-select {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.ai-pm-alt-select:hover { border-color: var(--text); }
+
 .assignment-item,
 .standup-item {
   display: grid;

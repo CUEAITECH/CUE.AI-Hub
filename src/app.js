@@ -1291,21 +1291,26 @@ function renderAiPm() {
     <div><span>最近触发</span><b>${escapeHtml(latest)}</b></div>
   `;
 
-  approvalList.innerHTML = pending.length ? pending.map((item) => `
-    <div class="ai-pm-item ai-pm-major">
+  approvalList.innerHTML = pending.length ? pending.map((item) => {
+    const isDone = item.status === 'approved' || item.status === 'rejected';
+    const statusLabel = item.status === 'approved' ? (item.selectedAlternativeTitle ? `已批准·${item.selectedAlternativeTitle}` : '已批准') : item.status === 'rejected' ? '不更改' : '待审批';
+    return `
+    <div class="ai-pm-item ai-pm-major" data-adjust-id="${escapeHtml(item.id)}">
       <div class="ai-pm-item-head">
         <strong>${escapeHtml(item.summary || '大的开发计划调整')}</strong>
-        <span>${escapeHtml(item.status === 'approved' ? '已批准' : item.status === 'rejected' ? '已拒绝' : '待审批')}</span>
+        <span>${escapeHtml(statusLabel)}</span>
       </div>
       <p>${escapeHtml(item.suggestion || '')}</p>
       ${renderStageUpdateMeta(item.stageUpdate)}
       <small>${escapeHtml(item.requiresApprovalReason || item.impact || '影响阶段目标、负责人或排期，需要人工审批。')}</small>
       <div class="ai-pm-actions">
-        <button type="button" data-action="approve-plan-adjustment" data-adjust-id="${escapeHtml(item.id)}" ${item.status === 'approved' || item.status === 'rejected' ? 'disabled' : ''}>批准</button>
-        <button type="button" data-action="reject-plan-adjustment" data-adjust-id="${escapeHtml(item.id)}" ${item.status === 'approved' || item.status === 'rejected' ? 'disabled' : ''}>拒绝</button>
+        <button type="button" data-action="approve-plan-adjustment" data-adjust-id="${escapeHtml(item.id)}" ${isDone ? 'disabled' : ''}>批准此方案</button>
+        <button type="button" data-action="reject-plan-adjustment" data-adjust-id="${escapeHtml(item.id)}" ${isDone ? 'disabled' : ''}>不更改</button>
+        ${!isDone ? `<button type="button" data-action="more-plan-options" data-adjust-id="${escapeHtml(item.id)}">更多方案</button>` : ''}
       </div>
+      <div class="ai-pm-alternatives" id="alt-${escapeHtml(item.id)}" style="display:none"></div>
     </div>
-  `).join('') : '<div class="empty-state">暂无待审批调整。大的阶段计划变化会出现在这里。</div>';
+  `}).join('') : '<div class="empty-state">暂无待审批调整。大的阶段计划变化会出现在这里。</div>';
 
   autoList.innerHTML = auto.length ? auto.slice(0, 8).map((item) => `
     <div class="ai-pm-item">
@@ -1334,6 +1339,45 @@ function renderAiPm() {
   approvalList.querySelectorAll('[data-action="reject-plan-adjustment"]').forEach((button) => {
     button.addEventListener('click', () => decidePlanAdjustment(button.dataset.adjustId, 'rejected').catch((e) => toast(e.message)));
   });
+  approvalList.querySelectorAll('[data-action="more-plan-options"]').forEach((button) => {
+    button.addEventListener('click', () => loadPlanAlternatives(button.dataset.adjustId, button).catch((e) => toast(e.message)));
+  });
+}
+
+async function loadPlanAlternatives(id, triggerBtn) {
+  const container = document.getElementById(`alt-${id}`);
+  if (!container) return;
+  if (container.style.display !== 'none') { container.style.display = 'none'; return; }
+  triggerBtn.disabled = true;
+  triggerBtn.textContent = '生成中…';
+  try {
+    const data = await api(`/api/plan-adjustments/${encodeURIComponent(id)}/alternatives`, { method: 'POST', body: '{}' });
+    const alts = data.alternatives || [];
+    if (!alts.length) { toast('暂无可用备选方案（需要 Claude API）'); return; }
+    container.innerHTML = alts.map((opt) => `
+      <div class="ai-pm-alt-card">
+        <div class="ai-pm-alt-head">
+          <strong>${escapeHtml(opt.title)}</strong>
+          <span class="risk-badge risk-${escapeHtml(opt.risk)}">${escapeHtml(opt.risk)}风险</span>
+        </div>
+        <p>${escapeHtml(opt.approach)}</p>
+        <small>${escapeHtml(opt.impact)}</small>
+        <button type="button" class="ai-pm-alt-select"
+          data-adjust-id="${escapeHtml(id)}"
+          data-alt='${JSON.stringify(opt).replace(/'/g, "&#39;")}'>选此方案</button>
+      </div>
+    `).join('');
+    container.style.display = 'block';
+    container.querySelectorAll('.ai-pm-alt-select').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const alt = JSON.parse(btn.dataset.alt);
+        decidePlanAdjustment(btn.dataset.adjustId, 'approved', alt).catch((e) => toast(e.message));
+      });
+    });
+    triggerBtn.textContent = '收起';
+  } finally {
+    triggerBtn.disabled = false;
+  }
 }
 
 function renderConfig() {
@@ -1892,11 +1936,13 @@ async function refreshAiAnalysis() {
   toast(payload.healthAnalysis?.nextFocus || 'AI 混合分析已刷新');
 }
 
-async function decidePlanAdjustment(id, decision) {
+async function decidePlanAdjustment(id, decision, selectedAlternative = null) {
   if (!id) return;
+  const body = { decision };
+  if (selectedAlternative) body.selectedAlternative = selectedAlternative;
   const payload = await api(`/api/plan-adjustments/${encodeURIComponent(id)}/decision`, {
     method: 'POST',
-    body: JSON.stringify({ decision })
+    body: JSON.stringify(body)
   });
   const nextState = await api('/api/state');
   state.planAdjustments = payload.adjustments || state.planAdjustments;
@@ -1909,7 +1955,8 @@ async function decidePlanAdjustment(id, decision) {
   renderStage();
   renderRoadmap();
   renderRisks();
-  toast(decision === 'approved' ? 'AI PM 大调整已批准' : 'AI PM 大调整已拒绝');
+  const label = selectedAlternative ? `已批准·${selectedAlternative.title}` : decision === 'approved' ? 'AI PM 大调整已批准' : '已选择不更改';
+  toast(label);
 }
 
 // ── 日报 ──────────────────────────────────────────────────────
