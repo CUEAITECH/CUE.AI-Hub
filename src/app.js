@@ -825,16 +825,9 @@ async function openReviewDetail(reviewId) {
       </div>
 
       <div class="review-decision-area" id="reviewDecisionArea">
-        <div class="review-section-label">做出决策</div>
         <div class="review-decision-row">
-          <button class="btn-sm btn-resolve-pass" onclick="resolveReview('${escapeHtml(reviewId)}','pass')">✓ 通过（无需解决）</button>
-        </div>
-        <div class="review-decision-row" id="fixDecisionRow" style="display:none">
-          <span style="font-size:13px">负责人：</span>
-          <select class="review-assignee-select" id="reviewAssignee">
-            ${membersOptions}
-          </select>
-          <button class="btn-sm btn-resolve-fix" id="btnCreateTask" onclick="resolveReview('${escapeHtml(reviewId)}','needs-fix')">建任务跟进</button>
+          <button class="btn-sm btn-resolve-pass" onclick="resolveReview('${escapeHtml(reviewId)}','pass')">✓ 通过</button>
+          <button class="btn-sm btn-resolve-fix" onclick="resolveReview('${escapeHtml(reviewId)}','needs-fix')">↩ 打回 ${escapeHtml(review.owner || review.actor || '负责人')}</button>
         </div>
       </div>`}
     </div>`;
@@ -889,15 +882,12 @@ function selectSolution(el, idx) {
   el.classList.add('selected');
   const solutions = JSON.parse(document.querySelector('#solutionsContainer')?.dataset.solutions || '[]');
   _selectedSolution = solutions[idx] || null;
-  const fixRow = document.querySelector('#fixDecisionRow');
-  if (fixRow) fixRow.style.display = 'flex';
 }
 
 async function resolveReview(reviewId, decision) {
-  if (decision === 'needs-fix' && !_selectedSolution) {
-    toast('请先选择一个解决方案'); return;
-  }
-  const assignee = document.querySelector('#reviewAssignee')?.value || '';
+  // 自动用原负责人，无需手动选择
+  const review = _reviewDetailCache[reviewId]?.review;
+  const assignee = review?.owner || review?.actor || '';
   const payload = {
     decision,
     solution: _selectedSolution?.detail || '',
