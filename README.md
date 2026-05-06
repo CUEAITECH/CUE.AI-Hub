@@ -19,11 +19,14 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。�
 - 任务卡片直接点成员名字一键认领，无需填写表单
 - 认领立即生效，AI 任务细则（brief）异步生成，详情页自动轮询展示
 - 同一人同一任务同一天只保留一条记录，防重复领取
+- **跨日续显**：前一天未完成且今日未重新认领的分工，自动带「续」标签显示在分工页，不丢失上下文
 
 ### AI 代码审阅
 - 每次 GitHub 同步自动对新 commit 运行 AI Review
 - 四级结论：`Pass` / `Warning` / `Block` / `Escalate`
-- **人工审阅待办队列**：Block/Escalate 项需要人工确认（已确认 / 需修复 / 豁免）
+- **人工审阅子页面**：左栏待办队列，右栏展示 commit 详情、提交人、diff、AI 发现的问题
+- AI 按需生成 2-3 个具体解决方案（带工作量评估），选择后一键建任务跟进
+- 决策结果（通过 / 需修复 / 豁免）记录到审阅历史，不重复触发 LLM
 - 晚会前 2 小时自动推送企业微信提醒
 
 ### 风险引擎
@@ -45,6 +48,7 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。�
 ### 企业微信集成
 - 晚会作战包、会后总结、人工审阅提醒自动推送
 - 风险摘要可手动触发推送
+- **AI 插件**：企业微信内直接查询任务列表、认领任务、提交站会、更新进度（通过 OpenAPI spec 自动发现工具）
 
 ### 异步站会
 - 成员提交昨日完成、今日计划、阻塞项
@@ -80,7 +84,7 @@ pm2 start server/index.js --name cue-project-hub  # 生产
 
 ### 自动部署（GitHub Actions）
 
-每次 push 到 `main` 分支自动通过 rsync 部署到服务器并重启 PM2。
+每次 push 到 `main` 分支自动通过 rsync 部署到服务器并重启 PM2。使用 `webfactory/ssh-agent` 注入 SSH 私钥，`db.json` 和 `.env` 排除在同步之外，服务器数据不受代码更新影响。
 
 需在 GitHub 仓库 Settings → Secrets 配置：
 
@@ -89,7 +93,7 @@ pm2 start server/index.js --name cue-project-hub  # 生产
 | `SERVER_HOST` | 服务器公网 IP |
 | `SERVER_USER` | SSH 用户名 |
 | `DEPLOY_PATH` | 部署路径，如 `/opt/CUE-Project-Hub` |
-| `DEPLOY_SSH_KEY` | 服务器 SSH 私钥 |
+| `HANGZHOU_SERVER` | 服务器 SSH 私钥（原始 PEM 格式） |
 
 ---
 
