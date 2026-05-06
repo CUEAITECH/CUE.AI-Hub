@@ -814,24 +814,35 @@ let _selectedSolution = null;
 
 async function loadReviewSolutions(reviewId) {
   const btn = document.querySelector('#btnLoadSolutions');
-  if (btn) { btn.disabled = true; btn.textContent = '生成中...'; }
   const container = document.querySelector('#solutionsContainer');
+  if (btn) { btn.disabled = true; btn.textContent = '生成中...'; }
   if (container) container.innerHTML = '<div style="font-size:13px;color:var(--text-dim)">AI 正在分析...</div>';
 
-  const { solutions } = await api(`/api/reviews/${encodeURIComponent(reviewId)}/solutions`, { method: 'POST' });
-  _selectedSolution = null;
+  try {
+    const data = await api(`/api/reviews/${encodeURIComponent(reviewId)}/solutions`, { method: 'POST' });
+    const solutions = data?.solutions || [];
+    _selectedSolution = null;
 
-  if (container) {
-    container.innerHTML = `<div class="review-solutions">${solutions.map((s, i) => `
-      <div class="review-solution-card${s.recommended ? ' recommended' : ''}" data-solution-idx="${i}" onclick="selectSolution(this, ${i})">
-        <div class="review-solution-title">${escapeHtml(s.title)}</div>
-        <div class="review-solution-detail">${escapeHtml(s.detail)}</div>
-        <div class="review-solution-effort">预计工作量：${escapeHtml(s.effort || '未知')}</div>
-      </div>`).join('')}
-    </div>`;
-    container.dataset.solutions = JSON.stringify(solutions);
+    if (container) {
+      if (!solutions.length) {
+        container.innerHTML = '<div style="font-size:13px;color:var(--text-dim)">AI 未能生成方案，请检查 API 配置</div>';
+      } else {
+        container.innerHTML = `<div class="review-solutions">${solutions.map((s, i) => `
+          <div class="review-solution-card${s.recommended ? ' recommended' : ''}" data-solution-idx="${i}" onclick="selectSolution(this, ${i})">
+            <div class="review-solution-title">${escapeHtml(s.title)}</div>
+            <div class="review-solution-detail">${escapeHtml(s.detail)}</div>
+            <div class="review-solution-effort">预计工作量：${escapeHtml(s.effort || '未知')}</div>
+          </div>`).join('')}
+        </div>`;
+        container.dataset.solutions = JSON.stringify(solutions);
+      }
+    }
+  } catch (err) {
+    toast(err.message || 'AI 生成方案失败');
+    if (container) container.innerHTML = '<div style="font-size:13px;color:var(--text-dim)">生成失败，请重试</div>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'AI 生成方案'; }
   }
-  if (btn) { btn.disabled = false; btn.textContent = 'AI 生成方案'; }
 }
 
 function selectSolution(el, idx) {
@@ -2231,7 +2242,30 @@ function bindEvents() {
     });
   });
 
-  // AI 产品经理：文档同步按钮
+  // AI 产品经理：一键扫描（同步仓库 → 文档解析导入 → AI 混合分析）
+  document.querySelectorAll('[data-action="daily-scan"]').forEach((button) => button.addEventListener('click', async () => {
+    button.disabled = true;
+    const orig = button.textContent;
+    button.textContent = '扫描中...';
+    try {
+      toast('开始一键扫描：同步仓库 → 解析文档 → AI 分析');
+      const projectId = state.currentProject?.id || 'cue_ai_classroom';
+      const result = await api(`/api/projects/${projectId}/daily-scan`, { method: 'POST', body: '{}' });
+      const steps = result.steps || {};
+      const msgs = [];
+      if (steps.commits?.newCount) msgs.push(`新 commit ${steps.commits.newCount} 条`);
+      if (steps.docs?.imported) msgs.push(`导入任务 ${steps.docs.imported} 条`);
+      if (steps.analysis) msgs.push('AI 分析完成');
+      toast(msgs.length ? msgs.join('，') : '扫描完成，无新数据');
+      await loadState().then(() => renderAll()).catch(() => {});
+    } catch (e) {
+      toast(e.message || '扫描失败');
+    } finally {
+      button.disabled = false;
+      button.textContent = orig;
+    }
+  }));
+  // 保留单独按钮的处理（其他页面可能还有）
   document.querySelectorAll('[data-action="sync-docs"]').forEach((button) => button.addEventListener('click', () => {
     syncDocsToHub().catch((e) => toast(e.message));
   }));
