@@ -2372,7 +2372,13 @@ function bindEvents() {
       toast(msgs.length ? `扫描完成：${msgs.join('，')}` : '扫描完成，无新数据');
       await loadState().then(() => renderAll()).catch(() => {});
     } catch (e) {
-      toast(e.message || '扫描失败');
+      if (e.message?.includes('504') || e.message?.includes('Gateway') || e.message?.includes('timeout')) {
+        toast('扫描仍在后台处理中（网关超时），稍后刷新页面查看结果');
+        await new Promise((r) => setTimeout(r, 8000));
+        await loadState().then(() => renderAll()).catch(() => {});
+      } else {
+        toast(e.message || '扫描失败');
+      }
     } finally {
       button.disabled = false;
       button.textContent = orig;
