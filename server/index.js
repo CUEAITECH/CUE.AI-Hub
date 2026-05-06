@@ -43,6 +43,7 @@ import { buildOpenApiSpec } from './data/openapi.js';
 import {
   fetchProjectDocs,
   parseDocsForTasks,
+  parsePhasesFromDocs,
   selectDailyDocTasks,
   buildProgressMarkdown,
   writeProgressToGitHub
@@ -504,6 +505,9 @@ function applyPlanAdjustmentToStage(store, adjustment) {
       byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
     });
     nextStage.checklist = [...byId.values()];
+  }
+  if (Array.isArray(stageUpdate.phases) && stageUpdate.phases.length) {
+    nextStage.phases = stageUpdate.phases;
   }
   return {
     ...store,
@@ -1016,7 +1020,11 @@ async function handleApi(req, res, url) {
     const docs = await fetchProjectDocs(owner, repo);
     if (!docs.length) { sendJson(res, 200, { imported: 0, message: 'docs/ 目录无计划文档' }); return true; }
 
-    const parsedTasks = await parseDocsForTasks(docs);
+    // 并行：解析任务 + 提炼阶段划分
+    const [parsedTasks, parsedPhases] = await Promise.all([
+      parseDocsForTasks(docs),
+      parsePhasesFromDocs(docs)
+    ]);
     if (!parsedTasks.length) { sendJson(res, 200, { imported: 0, message: 'LLM 未解析出任务（无 API key 或文档无可执行任务）' }); return true; }
     const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
     const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
@@ -1050,6 +1058,10 @@ async function handleApi(req, res, url) {
       // 缓存原始 docTasks 快照（用于进度追踪对照）
       if (!draft.docTasks) draft.docTasks = {};
       draft.docTasks[projectId] = parsedTasks;
+      // 将 LLM 生成的阶段划分写入 currentStage.phases（仅在有结果时覆盖）
+      if (parsedPhases?.length) {
+        draft.currentStage = { ...(draft.currentStage || {}), phases: parsedPhases };
+      }
       return draft;
     });
     sendJson(res, 200, {
@@ -1129,26 +1141,25 @@ async function handleApi(req, res, url) {
         ? { owner: project.githubFullRepo.split('/')[0], repo: project.githubFullRepo.split('/')[1] }
         : { owner: project.githubOwner || '', repo: project.repository || '' };
       const docs = await fetchProjectDocs(owner, repo);
-      const parsedTasks = await parseDocsForTasks(docs);
+      const [parsedTasks, parsedPhases] = await Promise.all([parseDocsForTasks(docs), parsePhasesFromDocs(docs)]);
       const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
       const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
       let imported = 0;
-      if (importCandidates.length) {
-        await updateStore((draft) => {
-          const existing = draft.tasks || [];
-          for (const t of importCandidates) {
-            if (!existing.find((e) => e.title === t.title && e.sourceDoc === t.sourceDoc)) {
-              existing.unshift({ id: createId('task'), title: t.title, owner: t.owner || '', priority: t.priority || 'P1', status: t.status || 'pending', description: t.description || '', dueDate: t.dueDate || '', sourceDoc: t.sourceDoc || '', projectId, acceptance: '', createdAt: new Date().toISOString() });
-              imported++;
-            }
+      await updateStore((draft) => {
+        const existing = draft.tasks || [];
+        for (const t of importCandidates) {
+          if (!existing.find((e) => e.title === t.title && e.sourceDoc === t.sourceDoc)) {
+            existing.unshift({ id: createId('task'), title: t.title, owner: t.owner || '', priority: t.priority || 'P1', status: t.status || 'pending', description: t.description || '', dueDate: t.dueDate || '', sourceDoc: t.sourceDoc || '', projectId, acceptance: '', createdAt: new Date().toISOString() });
+            imported++;
           }
-          draft.tasks = existing;
-          if (!draft.docTasks) draft.docTasks = {};
-          draft.docTasks[projectId] = parsedTasks;
-          return draft;
-        });
-      }
-      result.steps.syncDocs = { ok: true, imported, selected: importCandidates.length, totalCandidates: parsedTasks.length };
+        }
+        draft.tasks = existing;
+        if (!draft.docTasks) draft.docTasks = {};
+        draft.docTasks[projectId] = parsedTasks;
+        if (parsedPhases?.length) draft.currentStage = { ...(draft.currentStage || {}), phases: parsedPhases };
+        return draft;
+      });
+      result.steps.syncDocs = { ok: true, imported, selected: importCandidates.length, totalCandidates: parsedTasks.length, phases: parsedPhases?.length || 0 };
     } catch (err) {
       result.steps.syncDocs = { ok: false, error: err.message };
     }

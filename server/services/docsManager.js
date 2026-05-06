@@ -138,6 +138,47 @@ export async function parseDocsForTasks(docs) {
   }
 }
 
+const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负责从开发计划文档中提炼项目的整体开发阶段划分。
+
+输出严格遵循以下 JSON 数组格式，不输出其他内容：
+[
+  {
+    "id": "phase_<英文标识>",
+    "title": "阶段名（中文，10字以内）",
+    "status": "待开始|进行中|已完成"
+  }
+]
+
+规则：
+- 阶段数量 2-5 个，代表项目从启动到交付的主要里程碑分段
+- id 用英文下划线格式（如 phase_backend, phase_launch）
+- 从文档的里程碑、阶段划分、进度标注中推断状态
+- 如文档中看不出明确阶段划分，根据任务性质自行合理归纳`;
+
+/**
+ * 从文档内容用 LLM 提炼开发阶段划分
+ */
+export async function parsePhasesFromDocs(docs) {
+  if (!docs.length) return null;
+  const userPrompt = docs.map((d) => `=== ${d.path} ===\n${d.content.slice(0, 2000)}`).join('\n\n');
+  const raw = await callClaude(PHASES_SYSTEM_PROMPT, userPrompt);
+  if (!raw) return null;
+  try {
+    const parsed = parseJsonOutput(raw);
+    if (!Array.isArray(parsed) || !parsed.length) return null;
+    return parsed
+      .filter((p) => p.id && p.title)
+      .slice(0, 5)
+      .map((p) => ({
+        id: String(p.id).replace(/[^\w-]/g, '_').slice(0, 32),
+        title: String(p.title).slice(0, 20),
+        status: ['待开始', '进行中', '已完成'].includes(p.status) ? p.status : '待开始'
+      }));
+  } catch {
+    return null;
+  }
+}
+
 function priorityRank(task) {
   if (task.priority === 'P0') return 0;
   if (task.priority === 'P1') return 1;
