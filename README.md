@@ -95,6 +95,24 @@ pm2 start server/index.js --name cue-project-hub  # 生产
 | `DEPLOY_PATH` | 部署路径，如 `/opt/CUE.AI-Hub` |
 | `HANGZHOU_SERVER` | 服务器 SSH 私钥（原始 PEM 格式） |
 
+### 数据管理
+
+**自动备份：** 每次数据写入前，`store.js` 自动将 `db.json` 备份为 `db.backup.json`，始终保留上一个版本。
+
+**紧急恢复：**
+```bash
+cp /opt/CUE.AI-Hub/server/data/db.backup.json /opt/CUE.AI-Hub/server/data/db.json
+pm2 restart cue-project-hub --update-env
+```
+
+**重置为初始数据（危险，不可恢复）：**
+```bash
+# 建议先手动备份
+cp /opt/CUE.AI-Hub/server/data/db.json ~/db.$(date +%Y%m%d).json
+# 再删除，重启后从 seed.json 重新初始化
+rm /opt/CUE.AI-Hub/server/data/db.json && pm2 restart cue-project-hub --update-env
+```
+
 ---
 
 ## 技术架构
