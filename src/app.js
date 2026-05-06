@@ -1138,7 +1138,7 @@ function renderAssignments() {
   const dateEl = document.querySelector('#assignmentDate');
   if (dateEl) dateEl.textContent = today;
   const activeTasks = getAssignableTaskPool();
-  const focusedTasks = getFocusedAssignmentTasks(8);
+  const focusedTasks = getFocusedAssignmentTasks(activeTasks.length); // 全部排序，不截断
   setOptions('#assignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
   setOptions('#assignmentTask', focusedTasks.length ? focusedTasks : activeTasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
 
@@ -1193,8 +1193,8 @@ function renderAssignments() {
       // 统计每个任务已有哪些人认领
       assignableEl.innerHTML = `
         <div class="assignment-focus-note">
-          <strong>今日建议领取</strong>
-          <span>从 ${activeTasks.length} 个当前阶段任务中筛出 ${focusedTasks.length} 个，点名字直接认领。</span>
+          <strong>可认领任务</strong>
+          <span>共 ${activeTasks.length} 个进行中任务，按优先级排序，点名字直接认领。</span>
         </div>
         ${focusedTasks.map((task) => {
         const claimants = todayAssignments.filter((a) => a.taskId === task.id);
