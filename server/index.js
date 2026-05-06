@@ -1319,6 +1319,8 @@ AI 建议：${review.suggestion || '无'}`;
 
     let createdTask = null;
     if (decision === 'needs-fix' && solution) {
+      // 继承被审阅 commit 的项目归属，确保出现在分工领取任务池中
+      const reviewProject = review.repo ? review.repo : null;
       createdTask = {
         id: createId('task'),
         title: `[审阅修复] ${solutionTitle || review.title.slice(0, 30)}`,
@@ -1328,6 +1330,8 @@ AI 建议：${review.suggestion || '无'}`;
         risk: review.level === 'Escalate' ? '高' : '中',
         progress: 0,
         reviewId: id,
+        repo: reviewProject,
+        projectId: 'cue_ai_classroom',
         createdAt: new Date().toISOString()
       };
     }
