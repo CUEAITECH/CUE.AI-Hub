@@ -123,16 +123,17 @@ export async function parseDocsForTasks(docs) {
   ).join('\n\n');
 
   const raw = await callClaude(PARSE_SYSTEM_PROMPT, userPrompt);
-  if (!raw) return [];
+  if (!raw) { console.error('[DocsManager] callClaude 返回 null，API key 缺失或调用失败'); return []; }
 
   try {
-    // 提取第一个 JSON 数组
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) return [];
-    const tasks = JSON.parse(match[0]);
+    // 提取第一个 JSON 数组（兼容 markdown 代码块包裹）
+    const match = raw.match(/\[[\s\S]*?\]/s) || raw.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/s);
+    const jsonStr = match?.[1] || match?.[0];
+    if (!jsonStr) { console.error('[DocsManager] LLM 输出未找到 JSON 数组，原始内容:', raw.slice(0, 300)); return []; }
+    const tasks = JSON.parse(jsonStr);
     return Array.isArray(tasks) ? tasks : [];
-  } catch {
-    console.error('[DocsManager] LLM 输出解析失败:', raw.slice(0, 200));
+  } catch (e) {
+    console.error('[DocsManager] LLM 输出解析失败:', e.message, raw.slice(0, 300));
     return [];
   }
 }
