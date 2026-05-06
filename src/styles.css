@@ -122,7 +122,8 @@ button {
   border-color: rgba(16, 16, 16, 0.08);
 }
 
-.nav-menu:hover > .nav-primary {
+.nav-menu:hover > .nav-primary,
+.nav-menu.expanded > .nav-primary {
   color: var(--text);
   background: rgba(16, 16, 16, 0.06);
   border-color: rgba(16, 16, 16, 0.08);
@@ -155,7 +156,8 @@ button {
   height: 9px;
 }
 
-.nav-menu:hover .nav-submenu {
+.nav-menu:hover .nav-submenu,
+.nav-menu.expanded .nav-submenu {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
@@ -2972,6 +2974,10 @@ select:focus {
   font-size: 13px;
   color: var(--text);
   margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
 }
 
 .review-queue-info span {

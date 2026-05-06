@@ -647,6 +647,7 @@ function renderReviews() {
 }
 
 let _selectedReviewId = null;
+const _reviewDetailCache = {}; // reviewId → { review, diff }，避免重复请求 GitHub
 
 function renderReviewQueue(queue) {
   const container = document.querySelector('#reviewQueue');
@@ -713,10 +714,15 @@ async function openReviewDetail(reviewId) {
   const panel = document.querySelector('#reviewDetailContent');
   const headTitle = document.querySelector('#reviewDetailHeadTitle');
   if (!panel) return;
-  panel.innerHTML = '<div class="empty-state">加载中...</div>';
 
-  const { review, diff } = await api(`/api/reviews/${encodeURIComponent(reviewId)}`);
-  if (headTitle) headTitle.textContent = (review.shortSha || reviewId.slice(-7)) + ' · ' + (review.title || '').slice(0, 40);
+  // 命中缓存则无需 loading，直接渲染
+  if (!_reviewDetailCache[reviewId]) {
+    panel.innerHTML = '<div class="empty-state">加载中...</div>';
+    const data = await api(`/api/reviews/${encodeURIComponent(reviewId)}`);
+    _reviewDetailCache[reviewId] = data;
+  }
+  const { review, diff } = _reviewDetailCache[reviewId];
+  if (headTitle) headTitle.textContent = (review.shortSha || reviewId.slice(-7)) + ' · ' + (review.title || '').slice(0, 28);
 
   const levelLower = String(review.level || '').toLowerCase();
   const decided = review.humanDecision;
@@ -853,6 +859,7 @@ async function resolveReview(reviewId, decision) {
   });
   toast(decision === 'pass' ? '已通过（无需解决）' : `已建任务：${result.task?.title || '跟进任务'}`);
   _selectedSolution = null;
+  delete _reviewDetailCache[reviewId]; // 决策后清缓存，下次重新拉最新状态
   await loadReviewQueue();
   await openReviewDetail(reviewId);
   if (result.task) {
@@ -2025,6 +2032,10 @@ function setRoute(route) {
       item.setAttribute('aria-expanded', String(isParentActive));
     }
   });
+  // 自动展开当前页面所在分组的子菜单
+  document.querySelectorAll('.nav-menu').forEach((menu) => {
+    menu.classList.toggle('expanded', menu.dataset.navParent === activeParent);
+  });
 }
 
 let _briefPollTimer = null;
@@ -2075,6 +2086,24 @@ function toast(message) {
 function bindEvents() {
   document.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => setRoute(button.dataset.route));
+  });
+
+  // 顶级导航组按钮点击：切换子菜单展开（不含总览）
+  document.querySelectorAll('.nav-menu .nav-primary').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const menu = btn.closest('.nav-menu');
+      if (!menu) return;
+      const isExpanded = menu.classList.contains('expanded');
+      document.querySelectorAll('.nav-menu').forEach((m) => m.classList.remove('expanded'));
+      if (!isExpanded) menu.classList.add('expanded');
+    });
+  });
+
+  // 点击页面其他区域收起手动展开的子菜单（setRoute 会在导航时重建展开状态）
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.nav-menu')) {
+      document.querySelectorAll('.nav-menu').forEach((m) => m.classList.remove('expanded'));
+    }
   });
 
   document.querySelector('#meetingDate')?.addEventListener('change', () => {
