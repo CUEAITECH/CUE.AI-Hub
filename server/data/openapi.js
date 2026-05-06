@@ -485,8 +485,51 @@ export function buildOpenApiSpec(serverUrl) {
         get: {
           operationId: 'getPlanAdjustments',
           summary: '获取 AI 计划调整建议',
-          description: '查看根据最新 GitHub 提交自动生成的计划调整建议。用于"最新的计划调整建议是什么"。',
-          responses: { '200': { description: '调整建议列表' } }
+          description: '查看根据最新 GitHub 提交自动生成的计划调整建议。major 进入人工审批；minor/progress 自动执行并写回阶段短名、进度或路径节点。',
+          responses: {
+            '200': {
+              description: '调整建议列表',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      adjustments: {
+                        type: 'array',
+                        items: { $ref: '#/components/schemas/PlanAdjustment' }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      '/api/plan-adjustments/{id}/decision': {
+        post: {
+          operationId: 'decidePlanAdjustment',
+          summary: '审批 AI PM 大计划调整',
+          description: '人工批准或拒绝 major 级开发计划调整。批准后写回 currentStage.shortName、阶段状态、进度和路径节点。',
+          security: apiKeySecurity,
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['decision'],
+                  properties: {
+                    decision: { type: 'string', enum: ['approved', 'rejected'] },
+                    note: { type: 'string' }
+                  }
+                }
+              }
+            }
+          },
+          responses: { '200': { description: '审批结果' } }
         }
       }
     },
@@ -561,6 +604,46 @@ export function buildOpenApiSpec(serverUrl) {
             title: { type: 'string' },
             detail: { type: 'string' },
             target: { type: 'string', description: '需要处理的人' }
+          }
+        },
+        PlanStageUpdate: {
+          type: 'object',
+          properties: {
+            shortName: { type: 'string', description: '总览短名，中文最多14字或英文最多20字符' },
+            status: { type: 'string', enum: ['进行中', '高风险', '阻塞', '已完成'] },
+            progressDelta: { type: 'number', minimum: -30, maximum: 30 },
+            checklist: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  title: { type: 'string' },
+                  owner: { type: 'string' },
+                  keywords: { type: 'array', items: { type: 'string' } },
+                  acceptance: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        PlanAdjustment: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            scope: { type: 'string', enum: ['minor', 'major', 'progress'] },
+            mode: { type: 'string', enum: ['approval', 'auto'] },
+            status: { type: 'string', enum: ['pending_approval', 'auto_applied', 'approved', 'rejected'] },
+            summary: { type: 'string' },
+            suggestion: { type: 'string' },
+            impact: { type: 'string' },
+            requiresApprovalReason: { type: 'string' },
+            stageUpdate: { $ref: '#/components/schemas/PlanStageUpdate' },
+            trigger: { type: 'string' },
+            triggerCount: { type: 'number' },
+            source: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' },
+            appliedAt: { type: 'string', format: 'date-time' }
           }
         }
       }

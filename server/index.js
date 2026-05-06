@@ -30,7 +30,7 @@ import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhoo
 import { scanLocalGitProject } from './services/localGit.js';
 import { scanGitHubProject, hasGitHubConfig, fetchCommitDetail } from './services/githubApi.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
-import { buildStageChecklist } from './services/stageChecklist.js';
+import { buildStageChecklist, normalizeStageName, normalizeStageShortName } from './services/stageChecklist.js';
 import {
   isWeComAvailable,
   pushRiskAlerts,
@@ -379,20 +379,32 @@ async function generatePlanAdjustment(activities, store) {
   "summary": "一句话说明",
   "suggestion": "不超过 200 字的具体计划调整",
   "impact": "影响范围",
-  "requiresApprovalReason": "如为 major，说明为什么需要人工审批"
+  "requiresApprovalReason": "如为 major，说明为什么需要人工审批",
+  "stageUpdate": {
+    "shortName": "总览短名，中文最多14字或英文最多20字符，只写阶段简称，不写项目全名",
+    "status": "进行中|高风险|阻塞|已完成",
+    "progressDelta": 0,
+    "checklist": [
+      { "id": "已有或新阶段节点 id", "title": "阶段节点短标题", "owner": "负责人", "keywords": ["commit 关键词"], "acceptance": "验收口径" }
+    ]
+  }
 }
 分类规则：
 - progress：只同步进度、补充证据、确认任务推进，可自动执行。
 - minor：小范围拆分、补充验收标准、调整当天跟进项，可自动执行。
 - major：改变阶段目标、延期、转派关键负责人、调整里程碑或影响多人排期，必须人工审批。
+- 如果建议影响阶段展示或路径图，必须给出 stageUpdate；总览只能使用后端生成的 shortName，不能让前端临时裁剪长阶段名。
 - 不需要调整时输出 {"needed": false}。`;
   const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成').slice(0, 10);
+  const stage = normalizeStageName(store.currentStage || {});
   const commitSummary = activities.map((a) => `- ${a.owner}: ${a.title} (${a.repo || ''})`).join('\n');
   const taskSummary = activeTasks.map((t) => `- [${t.status}] ${t.title}（${t.owner}）进度${t.progress}%`).join('\n');
-  const text = await callClaude(SYSTEM, `最新提交：\n${commitSummary}\n\n当前任务：\n${taskSummary}`);
+  const stageSummary = `当前阶段：${stage.name}；总览短名：${stage.shortName}；目标日期：${stage.targetDate || '待确认'}；状态：${stage.status || '进行中'}；进度：${Number(stage.progress) || 0}%`;
+  const text = await callClaude(SYSTEM, `${stageSummary}\n\n最新提交：\n${commitSummary}\n\n当前任务：\n${taskSummary}`);
   const parsed = parseJsonOutput(text);
   if (parsed && parsed.needed === false) return null;
   const scope = ['major', 'minor', 'progress'].includes(parsed?.scope) ? parsed.scope : inferAdjustmentScope(text, activities);
+  const stageUpdate = normalizePlanStageUpdate(parsed?.stageUpdate, scope, activities);
   return {
     scope,
     mode: scope === 'major' ? 'approval' : 'auto',
@@ -401,8 +413,98 @@ async function generatePlanAdjustment(activities, store) {
     suggestion: parsed?.suggestion || text || '',
     impact: parsed?.impact || summarizeAdjustmentImpact(scope, activities),
     requiresApprovalReason: parsed?.requiresApprovalReason || (scope === 'major' ? '涉及阶段目标、负责人或排期变化，需要人工确认。' : ''),
+    stageUpdate,
     costReason: `本轮 ${activities.length} 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。`
   };
+}
+
+function normalizePlanStageUpdate(stageUpdate, scope, activities = []) {
+  const input = stageUpdate && typeof stageUpdate === 'object' ? stageUpdate : {};
+  const fallbackShortName = inferStageShortNameFromActivities(activities);
+  const normalized = {};
+  const shortName = String(input.shortName || input.displayName || fallbackShortName || '').trim();
+  if (shortName) normalized.shortName = normalizeStageShortName(shortName);
+  if (['进行中', '高风险', '阻塞', '已完成'].includes(input.status)) normalized.status = input.status;
+  if (Number.isFinite(Number(input.progressDelta))) {
+    normalized.progressDelta = Math.max(-30, Math.min(30, Number(input.progressDelta)));
+  } else if (scope === 'progress') {
+    normalized.progressDelta = activities.length ? Math.min(8, activities.length * 2) : 1;
+  }
+  if (Array.isArray(input.checklist)) {
+    normalized.checklist = input.checklist
+      .filter((item) => item && item.title)
+      .slice(0, 8)
+      .map((item) => ({
+        id: String(item.id || createId('stage_node')).replace(/[^\w-]/g, '_').slice(0, 64),
+        title: String(item.title || '').trim().slice(0, 32),
+        owner: String(item.owner || '未指定').trim().slice(0, 32),
+        keywords: Array.isArray(item.keywords) ? item.keywords.slice(0, 10).map((keyword) => String(keyword).trim()).filter(Boolean) : [],
+        acceptance: String(item.acceptance || item.title || '').trim().slice(0, 160)
+      }));
+  }
+  return Object.keys(normalized).length ? normalized : null;
+}
+
+function inferStageShortNameFromActivities(activities = []) {
+  const text = activities.map((activity) => `${activity.title || ''} ${(activity.files || []).join(' ')}`).join(' ').toLowerCase();
+  if (/trtc|asr|session|usersig|课堂/.test(text)) return 'MVP / TRTC 联调';
+  if (/review|block|escalate|审阅/.test(text)) return 'AI Review 闭环';
+  if (/standup|meeting|晚会|分工/.test(text)) return '晚会分工闭环';
+  return '';
+}
+
+function applyPlanAdjustmentToStage(store, adjustment) {
+  const stageUpdate = adjustment?.stageUpdate;
+  if (!stageUpdate) return store;
+  const currentStage = normalizeStageName(store.currentStage || {});
+  const nextStage = {
+    ...currentStage,
+    shortName: stageUpdate.shortName || currentStage.shortName,
+    status: stageUpdate.status || currentStage.status,
+    progress: Math.max(0, Math.min(100, Number(currentStage.progress) + (Number(stageUpdate.progressDelta) || 0))),
+    updatedAt: new Date().toISOString()
+  };
+  if (Array.isArray(stageUpdate.checklist) && stageUpdate.checklist.length) {
+    const existing = Array.isArray(currentStage.checklist) ? currentStage.checklist : [];
+    const byId = new Map(existing.map((item) => [item.id, item]));
+    stageUpdate.checklist.forEach((item) => {
+      byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
+    });
+    nextStage.checklist = [...byId.values()];
+  }
+  return {
+    ...store,
+    currentStage: normalizeStageName(nextStage)
+  };
+}
+
+function buildPlanAdjustmentRecord(adjustment, activities, source) {
+  return {
+    id: createId('adjust'),
+    date: todayText(),
+    trigger: activities.map((activity) => activity.title).join('; '),
+    triggerCount: activities.length,
+    source,
+    ...adjustment,
+    appliedAt: adjustment.status === 'auto_applied' && adjustment.stageUpdate ? new Date().toISOString() : undefined,
+    createdAt: new Date().toISOString()
+  };
+}
+
+async function persistPlanAdjustment(adjustment, activities, source) {
+  if (!adjustment) return null;
+  const record = buildPlanAdjustmentRecord(adjustment, activities, source);
+  await updateStore((draft) => {
+    let nextDraft = draft;
+    if (record.status === 'auto_applied') {
+      nextDraft = applyPlanAdjustmentToStage(draft, record);
+    }
+    nextDraft.planAdjustments = nextDraft.planAdjustments || [];
+    nextDraft.planAdjustments.unshift(record);
+    nextDraft.planAdjustments = nextDraft.planAdjustments.slice(0, 50);
+    return nextDraft;
+  });
+  return record;
 }
 
 function inferAdjustmentScope(text, activities = []) {
@@ -492,21 +594,8 @@ async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
   const newActivities = lightweightActivities.filter((activity) => !existingActivityIds.has(activity.id));
   if (newActivities.length > 0) {
     generatePlanAdjustment(newActivities, nextStore).then((adjustment) => {
-      if (!adjustment) return;
-      updateStore((draft) => {
-        draft.planAdjustments = draft.planAdjustments || [];
-        draft.planAdjustments.unshift({
-          id: createId('adjust'),
-          date: todayText(),
-          trigger: newActivities.map((activity) => activity.title).join('; '),
-          triggerCount: newActivities.length,
-          source: 'github-sync',
-          ...adjustment,
-          createdAt: new Date().toISOString()
-        });
-        draft.planAdjustments = draft.planAdjustments.slice(0, 50);
-        return draft;
-      });
+      if (!adjustment) return null;
+      return persistPlanAdjustment(adjustment, newActivities, 'github-sync');
     }).catch((err) => console.error('[PlanAdjust/GitHubSync]', err.message));
   }
   return {
@@ -544,11 +633,13 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/state') {
     const store = await loadStore();
     const alerts = scanRisks(store);
+    const currentStage = normalizeStageName(store.currentStage || {});
     sendJson(res, 200, {
       ...store,
+      currentStage,
       alerts,
       metrics: buildMetrics(store, alerts),
-      stageChecklist: buildStageChecklist(store)
+      stageChecklist: buildStageChecklist({ ...store, currentStage })
     });
     return true;
   }
@@ -1373,22 +1464,8 @@ AI 建议：${review.suggestion || '无'}`;
     // 异步生成计划调整建议（不阻塞响应）
     if (activities.length > 0) {
       generatePlanAdjustment(activities, nextStore).then((adjustment) => {
-        if (adjustment) {
-          updateStore((draft) => {
-            draft.planAdjustments = draft.planAdjustments || [];
-            draft.planAdjustments.unshift({
-              id: createId('adjust'),
-              date: new Date().toISOString().slice(0, 10),
-              trigger: activities.map((a) => a.title).join('; '),
-              triggerCount: activities.length,
-              source: 'github-webhook',
-              ...adjustment,
-              createdAt: new Date().toISOString()
-            });
-            draft.planAdjustments = draft.planAdjustments.slice(0, 50);
-            return draft;
-          });
-        }
+        if (!adjustment) return null;
+        return persistPlanAdjustment(adjustment, activities, 'github-webhook');
       }).catch((err) => console.error('[PlanAdjust]', err.message));
     }
 
@@ -1865,13 +1942,19 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     const nextStore = await updateStore((draft) => {
       const index = (draft.planAdjustments || []).findIndex((item) => item.id === id);
       if (index < 0) return draft;
-      draft.planAdjustments[index] = {
+      const nextAdjustment = {
         ...draft.planAdjustments[index],
         status: decision,
         decidedAt,
-        decisionNote: String(json?.note || '').trim()
+        decisionNote: String(json?.note || '').trim(),
+        appliedAt: decision === 'approved' && draft.planAdjustments[index].stageUpdate ? decidedAt : draft.planAdjustments[index].appliedAt
       };
-      return draft;
+      let nextDraft = draft;
+      if (decision === 'approved') {
+        nextDraft = applyPlanAdjustmentToStage(draft, nextAdjustment);
+      }
+      nextDraft.planAdjustments[index] = nextAdjustment;
+      return nextDraft;
     });
     const adjustment = (nextStore.planAdjustments || []).find((item) => item.id === id);
     if (!adjustment) {

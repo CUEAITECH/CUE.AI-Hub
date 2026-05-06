@@ -1,11 +1,36 @@
 export const defaultCurrentStage = {
   id: 'stage_cue_ai_trtc_mvp',
   name: 'Cue.AI 双设备课堂 MVP / TRTC 联调阶段',
+  shortName: 'MVP / TRTC 联调',
   targetDate: '2026-05-15',
   progress: 0,
   status: '进行中',
   updatedAt: ''
 };
+
+export function normalizeStageShortName(value, fallback = defaultCurrentStage.shortName) {
+  const raw = String(value || fallback || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return defaultCurrentStage.shortName;
+  const maxLength = /[\u3400-\u9fff]/.test(raw) ? 14 : 20;
+  return Array.from(raw).slice(0, maxLength).join('').trim() || defaultCurrentStage.shortName;
+}
+
+export function normalizeStageName(stage = {}) {
+  const name = String(stage.name || defaultCurrentStage.name).trim();
+  const explicitShortName = String(stage.shortName || stage.displayName || '').trim();
+  const derivedShortName = explicitShortName
+    || name
+      .replace(/^Cue\.AI\s*/, '')
+      .replace(/^双设备课堂\s*/, '')
+      .replace(/阶段$/, '')
+      .trim()
+    || defaultCurrentStage.shortName;
+  return {
+    ...stage,
+    name,
+    shortName: normalizeStageShortName(derivedShortName)
+  };
+}
 
 export const defaultStageChecklist = [
   {
@@ -187,7 +212,7 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
 }
 
 export function buildStageChecklist(store) {
-  const stage = store.currentStage || {};
+  const stage = normalizeStageName(store.currentStage || {});
   const checklistSource = Array.isArray(stage.checklist) && stage.checklist.length
     ? stage.checklist
     : defaultStageChecklist;
@@ -196,9 +221,11 @@ export function buildStageChecklist(store) {
   const reviews = store.reviews || [];
   const assignments = store.assignments || [];
   const checklist = checklistSource.map((item) => scoreChecklistItem(item, tasks, activities, reviews, assignments, store));
-  const progress = checklist.length
+  const checklistProgress = checklist.length
     ? Math.round(checklist.reduce((sum, item) => sum + item.progress, 0) / checklist.length)
     : 0;
+  const storedProgress = Number.isFinite(Number(stage.progress)) ? Math.round(Number(stage.progress)) : checklistProgress;
+  const progress = Math.max(0, Math.min(100, Math.max(checklistProgress, storedProgress)));
   const blockedCount = checklist.filter((item) => item.status === '阻塞' || item.status === '高风险').length;
   const missingEvidenceCount = checklist.filter((item) => item.gaps.length > 0).length;
 
@@ -206,6 +233,7 @@ export function buildStageChecklist(store) {
     stage: {
       id: stage.id || defaultCurrentStage.id,
       name: stage.name || defaultCurrentStage.name,
+      shortName: stage.shortName || defaultCurrentStage.shortName,
       targetDate: stage.targetDate || defaultCurrentStage.targetDate,
       status: stage.status || defaultCurrentStage.status,
       progress
