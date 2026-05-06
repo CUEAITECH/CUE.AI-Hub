@@ -92,6 +92,22 @@ function renderStageUpdateMeta(stageUpdate = {}) {
     : '';
 }
 
+let _pendingRequests = 0;
+function _showLoader(text) {
+  _pendingRequests++;
+  const bar = document.querySelector('#loaderBar');
+  const label = document.querySelector('#loaderText');
+  if (bar) bar.classList.add('active');
+  if (label && text) label.textContent = text;
+}
+function _hideLoader() {
+  _pendingRequests = Math.max(0, _pendingRequests - 1);
+  if (_pendingRequests === 0) {
+    const bar = document.querySelector('#loaderBar');
+    if (bar) bar.classList.remove('active');
+  }
+}
+
 async function api(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
   const needsApiKey = state.config?.apiKeyRequiredForWrites
@@ -107,10 +123,13 @@ async function api(path, options = {}) {
     }
   }
 
-  const response = await fetch(path, {
-    headers,
-    ...options
-  });
+  _showLoader(options.loadingText || (method !== 'GET' ? '处理中...' : '加载中...'));
+  let response;
+  try {
+    response = await fetch(path, { headers, ...options });
+  } finally {
+    _hideLoader();
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401 && payload.error === 'invalid api key' && needsApiKey) {
