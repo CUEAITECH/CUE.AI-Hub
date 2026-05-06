@@ -2359,15 +2359,17 @@ function bindEvents() {
     const orig = button.textContent;
     button.textContent = '扫描中...';
     try {
-      toast('开始一键扫描：同步仓库 → 解析文档 → AI 分析');
+      toast('开始一键扫描，通常需要 60-90 秒，请稍候…');
       const projectId = state.currentProject?.id || 'cue_ai_classroom';
       const result = await api(`/api/projects/${projectId}/daily-scan`, { method: 'POST', body: '{}' });
       const steps = result.steps || {};
       const msgs = [];
-      if (steps.commits?.newCount) msgs.push(`新 commit ${steps.commits.newCount} 条`);
-      if (steps.docs?.imported) msgs.push(`导入任务 ${steps.docs.imported} 条`);
-      if (steps.analysis) msgs.push('AI 分析完成');
-      toast(msgs.length ? msgs.join('，') : '扫描完成，无新数据');
+      const added = steps.syncCommits?.added ?? steps.commits?.newCount;
+      const imported = steps.syncDocs?.imported ?? steps.docs?.imported;
+      if (added) msgs.push(`新 commit ${added} 条`);
+      if (imported) msgs.push(`导入任务 ${imported} 条`);
+      if (steps.syncDocs?.phases) msgs.push(`路径图阶段已更新`);
+      toast(msgs.length ? `扫描完成：${msgs.join('，')}` : '扫描完成，无新数据');
       await loadState().then(() => renderAll()).catch(() => {});
     } catch (e) {
       toast(e.message || '扫描失败');
