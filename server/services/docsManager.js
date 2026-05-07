@@ -138,7 +138,7 @@ export async function parseDocsForTasks(docs) {
   }
 }
 
-const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负责从开发计划文档中提炼项目的整体开发阶段划分，并为每个阶段分配路径图检查节点。
+const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负责从开发计划文档中提炼完整的开发阶段路线图，并为每个阶段分配路径图检查节点。
 
 输出严格遵循以下 JSON 对象格式，不输出其他内容：
 {
@@ -159,9 +159,11 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
 }
 
 规则：
-- phases 数量 2-5 个，代表项目从启动到交付的主要里程碑分段
-- id 用英文下划线格式（如 phase_backend, phase_launch）
-- 每个阶段对应 2-4 个可交付节点，最多不超过 5 个；节点总数 3-8 个
+- phases 数量 3-8 个，覆盖从当前进行中到最终交付的完整路线图
+- 近期阶段（已开始/即将开始）：3-5 个节点，描述具体可交付物
+- 远期阶段（计划中/未开始）：1-3 个节点，可以相对模糊，以里程碑为主
+- 如果某一段计划任务过多（>5个），优先拆分为多个子阶段，而不是把任务堆在同一阶段
+- id 用英文下划线格式（如 phase_backend, phase_launch），不能有重复
 - nodes 中的 phaseId 必须从 phases 数组中选取，不能创建新 phaseId
 - nodeAssignments 覆盖所有 nodes 的 nodeId→phaseId 映射
 - 优先复用用户提供的"当前路径图节点"的 id（通过标题语义匹配），未匹配则用新 id
