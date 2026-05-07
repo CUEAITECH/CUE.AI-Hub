@@ -238,8 +238,8 @@ export function buildStageChecklist(store) {
     : 0;
   const storedProgress = Number.isFinite(Number(stage.progress)) ? Math.round(Number(stage.progress)) : checklistProgress;
   const progress = Math.max(0, Math.min(100, Math.max(checklistProgress, storedProgress)));
-  const blockedCount = effectiveChecklist.filter((item) => item.status === '阻塞' || item.status === '高风险').length;
-  const missingEvidenceCount = effectiveChecklist.filter((item) => item.gaps.length > 0).length;
+  const blockedCount = checklist.filter((item) => item.status === '阻塞' || item.status === '高风险').length;
+  const missingEvidenceCount = checklist.filter((item) => item.gaps.length > 0).length;
 
   // 推断每个 phase 的状态（有阻塞→阻塞，全完成→已完成，有推进中→进行中，否则待开始）
   const rawPhases = Array.isArray(stage.phases) && stage.phases.length ? stage.phases : defaultPhases;
