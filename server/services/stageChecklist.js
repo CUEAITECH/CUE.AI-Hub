@@ -249,29 +249,26 @@ export function reassignChecklistPhaseIds(checklist, phases, nodeAssignments = {
 
   // 2. Rebalance：超过 5 个节点的 phase 把多出的节点移到最少节点的 phase
   const MAX_PER_PHASE = 5;
-  const counts = () => {
+  const getCounts = (arr) => {
     const c = new Map(phases.map((p) => [p.id, 0]));
-    assigned.forEach((n) => c.set(n.phaseId, (c.get(n.phaseId) || 0) + 1));
+    arr.forEach((n) => c.set(n.phaseId, (c.get(n.phaseId) || 0) + 1));
     return c;
   };
   let result = assigned;
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const c = counts();
+  for (let iter = 0; iter < checklist.length; iter++) {
+    const c = getCounts(result);
     const overPhase = phases.find((p) => (c.get(p.id) || 0) > MAX_PER_PHASE);
     if (!overPhase) break;
     const minPhase = phases.reduce((a, b) => (c.get(a.id) || 0) <= (c.get(b.id) || 0) ? a : b);
     if (minPhase.id === overPhase.id) break;
-    // Move the last excess node
+    // 找到 overPhase 中的第一个超出节点，移到 minPhase
     let moved = false;
     result = result.map((n) => {
       if (moved || n.phaseId !== overPhase.id) return n;
-      const overCount = result.filter((x) => x.phaseId === overPhase.id).length;
-      if (overCount > MAX_PER_PHASE) { moved = true; return { ...n, phaseId: minPhase.id }; }
-      return n;
+      moved = true;
+      return { ...n, phaseId: minPhase.id };
     });
-    changed = moved;
+    if (!moved) break;
   }
   return result;
 }
