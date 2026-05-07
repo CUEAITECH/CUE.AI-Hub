@@ -151,6 +151,7 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
 
 规则：
 - 阶段数量 2-5 个，代表项目从启动到交付的主要里程碑分段
+- 每个阶段对应 2-4 个可交付节点（任务），最多不超过 5 个；任务过多时拆分为更细阶段
 - id 用英文下划线格式（如 phase_backend, phase_launch）
 - 从文档的里程碑、阶段划分、进度标注中推断状态
 - 如文档中看不出明确阶段划分，根据任务性质自行合理归纳`;
@@ -183,21 +184,31 @@ export async function parsePhasesFromDocs(docs, parsedTasks = []) {
     }
   }
 
-  // 2. 兜底：按 sourceDoc 文档名自动归组
+  // 2. 兜底：按 sourceDoc 文档名自动归组，每组超过 5 个任务时拆分
   if (parsedTasks.length) {
     const docNames = [...new Set(parsedTasks.map((t) => t.sourceDoc).filter(Boolean))];
     if (docNames.length) {
-      return docNames.slice(0, 5).map((docPath, i) => {
-        const name = docPath.replace(/^docs\//, '').replace(/\.md$/, '').trim();
-        const doneCount = parsedTasks.filter((t) => t.sourceDoc === docPath && t.status === 'completed').length;
-        const total = parsedTasks.filter((t) => t.sourceDoc === docPath).length;
-        const status = doneCount === total ? '已完成' : doneCount > 0 ? '进行中' : '待开始';
-        return {
-          id: `phase_doc_${i + 1}`,
-          title: name.slice(0, 20),
-          status
-        };
-      });
+      const phases = [];
+      for (const docPath of docNames) {
+        const docTasks = parsedTasks.filter((t) => t.sourceDoc === docPath);
+        const baseName = docPath.replace(/^docs\//, '').replace(/\.md$/, '').trim();
+        // 每组最多 5 个任务，超出时按 5 个一组拆分
+        const chunkSize = 5;
+        const chunks = Math.ceil(docTasks.length / chunkSize);
+        for (let c = 0; c < chunks; c++) {
+          const chunk = docTasks.slice(c * chunkSize, (c + 1) * chunkSize);
+          const doneCount = chunk.filter((t) => t.status === 'completed').length;
+          const status = doneCount === chunk.length ? '已完成' : doneCount > 0 ? '进行中' : '待开始';
+          const suffix = chunks > 1 ? `（${c + 1}/${chunks}）` : '';
+          phases.push({
+            id: `phase_doc_${phases.length + 1}`,
+            title: (baseName + suffix).slice(0, 20),
+            status
+          });
+        }
+        if (phases.length >= 5) break;
+      }
+      if (phases.length) return phases.slice(0, 5);
     }
   }
 

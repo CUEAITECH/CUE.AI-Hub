@@ -30,7 +30,7 @@ import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhoo
 import { scanLocalGitProject } from './services/localGit.js';
 import { scanGitHubProject, hasGitHubConfig, fetchCommitDetail } from './services/githubApi.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
-import { buildStageChecklist, normalizeStageName, normalizeStageShortName } from './services/stageChecklist.js';
+import { buildStageChecklist, normalizeStageName, normalizeStageShortName, defaultStageChecklist } from './services/stageChecklist.js';
 import {
   isWeComAvailable,
   pushRiskAlerts,
@@ -1056,9 +1056,29 @@ async function handleApi(req, res, url) {
       // 缓存原始 docTasks 快照（用于进度追踪对照）
       if (!draft.docTasks) draft.docTasks = {};
       draft.docTasks[projectId] = parsedTasks;
-      // 将 LLM 生成的阶段划分写入 currentStage.phases（仅在有结果时覆盖）
+      // 将 LLM 生成的阶段划分写入 currentStage.phases
+      // 只有当新阶段 ID 能对上现有检查清单节点时才整体替换，否则仅更新匹配阶段的状态
       if (parsedPhases?.length) {
-        draft.currentStage = { ...(draft.currentStage || {}), phases: parsedPhases };
+        const existingChecklist = Array.isArray(draft.currentStage?.checklist) && draft.currentStage.checklist.length
+          ? draft.currentStage.checklist
+          : defaultStageChecklist;
+        const nodePhaseIds = new Set(existingChecklist.map((n) => n.phaseId).filter(Boolean));
+        const hasMatch = parsedPhases.some((p) => nodePhaseIds.has(p.id));
+        if (hasMatch) {
+          // 新阶段 ID 与节点对得上：整体替换
+          draft.currentStage = { ...(draft.currentStage || {}), phases: parsedPhases };
+        } else {
+          // ID 对不上（文档名兜底生成的 phase_doc_N）：只更新现有阶段的状态，不替换 ID
+          const currentPhases = Array.isArray(draft.currentStage?.phases) ? draft.currentStage.phases : [];
+          if (currentPhases.length) {
+            const updatedPhases = currentPhases.map((existing, i) => {
+              const incoming = parsedPhases[i];
+              return incoming ? { ...existing, status: incoming.status || existing.status } : existing;
+            });
+            draft.currentStage = { ...(draft.currentStage || {}), phases: updatedPhases };
+          }
+          // 无现有阶段时不写入文档名阶段，保留 defaultPhases（由 store migration 补填）
+        }
       }
       return draft;
     });
@@ -1155,7 +1175,23 @@ async function handleApi(req, res, url) {
         draft.tasks = existing;
         if (!draft.docTasks) draft.docTasks = {};
         draft.docTasks[projectId] = parsedTasks;
-        if (parsedPhases?.length) draft.currentStage = { ...(draft.currentStage || {}), phases: parsedPhases };
+        if (parsedPhases?.length) {
+          const existingChecklist2 = Array.isArray(draft.currentStage?.checklist) && draft.currentStage.checklist.length
+            ? draft.currentStage.checklist : defaultStageChecklist;
+          const nodePhaseIds2 = new Set(existingChecklist2.map((n) => n.phaseId).filter(Boolean));
+          const hasMatch2 = parsedPhases.some((p) => nodePhaseIds2.has(p.id));
+          if (hasMatch2) {
+            draft.currentStage = { ...(draft.currentStage || {}), phases: parsedPhases };
+          } else {
+            const cur = Array.isArray(draft.currentStage?.phases) ? draft.currentStage.phases : [];
+            if (cur.length) {
+              draft.currentStage = {
+                ...(draft.currentStage || {}),
+                phases: cur.map((e, i) => parsedPhases[i] ? { ...e, status: parsedPhases[i].status || e.status } : e)
+              };
+            }
+          }
+        }
         return draft;
       });
       result.steps.syncDocs = { ok: true, imported, selected: importCandidates.length, totalCandidates: parsedTasks.length, phases: parsedPhases?.length || 0 };

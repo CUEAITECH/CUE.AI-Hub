@@ -238,12 +238,17 @@ export function buildStageChecklist(store) {
     : 0;
   const storedProgress = Number.isFinite(Number(stage.progress)) ? Math.round(Number(stage.progress)) : checklistProgress;
   const progress = Math.max(0, Math.min(100, Math.max(checklistProgress, storedProgress)));
-  const blockedCount = checklist.filter((item) => item.status === '阻塞' || item.status === '高风险').length;
-  const missingEvidenceCount = checklist.filter((item) => item.gaps.length > 0).length;
+  const blockedCount = effectiveChecklist.filter((item) => item.status === '阻塞' || item.status === '高风险').length;
+  const missingEvidenceCount = effectiveChecklist.filter((item) => item.gaps.length > 0).length;
 
   // 推断每个 phase 的状态（有阻塞→阻塞，全完成→已完成，有推进中→进行中，否则待开始）
   const rawPhases = Array.isArray(stage.phases) && stage.phases.length ? stage.phases : defaultPhases;
-  const phases = rawPhases.map((phase) => {
+
+  // 如果存储的 phase ID 与节点 phaseId 完全对不上，回退到 defaultPhases（节点 phaseId 保持原样）
+  const matchCount = checklist.filter((item) => rawPhases.some((p) => p.id === item.phaseId)).length;
+  const effectivePhases = (matchCount === 0 && checklist.length > 0) ? defaultPhases : rawPhases;
+
+  const phases = effectivePhases.map((phase) => {
     const nodes = checklist.filter((item) => item.phaseId === phase.id);
     if (!nodes.length) return { ...phase };
     const allDone = nodes.every((n) => n.status === '已完成');
