@@ -9,7 +9,7 @@
  * 4. writeProgressToGitHub — PUT API 写回目标仓库
  */
 
-import { callClaude } from './claude.js';
+import { callClaude, parseJsonOutput } from './claude.js';
 
 const API_BASE = 'https://api.github.com';
 const PROGRESS_DOC_PATH = 'docs/阶段进度追踪.md';
@@ -138,39 +138,56 @@ export async function parseDocsForTasks(docs) {
   }
 }
 
-const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负责从开发计划文档中提炼项目的整体开发阶段划分。
+const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负责从开发计划文档中提炼项目的整体开发阶段划分，并为每个阶段分配路径图检查节点。
 
-输出严格遵循以下 JSON 数组格式，不输出其他内容：
-[
-  {
-    "id": "phase_<英文标识>",
-    "title": "阶段名（中文，10字以内）",
-    "status": "待开始|进行中|已完成"
-  }
-]
+输出严格遵循以下 JSON 对象格式，不输出其他内容：
+{
+  "phases": [
+    { "id": "phase_<英文标识>", "title": "阶段名（中文，10字以内）", "status": "待开始|进行中|已完成" }
+  ],
+  "nodes": [
+    {
+      "id": "保留已有节点id或新生成的stage_node_xxx",
+      "title": "节点短标题（20字以内）",
+      "owner": "负责人（未明确写'待确认'）",
+      "acceptance": "验收口径（80字以内）",
+      "phaseId": "所属阶段id（必须是上面phases中的id之一）",
+      "keywords": ["关键词1", "关键词2"]
+    }
+  ],
+  "nodeAssignments": { "nodeId": "phaseId" }
+}
 
 规则：
-- 阶段数量 2-5 个，代表项目从启动到交付的主要里程碑分段
-- 每个阶段对应 2-4 个可交付节点（任务），最多不超过 5 个；任务过多时拆分为更细阶段
+- phases 数量 2-5 个，代表项目从启动到交付的主要里程碑分段
 - id 用英文下划线格式（如 phase_backend, phase_launch）
-- 从文档的里程碑、阶段划分、进度标注中推断状态
-- 如文档中看不出明确阶段划分，根据任务性质自行合理归纳`;
+- 每个阶段对应 2-4 个可交付节点，最多不超过 5 个；节点总数 3-8 个
+- nodes 中的 phaseId 必须从 phases 数组中选取，不能创建新 phaseId
+- nodeAssignments 覆盖所有 nodes 的 nodeId→phaseId 映射
+- 优先复用用户提供的"当前路径图节点"的 id（通过标题语义匹配），未匹配则用新 id
+- 从文档的里程碑、阶段划分、进度标注中推断 phases 的 status`;
 
 /**
- * 从文档内容用 LLM 提炼开发阶段划分；LLM 失败时按 sourceDoc 文档名兜底归组
+ * 从文档内容用 LLM 提炼开发阶段划分和路径图节点；LLM 失败时按 sourceDoc 文档名兜底归组
  * @param {Array<{path, name, content}>} docs
  * @param {Array} parsedTasks - 已解析的候选任务（兜底用）
+ * @param {Array} existingNodes - 当前路径图节点 [{id, title, phaseId}]（供 LLM 复用 id）
+ * @returns {Promise<{phases, nodes, nodeAssignments}|null>}
  */
-export async function parsePhasesFromDocs(docs, parsedTasks = []) {
+export async function parsePhasesFromDocs(docs, parsedTasks = [], existingNodes = []) {
   // 1. 尝试 LLM 提炼
   if (docs.length) {
-    const userPrompt = docs.map((d) => `=== ${d.path} ===\n${d.content.slice(0, 2000)}`).join('\n\n');
-    const raw = await callClaude(PHASES_SYSTEM_PROMPT, userPrompt);
+    const docsText = docs.map((d) => `=== ${d.path} ===\n${d.content.slice(0, 2000)}`).join('\n\n');
+    const existingNodesText = existingNodes.length
+      ? `\n\n=== 当前路径图节点（尽量复用这些节点的 id，通过标题语义匹配）===\n${JSON.stringify(existingNodes.map((n) => ({ id: n.id, title: n.title, phaseId: n.phaseId })))}`
+      : '';
+    const raw = await callClaude(PHASES_SYSTEM_PROMPT, docsText + existingNodesText);
     if (raw) {
       try {
         const parsed = parseJsonOutput(raw);
-        if (Array.isArray(parsed) && parsed.length) {
-          const result = parsed
+        // 新格式：对象 {phases, nodes, nodeAssignments}
+        if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.phases) && parsed.phases.length) {
+          const phases = parsed.phases
             .filter((p) => p.id && p.title)
             .slice(0, 5)
             .map((p) => ({
@@ -178,13 +195,56 @@ export async function parsePhasesFromDocs(docs, parsedTasks = []) {
               title: String(p.title).slice(0, 20),
               status: ['待开始', '进行中', '已完成'].includes(p.status) ? p.status : '待开始'
             }));
-          if (result.length) return result;
+          if (!phases.length) throw new Error('no valid phases');
+          const phaseIdSet = new Set(phases.map((p) => p.id));
+          // 处理 nodes：通过标题匹配复用已有节点 id
+          const normalizeTitle = (t) => String(t || '').replace(/\s+/g, '').toLowerCase();
+          const existingByTitle = new Map(existingNodes.map((n) => [normalizeTitle(n.title), n.id]));
+          const nodes = Array.isArray(parsed.nodes)
+            ? parsed.nodes.slice(0, 8).map((n) => {
+                const normalizedTitle = normalizeTitle(n.title);
+                // 复用：完整包含 or 被包含关系
+                const matchedId = existingByTitle.get(normalizedTitle)
+                  || [...existingByTitle.entries()].find(([t]) => t.includes(normalizedTitle) || normalizedTitle.includes(t))?.[1];
+                const id = matchedId || String(n.id || `stage_node_${Math.random().toString(36).slice(2, 8)}`).replace(/[^\w-]/g, '_').slice(0, 64);
+                const phaseId = phaseIdSet.has(n.phaseId) ? n.phaseId : phases[0].id;
+                return {
+                  id,
+                  title: String(n.title || '').trim().slice(0, 32),
+                  owner: String(n.owner || '').trim().slice(0, 32),
+                  acceptance: String(n.acceptance || '').trim().slice(0, 160),
+                  phaseId,
+                  keywords: Array.isArray(n.keywords) ? n.keywords.slice(0, 10).map((k) => String(k).trim()).filter(Boolean) : [],
+                  taskIds: []
+                };
+              })
+            : [];
+          const nodeAssignments = typeof parsed.nodeAssignments === 'object' && parsed.nodeAssignments
+            ? Object.fromEntries(
+                Object.entries(parsed.nodeAssignments)
+                  .filter(([, v]) => phaseIdSet.has(v))
+              )
+            : {};
+          return { phases, nodes, nodeAssignments };
+        }
+        // 兼容旧格式（纯数组）
+        if (Array.isArray(parsed) && parsed.length) {
+          const phases = parsed
+            .filter((p) => p.id && p.title)
+            .slice(0, 5)
+            .map((p) => ({
+              id: String(p.id).replace(/[^\w-]/g, '_').slice(0, 32),
+              title: String(p.title).slice(0, 20),
+              status: ['待开始', '进行中', '已完成'].includes(p.status) ? p.status : '待开始'
+            }));
+          if (phases.length) return { phases, nodes: [], nodeAssignments: {} };
         }
       } catch { /* 降级 */ }
     }
   }
 
   // 2. 兜底：按 sourceDoc 文档名自动归组，每组超过 5 个任务时拆分
+  // 生成 phases（phase_doc_N 格式），不生成新节点，只对现有节点做均匀位置分配
   if (parsedTasks.length) {
     const docNames = [...new Set(parsedTasks.map((t) => t.sourceDoc).filter(Boolean))];
     if (docNames.length) {
@@ -192,7 +252,6 @@ export async function parsePhasesFromDocs(docs, parsedTasks = []) {
       for (const docPath of docNames) {
         const docTasks = parsedTasks.filter((t) => t.sourceDoc === docPath);
         const baseName = docPath.replace(/^docs\//, '').replace(/\.md$/, '').trim();
-        // 每组最多 5 个任务，超出时按 5 个一组拆分
         const chunkSize = 5;
         const chunks = Math.ceil(docTasks.length / chunkSize);
         for (let c = 0; c < chunks; c++) {
@@ -200,15 +259,21 @@ export async function parsePhasesFromDocs(docs, parsedTasks = []) {
           const doneCount = chunk.filter((t) => t.status === 'completed').length;
           const status = doneCount === chunk.length ? '已完成' : doneCount > 0 ? '进行中' : '待开始';
           const suffix = chunks > 1 ? `（${c + 1}/${chunks}）` : '';
-          phases.push({
-            id: `phase_doc_${phases.length + 1}`,
-            title: (baseName + suffix).slice(0, 20),
-            status
-          });
+          phases.push({ id: `phase_doc_${phases.length + 1}`, title: (baseName + suffix).slice(0, 20), status });
         }
         if (phases.length >= 5) break;
       }
-      if (phases.length) return phases.slice(0, 5);
+      if (phases.length) {
+        // 对现有节点做均匀位置分配
+        const nodeAssignments = {};
+        existingNodes.forEach((n, idx) => {
+          nodeAssignments[n.id] = phases[Math.min(
+            Math.floor(idx / Math.ceil(Math.max(existingNodes.length, 1) / phases.length)),
+            phases.length - 1
+          )].id;
+        });
+        return { phases: phases.slice(0, 5), nodes: [], nodeAssignments };
+      }
     }
   }
 
