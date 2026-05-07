@@ -1077,25 +1077,22 @@ async function handleApi(req, res, url) {
       if (parsedPhasesResult?.phases?.length) {
         const { phases: newPhases, nodes: newNodes, nodeAssignments } = parsedPhasesResult;
         draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases };
-        // 合并 checklist：以现有节点为基础，新增或更新 LLM 生成的节点
-        const currentChecklist = draft.currentStage.checklist?.length
-          ? draft.currentStage.checklist : defaultStageChecklist;
-        const byId = new Map(currentChecklist.map((n) => [n.id, n]));
-        for (const newNode of (newNodes || [])) {
-          if (byId.has(newNode.id)) {
-            // 复用现有节点：只更新 title/acceptance/phaseId，保留 taskIds/keywords
-            const old = byId.get(newNode.id);
-            byId.set(newNode.id, {
-              ...old,
-              title: newNode.title || old.title,
-              acceptance: newNode.acceptance || old.acceptance,
-              phaseId: newNode.phaseId || old.phaseId
-            });
-          } else {
-            byId.set(newNode.id, newNode);
-          }
+        if ((newNodes || []).length) {
+          // LLM 返回了完整节点列表：以 LLM 为准，从旧节点补充证据字段
+          const currentChecklist = draft.currentStage.checklist?.length
+            ? draft.currentStage.checklist : defaultStageChecklist;
+          const oldById = new Map(currentChecklist.map((n) => [n.id, n]));
+          const newNodeSet = new Set(newNodes.map((n) => n.id));
+          // 合并：LLM 节点 + 旧节点中有真实关联任务但不在 LLM 列表里的（保留证据）
+          const mergedNodes = [
+            ...newNodes.map((n) => {
+              const old = oldById.get(n.id);
+              return old ? { ...old, title: n.title || old.title, acceptance: n.acceptance || old.acceptance, phaseId: n.phaseId || old.phaseId } : n;
+            }),
+            ...currentChecklist.filter((n) => !newNodeSet.has(n.id) && (n.taskIds?.length > 0))
+          ];
+          draft.currentStage.checklist = reassignChecklistPhaseIds(mergedNodes, newPhases, nodeAssignments || {});
         }
-        draft.currentStage.checklist = reassignChecklistPhaseIds([...byId.values()], newPhases, nodeAssignments || {});
       }
       return draft;
     });
@@ -1199,18 +1196,20 @@ async function handleApi(req, res, url) {
         if (parsedPhasesResult2?.phases?.length) {
           const { phases: newPhases2, nodes: newNodes2, nodeAssignments: na2 } = parsedPhasesResult2;
           draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases2 };
-          const currentChecklist2 = draft.currentStage.checklist?.length
-            ? draft.currentStage.checklist : defaultStageChecklist;
-          const byId2 = new Map(currentChecklist2.map((n) => [n.id, n]));
-          for (const nn of (newNodes2 || [])) {
-            if (byId2.has(nn.id)) {
-              const old2 = byId2.get(nn.id);
-              byId2.set(nn.id, { ...old2, title: nn.title || old2.title, acceptance: nn.acceptance || old2.acceptance, phaseId: nn.phaseId || old2.phaseId });
-            } else {
-              byId2.set(nn.id, nn);
-            }
+          if ((newNodes2 || []).length) {
+            const currentChecklist2 = draft.currentStage.checklist?.length
+              ? draft.currentStage.checklist : defaultStageChecklist;
+            const oldById2 = new Map(currentChecklist2.map((n) => [n.id, n]));
+            const newNodeSet2 = new Set(newNodes2.map((n) => n.id));
+            const mergedNodes2 = [
+              ...newNodes2.map((n) => {
+                const old2 = oldById2.get(n.id);
+                return old2 ? { ...old2, title: n.title || old2.title, acceptance: n.acceptance || old2.acceptance, phaseId: n.phaseId || old2.phaseId } : n;
+              }),
+              ...currentChecklist2.filter((n) => !newNodeSet2.has(n.id) && (n.taskIds?.length > 0))
+            ];
+            draft.currentStage.checklist = reassignChecklistPhaseIds(mergedNodes2, newPhases2, na2 || {});
           }
-          draft.currentStage.checklist = reassignChecklistPhaseIds([...byId2.values()], newPhases2, na2 || {});
         }
         return draft;
       });
@@ -2354,17 +2353,19 @@ setTimeout(async () => {
     await updateStore((draft) => {
       const { phases: newPhases, nodes: newNodes, nodeAssignments } = result;
       draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases };
-      const cur = draft.currentStage.checklist?.length ? draft.currentStage.checklist : defaultStageChecklist;
-      const byId = new Map(cur.map((n) => [n.id, n]));
-      for (const nn of (newNodes || [])) {
-        if (byId.has(nn.id)) {
-          const old = byId.get(nn.id);
-          byId.set(nn.id, { ...old, title: nn.title || old.title, acceptance: nn.acceptance || old.acceptance, phaseId: nn.phaseId || old.phaseId });
-        } else {
-          byId.set(nn.id, nn);
-        }
+      if ((newNodes || []).length) {
+        const cur = draft.currentStage.checklist?.length ? draft.currentStage.checklist : defaultStageChecklist;
+        const oldById = new Map(cur.map((n) => [n.id, n]));
+        const newNodeSet = new Set(newNodes.map((n) => n.id));
+        const merged = [
+          ...newNodes.map((n) => {
+            const old = oldById.get(n.id);
+            return old ? { ...old, title: n.title || old.title, acceptance: n.acceptance || old.acceptance, phaseId: n.phaseId || old.phaseId } : n;
+          }),
+          ...cur.filter((n) => !newNodeSet.has(n.id) && (n.taskIds?.length > 0))
+        ];
+        draft.currentStage.checklist = reassignChecklistPhaseIds(merged, newPhases, nodeAssignments || {});
       }
-      draft.currentStage.checklist = reassignChecklistPhaseIds([...byId.values()], newPhases, nodeAssignments || {});
       return draft;
     });
     console.log('[Startup] phases 修正完成，共', result.phases.length, '个阶段');
