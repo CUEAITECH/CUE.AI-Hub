@@ -2999,6 +2999,36 @@ select:focus {
 .assign-done-btn:hover { color: var(--green); border-color: var(--green); }
 .assign-cancel-btn:hover { color: var(--red); border-color: var(--red); }
 
+.assign-completed-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.assign-completed-toggle {
+  font-size: 12px;
+  color: var(--dim);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.assign-completed-toggle::-webkit-details-marker { display: none; }
+.assign-completed-toggle::before { content: '▸'; font-size: 10px; }
+details[open] .assign-completed-toggle::before { content: '▾'; }
+.assign-completed-section .assign-item { opacity: 0.5; }
+
+@keyframes suggest-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 98, 254, 0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(15, 98, 254, 0.15); }
+}
+.assignable-task-row.suggest-next {
+  border-color: var(--blue);
+  animation: suggest-pulse 1s ease-in-out 3;
+}
+
 /* AI 计划调整建议 */
 .plan-adjust-list { display: flex; flex-direction: column; gap: 10px; }
 .plan-adjust-item {
