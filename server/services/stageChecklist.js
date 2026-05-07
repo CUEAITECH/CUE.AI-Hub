@@ -223,6 +223,59 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
   };
 }
 
+/**
+ * 统一分配 checklist 节点的 phaseId，并做节点数 rebalance（每 phase 上限 5 个）。
+ * @param {Array} checklist
+ * @param {Array} phases
+ * @param {Object} nodeAssignments — {nodeId: phaseId} 显式覆盖映射（来自 LLM）
+ * @returns {Array} 新数组（不修改原数组）
+ */
+export function reassignChecklistPhaseIds(checklist, phases, nodeAssignments = {}) {
+  if (!phases?.length) return checklist;
+  const phaseIdSet = new Set(phases.map((p) => p.id));
+
+  // 1. 为每个节点确定 phaseId
+  const assigned = checklist.map((node, idx) => {
+    const override = nodeAssignments[node.id];
+    if (override && phaseIdSet.has(override)) return { ...node, phaseId: override };
+    if (node.phaseId && phaseIdSet.has(node.phaseId)) return node;
+    // 位置兜底：均匀分配
+    const positional = phases[Math.min(
+      Math.floor(idx / Math.ceil(checklist.length / phases.length)),
+      phases.length - 1
+    )].id;
+    return { ...node, phaseId: positional };
+  });
+
+  // 2. Rebalance：超过 5 个节点的 phase 把多出的节点移到最少节点的 phase
+  const MAX_PER_PHASE = 5;
+  const counts = () => {
+    const c = new Map(phases.map((p) => [p.id, 0]));
+    assigned.forEach((n) => c.set(n.phaseId, (c.get(n.phaseId) || 0) + 1));
+    return c;
+  };
+  let result = assigned;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const c = counts();
+    const overPhase = phases.find((p) => (c.get(p.id) || 0) > MAX_PER_PHASE);
+    if (!overPhase) break;
+    const minPhase = phases.reduce((a, b) => (c.get(a.id) || 0) <= (c.get(b.id) || 0) ? a : b);
+    if (minPhase.id === overPhase.id) break;
+    // Move the last excess node
+    let moved = false;
+    result = result.map((n) => {
+      if (moved || n.phaseId !== overPhase.id) return n;
+      const overCount = result.filter((x) => x.phaseId === overPhase.id).length;
+      if (overCount > MAX_PER_PHASE) { moved = true; return { ...n, phaseId: minPhase.id }; }
+      return n;
+    });
+    changed = moved;
+  }
+  return result;
+}
+
 export function buildStageChecklist(store) {
   const stage = normalizeStageName(store.currentStage || {});
   const checklistSource = Array.isArray(stage.checklist) && stage.checklist.length
@@ -241,14 +294,9 @@ export function buildStageChecklist(store) {
   const blockedCount = checklist.filter((item) => item.status === '阻塞' || item.status === '高风险').length;
   const missingEvidenceCount = checklist.filter((item) => item.gaps.length > 0).length;
 
-  // 推断每个 phase 的状态（有阻塞→阻塞，全完成→已完成，有推进中→进行中，否则待开始）
   const rawPhases = Array.isArray(stage.phases) && stage.phases.length ? stage.phases : defaultPhases;
 
-  // 如果存储的 phase ID 与节点 phaseId 完全对不上，回退到 defaultPhases（节点 phaseId 保持原样）
-  const matchCount = checklist.filter((item) => rawPhases.some((p) => p.id === item.phaseId)).length;
-  const effectivePhases = (matchCount === 0 && checklist.length > 0) ? defaultPhases : rawPhases;
-
-  const phases = effectivePhases.map((phase) => {
+  const phases = rawPhases.map((phase) => {
     const nodes = checklist.filter((item) => item.phaseId === phase.id);
     if (!nodes.length) return { ...phase };
     const allDone = nodes.every((n) => n.status === '已完成');

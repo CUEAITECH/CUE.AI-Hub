@@ -30,7 +30,7 @@ import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhoo
 import { scanLocalGitProject } from './services/localGit.js';
 import { scanGitHubProject, hasGitHubConfig, fetchCommitDetail } from './services/githubApi.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
-import { buildStageChecklist, normalizeStageName, normalizeStageShortName, defaultStageChecklist } from './services/stageChecklist.js';
+import { buildStageChecklist, normalizeStageName, normalizeStageShortName, defaultStageChecklist, reassignChecklistPhaseIds } from './services/stageChecklist.js';
 import {
   isWeComAvailable,
   pushRiskAlerts,
@@ -386,7 +386,7 @@ async function generatePlanAdjustment(activities, store) {
     "status": "进行中|高风险|阻塞|已完成",
     "progressDelta": 0,
     "checklist": [
-      { "id": "已有或新阶段节点 id", "title": "阶段节点短标题", "owner": "负责人", "keywords": ["commit 关键词"], "acceptance": "验收口径" }
+      { "id": "已有或新阶段节点 id", "title": "阶段节点短标题", "owner": "负责人", "keywords": ["commit 关键词"], "acceptance": "验收口径", "phaseId": "所属阶段id（必填，从当前阶段划分中选，不能新建）" }
     ]
   }
 }
@@ -395,13 +395,16 @@ async function generatePlanAdjustment(activities, store) {
 - minor：小范围拆分、补充验收标准、调整当天跟进项，可自动执行。
 - major：改变阶段目标、延期、转派关键负责人、调整里程碑或影响多人排期，必须人工审批。
 - 如果建议影响阶段展示或路径图，必须给出 stageUpdate；总览只能使用后端生成的 shortName，不能让前端临时裁剪长阶段名。
+- stageUpdate.checklist 每个节点必须有 phaseId，从当前阶段划分中选 id，不能新建 phaseId。
 - 不需要调整时输出 {"needed": false}。`;
   const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成').slice(0, 10);
   const stage = normalizeStageName(store.currentStage || {});
   const commitSummary = activities.map((a) => `- ${a.owner}: ${a.title} (${a.repo || ''})`).join('\n');
   const taskSummary = activeTasks.map((t) => `- [${t.status}] ${t.title}（${t.owner}）进度${t.progress}%`).join('\n');
   const stageSummary = `当前阶段：${stage.name}；总览短名：${stage.shortName}；目标日期：${stage.targetDate || '待确认'}；状态：${stage.status || '进行中'}；进度：${Number(stage.progress) || 0}%`;
-  const text = await callClaude(SYSTEM, `${stageSummary}\n\n最新提交：\n${commitSummary}\n\n当前任务：\n${taskSummary}`);
+  const phases = store.currentStage?.phases || [];
+  const phaseLine = phases.length ? `当前阶段划分：${phases.map((p) => `${p.id}（${p.title}）`).join('、')}` : '';
+  const text = await callClaude(SYSTEM, `${stageSummary}${phaseLine ? '\n' + phaseLine : ''}\n\n最新提交：\n${commitSummary}\n\n当前任务：\n${taskSummary}`);
   const parsed = parseJsonOutput(text);
   if (parsed && parsed.needed === false) return null;
   const scope = ['major', 'minor', 'progress'].includes(parsed?.scope) ? parsed.scope : inferAdjustmentScope(text, activities);
@@ -434,11 +437,15 @@ async function generatePlanAlternatives(item) {
       "shortName": "中文最多14字",
       "status": "进行中|高风险|阻塞",
       "progressDelta": 0,
-      "checklist": []
+      "checklist": [
+        { "id": "节点id", "title": "短标题", "owner": "负责人", "keywords": [], "acceptance": "验收口径", "phaseId": "所属阶段id（必填，从当前阶段划分中选）" }
+      ]
     }
   }
 ]`;
-  const userPrompt = `主方案：${item.suggestion || ''}\n原因：${item.requiresApprovalReason || ''}\n影响：${item.impact || ''}`;
+  const currentPhases = (item.stageUpdate?.phases || []);
+  const phaseLine = currentPhases.length ? `当前阶段划分：${currentPhases.map((p) => `${p.id}（${p.title}）`).join('、')}\n` : '';
+  const userPrompt = `${phaseLine}主方案：${item.suggestion || ''}\n原因：${item.requiresApprovalReason || ''}\n影响：${item.impact || ''}`;
   const text = await callClaude(SYSTEM, userPrompt);
   const parsed = parseJsonOutput(text);
   if (!Array.isArray(parsed)) return [];
@@ -473,7 +480,8 @@ function normalizePlanStageUpdate(stageUpdate, scope, activities = []) {
         title: String(item.title || '').trim().slice(0, 32),
         owner: String(item.owner || '未指定').trim().slice(0, 32),
         keywords: Array.isArray(item.keywords) ? item.keywords.slice(0, 10).map((keyword) => String(keyword).trim()).filter(Boolean) : [],
-        acceptance: String(item.acceptance || item.title || '').trim().slice(0, 160)
+        acceptance: String(item.acceptance || item.title || '').trim().slice(0, 160),
+        ...(item.phaseId ? { phaseId: String(item.phaseId).replace(/[^\w-]/g, '_').slice(0, 64) } : {})
       }));
   }
   return Object.keys(normalized).length ? normalized : null;
@@ -508,6 +516,11 @@ function applyPlanAdjustmentToStage(store, adjustment) {
   }
   if (Array.isArray(stageUpdate.phases) && stageUpdate.phases.length) {
     nextStage.phases = stageUpdate.phases;
+  }
+  // 确保所有节点 phaseId 有效，并做节点数 rebalance
+  const effectivePhases = nextStage.phases?.length ? nextStage.phases : defaultPhases;
+  if (Array.isArray(nextStage.checklist)) {
+    nextStage.checklist = reassignChecklistPhaseIds(nextStage.checklist, effectivePhases, {});
   }
   return {
     ...store,
@@ -1022,8 +1035,12 @@ async function handleApi(req, res, url) {
 
     const parsedTasks = await parseDocsForTasks(docs);
     if (!parsedTasks.length) { sendJson(res, 200, { imported: 0, message: 'LLM 未解析出任务（无 API key 或文档无可执行任务）' }); return true; }
-    // phases 在任务解析后执行，兜底时可用 parsedTasks 按文档归组
-    const parsedPhases = await parsePhasesFromDocs(docs, parsedTasks);
+    // 读取现有节点供 LLM 复用 id，避免丢失 commit/task 证据关联
+    const storeSnap = await loadStore();
+    const existingNodes = (storeSnap.currentStage?.checklist?.length
+      ? storeSnap.currentStage.checklist : defaultStageChecklist
+    ).map((n) => ({ id: n.id, title: n.title, phaseId: n.phaseId }));
+    const parsedPhasesResult = await parsePhasesFromDocs(docs, parsedTasks, existingNodes);
     const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
     const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
 
@@ -1056,29 +1073,29 @@ async function handleApi(req, res, url) {
       // 缓存原始 docTasks 快照（用于进度追踪对照）
       if (!draft.docTasks) draft.docTasks = {};
       draft.docTasks[projectId] = parsedTasks;
-      // 将 LLM 生成的阶段划分写入 currentStage.phases
-      // 只有当新阶段 ID 能对上现有检查清单节点时才整体替换，否则仅更新匹配阶段的状态
-      if (parsedPhases?.length) {
-        const existingChecklist = Array.isArray(draft.currentStage?.checklist) && draft.currentStage.checklist.length
-          ? draft.currentStage.checklist
-          : defaultStageChecklist;
-        const nodePhaseIds = new Set(existingChecklist.map((n) => n.phaseId).filter(Boolean));
-        const hasMatch = parsedPhases.some((p) => nodePhaseIds.has(p.id));
-        if (hasMatch) {
-          // 新阶段 ID 与节点对得上：整体替换
-          draft.currentStage = { ...(draft.currentStage || {}), phases: parsedPhases };
-        } else {
-          // ID 对不上（文档名兜底生成的 phase_doc_N）：只更新现有阶段的状态，不替换 ID
-          const currentPhases = Array.isArray(draft.currentStage?.phases) ? draft.currentStage.phases : [];
-          if (currentPhases.length) {
-            const updatedPhases = currentPhases.map((existing, i) => {
-              const incoming = parsedPhases[i];
-              return incoming ? { ...existing, status: incoming.status || existing.status } : existing;
+      // 将 LLM 生成的阶段划分和节点写入 currentStage
+      if (parsedPhasesResult?.phases?.length) {
+        const { phases: newPhases, nodes: newNodes, nodeAssignments } = parsedPhasesResult;
+        draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases };
+        // 合并 checklist：以现有节点为基础，新增或更新 LLM 生成的节点
+        const currentChecklist = draft.currentStage.checklist?.length
+          ? draft.currentStage.checklist : defaultStageChecklist;
+        const byId = new Map(currentChecklist.map((n) => [n.id, n]));
+        for (const newNode of (newNodes || [])) {
+          if (byId.has(newNode.id)) {
+            // 复用现有节点：只更新 title/acceptance/phaseId，保留 taskIds/keywords
+            const old = byId.get(newNode.id);
+            byId.set(newNode.id, {
+              ...old,
+              title: newNode.title || old.title,
+              acceptance: newNode.acceptance || old.acceptance,
+              phaseId: newNode.phaseId || old.phaseId
             });
-            draft.currentStage = { ...(draft.currentStage || {}), phases: updatedPhases };
+          } else {
+            byId.set(newNode.id, newNode);
           }
-          // 无现有阶段时不写入文档名阶段，保留 defaultPhases（由 store migration 补填）
         }
+        draft.currentStage.checklist = reassignChecklistPhaseIds([...byId.values()], newPhases, nodeAssignments || {});
       }
       return draft;
     });
@@ -1160,7 +1177,11 @@ async function handleApi(req, res, url) {
         : { owner: project.githubOwner || '', repo: project.repository || '' };
       const docs = await fetchProjectDocs(owner, repo);
       const parsedTasks = await parseDocsForTasks(docs);
-      const parsedPhases = await parsePhasesFromDocs(docs, parsedTasks);
+      const snapForDailyScan = await loadStore();
+      const existingNodesDailyScan = (snapForDailyScan.currentStage?.checklist?.length
+        ? snapForDailyScan.currentStage.checklist : defaultStageChecklist
+      ).map((n) => ({ id: n.id, title: n.title, phaseId: n.phaseId }));
+      const parsedPhasesResult2 = await parsePhasesFromDocs(docs, parsedTasks, existingNodesDailyScan);
       const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
       const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
       let imported = 0;
@@ -1175,26 +1196,25 @@ async function handleApi(req, res, url) {
         draft.tasks = existing;
         if (!draft.docTasks) draft.docTasks = {};
         draft.docTasks[projectId] = parsedTasks;
-        if (parsedPhases?.length) {
-          const existingChecklist2 = Array.isArray(draft.currentStage?.checklist) && draft.currentStage.checklist.length
+        if (parsedPhasesResult2?.phases?.length) {
+          const { phases: newPhases2, nodes: newNodes2, nodeAssignments: na2 } = parsedPhasesResult2;
+          draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases2 };
+          const currentChecklist2 = draft.currentStage.checklist?.length
             ? draft.currentStage.checklist : defaultStageChecklist;
-          const nodePhaseIds2 = new Set(existingChecklist2.map((n) => n.phaseId).filter(Boolean));
-          const hasMatch2 = parsedPhases.some((p) => nodePhaseIds2.has(p.id));
-          if (hasMatch2) {
-            draft.currentStage = { ...(draft.currentStage || {}), phases: parsedPhases };
-          } else {
-            const cur = Array.isArray(draft.currentStage?.phases) ? draft.currentStage.phases : [];
-            if (cur.length) {
-              draft.currentStage = {
-                ...(draft.currentStage || {}),
-                phases: cur.map((e, i) => parsedPhases[i] ? { ...e, status: parsedPhases[i].status || e.status } : e)
-              };
+          const byId2 = new Map(currentChecklist2.map((n) => [n.id, n]));
+          for (const nn of (newNodes2 || [])) {
+            if (byId2.has(nn.id)) {
+              const old2 = byId2.get(nn.id);
+              byId2.set(nn.id, { ...old2, title: nn.title || old2.title, acceptance: nn.acceptance || old2.acceptance, phaseId: nn.phaseId || old2.phaseId });
+            } else {
+              byId2.set(nn.id, nn);
             }
           }
+          draft.currentStage.checklist = reassignChecklistPhaseIds([...byId2.values()], newPhases2, na2 || {});
         }
         return draft;
       });
-      result.steps.syncDocs = { ok: true, imported, selected: importCandidates.length, totalCandidates: parsedTasks.length, phases: parsedPhases?.length || 0 };
+      result.steps.syncDocs = { ok: true, imported, selected: importCandidates.length, totalCandidates: parsedTasks.length, phases: parsedPhasesResult2?.phases?.length || 0 };
     } catch (err) {
       result.steps.syncDocs = { ok: false, error: err.message };
     }
@@ -2308,6 +2328,50 @@ function startScheduler() {
 }
 
 startScheduler();
+
+// 启动后异步检查并修正脏 phases/checklist（phase_doc_N 或节点 phaseId 失配）
+setTimeout(async () => {
+  try {
+    const s = await loadStore();
+    const phases = s.currentStage?.phases || [];
+    const checklist = s.currentStage?.checklist || [];
+    const phaseIdSet = new Set(phases.map((p) => p.id));
+    const hasDocPhases = phases.length > 0 && phases.every((p) => /^phase_doc_/.test(p.id));
+    const hasMissingPhaseId = checklist.some((n) => !phaseIdSet.has(n.phaseId));
+    if (!hasDocPhases && !hasMissingPhaseId) return;
+    console.log('[Startup] 检测到 phases 需要修正，触发异步 LLM 重新分配...');
+    const project = (s.projects || []).find((p) => p.githubFullRepo?.includes('/'));
+    if (!project) return;
+    const { owner, repo } = project.githubFullRepo.split('/').length >= 2
+      ? { owner: project.githubFullRepo.split('/')[0], repo: project.githubFullRepo.split('/')[1] }
+      : { owner: '', repo: '' };
+    if (!owner || !repo) return;
+    const docs = await fetchProjectDocs(owner, repo);
+    if (!docs.length) return;
+    const existingNodesStartup = checklist.map((n) => ({ id: n.id, title: n.title, phaseId: n.phaseId }));
+    const result = await parsePhasesFromDocs(docs, [], existingNodesStartup);
+    if (!result?.phases?.length) return;
+    await updateStore((draft) => {
+      const { phases: newPhases, nodes: newNodes, nodeAssignments } = result;
+      draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases };
+      const cur = draft.currentStage.checklist?.length ? draft.currentStage.checklist : defaultStageChecklist;
+      const byId = new Map(cur.map((n) => [n.id, n]));
+      for (const nn of (newNodes || [])) {
+        if (byId.has(nn.id)) {
+          const old = byId.get(nn.id);
+          byId.set(nn.id, { ...old, title: nn.title || old.title, acceptance: nn.acceptance || old.acceptance, phaseId: nn.phaseId || old.phaseId });
+        } else {
+          byId.set(nn.id, nn);
+        }
+      }
+      draft.currentStage.checklist = reassignChecklistPhaseIds([...byId.values()], newPhases, nodeAssignments || {});
+      return draft;
+    });
+    console.log('[Startup] phases 修正完成，共', result.phases.length, '个阶段');
+  } catch (e) {
+    console.error('[Startup] 异步 phases 修正失败:', e.message);
+  }
+}, 3000);
 
 server.listen(port, host, () => {
   const prepHour = meetingHour === 0 ? 23 : meetingHour - 1;

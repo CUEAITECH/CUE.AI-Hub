@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defaultCurrentStage, defaultPhases, defaultStageChecklist, normalizeStageName } from './services/stageChecklist.js';
+import { defaultCurrentStage, defaultPhases, defaultStageChecklist, normalizeStageName, reassignChecklistPhaseIds } from './services/stageChecklist.js';
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
@@ -145,26 +145,15 @@ function migrateStore(store) {
     ? next.currentStage.checklist
     : defaultStageChecklist;
   // 补全 phases：旧数据没有时补默认值
-  // 若 phases 全是文档兜底生成的 phase_doc_N，重置为 defaultPhases（避免路径图显示文档名作为阶段）
   if (!Array.isArray(next.currentStage.phases) || !next.currentStage.phases.length) {
     next.currentStage.phases = defaultPhases;
-  } else if (next.currentStage.phases.every((p) => /^phase_doc_/.test(p.id))) {
-    next.currentStage.phases = defaultPhases;
   }
-  // 补全节点缺失或失配的 phaseId
-  const phaseIds = new Set(next.currentStage.phases.map((p) => p.id));
-  next.currentStage.checklist = next.currentStage.checklist.map((node, i) => {
-    if (node.phaseId && phaseIds.has(node.phaseId)) return node;
-    // 先找 defaultStageChecklist 里同 id 的节点；phaseId 必须在当前 phases 中才可用
-    const defaultNode = defaultStageChecklist.find((d) => d.id === node.id);
-    const defaultPhaseId = defaultNode?.phaseId && phaseIds.has(defaultNode.phaseId) ? defaultNode.phaseId : null;
-    // 否则按位置分配到 defaultPhases 中（每相邻阶段最多 5 个节点）
-    const positional = next.currentStage.phases[Math.min(
-      Math.floor(i / 5),
-      next.currentStage.phases.length - 1
-    )].id;
-    return { ...node, phaseId: defaultPhaseId || positional };
-  });
+  // 补全节点缺失或失配的 phaseId（统一用 reassignChecklistPhaseIds 处理，含位置兜底和 rebalance）
+  next.currentStage.checklist = reassignChecklistPhaseIds(
+    next.currentStage.checklist,
+    next.currentStage.phases,
+    {}
+  );
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
     acceptance: task.acceptance === 'PR diff 可输出 Pass、Warning、Block、Escalate 四级结论。'
