@@ -163,6 +163,7 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
 - 近期阶段（已开始/即将开始）：3-5 个节点，描述具体可交付物
 - 远期阶段（计划中/未开始）：1-3 个节点，可以相对模糊，以里程碑为主
 - 如果某一段计划任务过多（>5个），优先拆分为多个子阶段，而不是把任务堆在同一阶段
+- 节点总数不设上限，完整覆盖文档中所有阶段的交付物
 - id 用英文下划线格式（如 phase_backend, phase_launch），不能有重复
 - nodes 中的 phaseId 必须从 phases 数组中选取，不能创建新 phaseId
 - nodeAssignments 覆盖所有 nodes 的 nodeId→phaseId 映射
@@ -203,7 +204,7 @@ export async function parsePhasesFromDocs(docs, parsedTasks = [], existingNodes 
           const normalizeTitle = (t) => String(t || '').replace(/\s+/g, '').toLowerCase();
           const existingByTitle = new Map(existingNodes.map((n) => [normalizeTitle(n.title), n.id]));
           const nodes = Array.isArray(parsed.nodes)
-            ? parsed.nodes.slice(0, 8).map((n) => {
+            ? parsed.nodes.slice(0, 40).map((n) => {
                 const normalizedTitle = normalizeTitle(n.title);
                 // 复用：完整包含 or 被包含关系
                 const matchedId = existingByTitle.get(normalizedTitle)
