@@ -126,8 +126,20 @@ rm /opt/CUE.AI-Hub/server/data/db.json && pm2 restart cue-project-hub --update-e
 ## 技术架构
 
 ```
-server/index.js              路由总入口（顺序 if-else 匹配）
+server/index.js              HTTP 启动、鉴权、调度器、静态文件、共享编排函数
 server/store.js              JSON 文件读写 + in-memory cache + 数据迁移
+server/routes/
+  index.js                   routeModules 顺序分发器
+  systemRoutes.js            health/config/state/openapi/tasks/members 读接口
+  planningRoutes.js          路径图、AI 混合分析、风险扫描、计划调整审批
+  projectRoutes.js           项目配置、GitHub 同步、docs 同步、daily-scan
+  taskRoutes.js              任务 CRUD、AI 进度估算、AI 排期应用
+  reviewRoutes.js            AI Review、人工审阅队列、解决方案、审阅修复任务
+  assignmentRoutes.js        晚会分工领取、任务细则生成
+  standupRoutes.js           异步站会、站会汇总
+  reportRoutes.js            日报、晚报、会后总结、分工 vs commit 对照
+  wecomRoutes.js             企业微信插件工具接口
+  webhookRoutes.js           GitHub webhook 接收与签名校验
 server/services/
   claude.js                  Claude API 封装（prompt caching，失败返回 null）
   reviewer.js                AI 代码审阅（LLM + 规则降级）
@@ -146,6 +158,8 @@ src/app.js                   单文件前端（无框架，浏览器原生 ESM�
 src/styles.css
 index.html                   8 个页面 section
 ```
+
+**Phase 0 路由拆分状态：** 已完成。`server/index.js` 不再直接承载业务 API 分支，所有对外 API 已按领域拆到 `server/routes/*`。本阶段只做行为保持型重构，不改变现有 JSON 数据模型，也不启动 Deliverable/Phase 外键迁移。后续 Phase 1 才进入交付项中心数据模型迁移。
 
 **数据存储：** `server/data/db.json`，进程内 in-memory cache，单例读写。
 

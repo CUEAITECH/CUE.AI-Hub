@@ -804,9 +804,7 @@ function githubSyncErrorHint(project, err) {
 }
 
 async function handleApi(req, res, url) {
-  if (await dispatchRoutes(routeModules, req, res, url)) return true;
-
-  return false;
+  return dispatchRoutes(routeModules, req, res, url);
 }
 
 async function serveStatic(res, pathname) {
