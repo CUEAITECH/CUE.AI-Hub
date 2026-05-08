@@ -1079,7 +1079,7 @@ function renderBriefBlock(brief, hasAssignment, assignmentDone = false, assignme
     if (briefAge > 30_000) {
       return `<div class=”brief-failed”>
         <span>细则生成失败</span>
-        ${assignmentId ? `<button class=”brief-retry-btn” data-assignment-id=”${escapeHtml(assignmentId)}”>重新生成</button>` : ''}
+        ${assignmentId ? `<button data-action=”brief-retry” data-assignment-id=”${escapeHtml(assignmentId)}” style=”font-size:12px;padding:3px 10px;border-radius:4px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;”>重新生成</button>` : ''}
       </div>`;
     }
     return '<div class=”brief-generating”><span class=”brief-spinner”></span>任务细则生成中，稍等片刻后刷新页面…</div>';
@@ -1182,7 +1182,7 @@ function renderTaskDetail() {
 }
 
 async function regenerateBrief(assignmentId) {
-  const btn = document.querySelector(`.brief-retry-btn[data-assignment-id="${CSS.escape(assignmentId)}"]`);
+  const btn = document.querySelector(`[data-action="brief-retry"][data-assignment-id="${CSS.escape(assignmentId)}"]`);
   if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
   try {
     await api(`/api/assignments/${encodeURIComponent(assignmentId)}/brief`, { method: 'POST' });
@@ -2318,7 +2318,7 @@ function bindEvents() {
 
   // 事件委托：重新生成细则按钮（动态渲染，不能在 renderTaskDetail 里绑定）
   document.addEventListener('click', (e) => {
-    const btn = e.target.closest('.brief-retry-btn');
+    const btn = e.target.closest('[data-action="brief-retry"]');
     if (!btn) return;
     regenerateBrief(btn.dataset.assignmentId).catch((err) => toast(err.message));
   });
