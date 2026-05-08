@@ -700,6 +700,26 @@ async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
       if (!adjustment) return null;
       return persistPlanAdjustment(adjustment, newActivities, 'github-sync');
     }).catch((err) => console.error('[PlanAdjust/GitHubSync]', err.message));
+
+    // 有新 commit → 异步更新任务进度（不阻塞响应）
+    estimateTasksProgress(nextStore).then((results) => {
+      if (!results.length) return;
+      return updateStore((draft) => {
+        for (const r of results) {
+          const task = draft.tasks.find((t) => t.id === r.taskId);
+          if (!task) continue;
+          const newProgress = Math.max(0, Math.min(100, Number(r.progress) || 0));
+          task.progress = Math.max(task.progress || 0, newProgress);
+          task.aiProgressSuggestion = {
+            progress: newProgress,
+            reason: String(r.reason || '').slice(0, 80),
+            suggestComplete: !!r.suggestComplete,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return draft;
+      });
+    }).catch((err) => console.error('[AIProgress/GitHubSync]', err.message));
   }
   return {
     project: nextStore.projects.find((item) => item.id === project.id),
