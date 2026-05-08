@@ -267,7 +267,6 @@ function getAssignableTaskPool() {
 }
 
 function getFocusedAssignmentTasks(limit = 8) {
-  const todayAssignments = getTodayAssignments();
   const stageTaskIds = new Set((state.stageChecklist?.checklist || [])
     .filter((item) => ['阻塞', '高风险', '待补证据', '推进中'].includes(item.status))
     .flatMap((item) => item.linkedTasks || [])
@@ -275,10 +274,8 @@ function getFocusedAssignmentTasks(limit = 8) {
 
   return getAssignableTaskPool()
     .map((task) => {
-      const claimed = todayAssignments.some((assignment) => assignment.taskId === task.id);
       const score = [
         task.reviewId ? 100 : 0,        // 打回审阅修复任务最优先
-        claimed ? 80 : 0,
         isCueAiTask(task) ? 70 : 0,
         stageTaskIds.has(task.id) ? 60 : 0,
         task.status === '高风险' || task.risk === '高' ? 50 : 0,
@@ -1251,7 +1248,7 @@ function renderAssignments() {
   const today = getTodayText();
   const todayAssignments = getTodayAssignments();
   const activeTasks = getAssignableTaskPool();
-  const focusedTasks = getFocusedAssignmentTasks(10);
+  const focusedTasks = getFocusedAssignmentTasks(30);
   setOptions('#assignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
   setOptions('#assignmentTask', focusedTasks.length ? focusedTasks : activeTasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
 
@@ -1346,7 +1343,7 @@ function renderAssignments() {
       assignableEl.innerHTML = `
         <div class="assignment-focus-note">
           <strong>建议优先认领</strong>
-          <span>共 ${activeTasks.length} 个进行中任务，展示得分最高的 ${suggestTasks.length} 个。</span>
+          <span>共 ${activeTasks.length} 个进行中任务，排除已认领后展示 ${suggestTasks.length} 个。</span>
         </div>
         ${suggestTasks.map((task) => {
         const claimants = todayAssignments.filter((a) => a.taskId === task.id);
