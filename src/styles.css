@@ -2999,6 +2999,72 @@ select:focus {
 .assign-done-btn:hover { color: var(--green); border-color: var(--green); }
 .assign-cancel-btn:hover { color: var(--red); border-color: var(--red); }
 
+.assign-progress-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(15, 98, 254, 0.08);
+  color: var(--blue);
+  flex-shrink: 0;
+}
+.assign-ai-hint {
+  width: 100%;
+  font-size: 11px;
+  color: var(--cyan);
+  background: rgba(8, 127, 111, 0.06);
+  border-left: 2px solid var(--cyan);
+  padding: 3px 7px;
+  border-radius: 0 3px 3px 0;
+  margin: 3px 0;
+  line-height: 1.5;
+}
+.assign-ai-done-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--cyan);
+  background: rgba(8, 127, 111, 0.08);
+  color: var(--cyan);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.assign-ai-done-btn:hover {
+  background: var(--cyan);
+  color: #fff;
+}
+
+.assign-completed-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.assign-completed-toggle {
+  font-size: 12px;
+  color: var(--dim);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.assign-completed-toggle::-webkit-details-marker { display: none; }
+.assign-completed-toggle::before { content: '▸'; font-size: 10px; }
+details[open] .assign-completed-toggle::before { content: '▾'; }
+.assign-completed-section .assign-item { opacity: 0.5; }
+
+@keyframes suggest-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 98, 254, 0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(15, 98, 254, 0.15); }
+}
+.assignable-task-row.suggest-next {
+  border-color: var(--blue);
+  animation: suggest-pulse 1s ease-in-out 3;
+}
+
 /* AI 计划调整建议 */
 .plan-adjust-list { display: flex; flex-direction: column; gap: 10px; }
 .plan-adjust-item {

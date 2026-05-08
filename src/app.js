@@ -1181,38 +1181,68 @@ function renderAssignments() {
 
   // 近期认领情况（今天 + 昨天未完成的延续）
   const recentAssignments = getRecentAssignments();
+  const activeAssignments = recentAssignments.filter((a) => a.status !== '已完成');
+  const completedTodayAssignments = recentAssignments.filter((a) => a.date === today && a.status === '已完成');
+  // 18:00 后隐藏已完成区域
+  const nowHour = new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai', hour: 'numeric', hour12: false });
+  const meetingHour = Number(state.config?.meetingHour ?? 18);
+  const pastMeeting = Number(nowHour) >= meetingHour;
+
+  function renderAssignGroup(assignments, showDoneBtn) {
+    const byOwner = {};
+    for (const a of assignments) {
+      if (!byOwner[a.owner]) byOwner[a.owner] = [];
+      byOwner[a.owner].push(a);
+    }
+    return Object.entries(byOwner).map(([owner, items]) => `
+      <div class="assign-group">
+        <strong class="assign-owner">${escapeHtml(owner)}</strong>
+        ${items.map((a) => {
+          const linkedTask = (state.tasks || []).find((t) => t.id === a.taskId);
+          const aiSug = linkedTask?.aiProgressSuggestion;
+          const showAiSuggest = showDoneBtn && a.status !== '已完成' && aiSug?.suggestComplete;
+          return `
+          <div class="assign-item assign-${escapeHtml(a.status || '进行中')}">
+            <span class="assign-title">${escapeHtml(a.taskTitle || '未知任务')}</span>
+            <span class="assign-status-badge">${escapeHtml(a.status || '进行中')}</span>
+            ${linkedTask ? `<span class="assign-progress-badge">${linkedTask.progress || 0}%</span>` : ''}
+            ${a.date !== today ? `<span class="assign-carryover-badge">续 ${a.date}</span>` : ''}
+            ${a.note ? `<small class="assign-note">${escapeHtml(a.note)}</small>` : ''}
+            ${showAiSuggest ? `<div class="assign-ai-hint">🤖 AI 判断完成度 ${aiSug.progress}%：${escapeHtml(aiSug.reason)}</div>` : ''}
+            ${renderAssignmentBrief(a.brief)}
+            <div class="assign-actions">
+              ${showDoneBtn && a.status !== '已完成' && !showAiSuggest ? `<button class="assign-done-btn" data-assign-id="${escapeHtml(a.id)}" title="标记完成">✓</button>` : ''}
+              ${showAiSuggest ? `<button class="assign-ai-done-btn" data-assign-id="${escapeHtml(a.id)}" title="确认 AI 建议：标记完成">✓ 确认完成</button>` : ''}
+              <button class="assign-cancel-btn" data-assign-id="${escapeHtml(a.id)}" title="取消认领">✕</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    `).join('');
+  }
+
   const summaryEl = document.querySelector('#assignmentSummary');
   if (summaryEl) {
-    if (!recentAssignments.length) {
+    if (!activeAssignments.length && !completedTodayAssignments.length) {
       summaryEl.innerHTML = '<div class="empty-state">今日暂无认领记录。</div>';
     } else {
-      // 按 owner 分组
-      const byOwner = {};
-      for (const a of recentAssignments) {
-        if (!byOwner[a.owner]) byOwner[a.owner] = [];
-        byOwner[a.owner].push(a);
-      }
-      summaryEl.innerHTML = Object.entries(byOwner).map(([owner, items]) => `
-        <div class="assign-group">
-          <strong class="assign-owner">${escapeHtml(owner)}</strong>
-          ${items.map((a) => `
-            <div class="assign-item assign-${escapeHtml(a.status || '进行中')}">
-              <span class="assign-title">${escapeHtml(a.taskTitle || '未知任务')}</span>
-              <span class="assign-status-badge">${escapeHtml(a.status || '进行中')}</span>
-              ${a.date !== today ? `<span class="assign-carryover-badge">续 ${a.date}</span>` : ''}
-              ${a.note ? `<small class="assign-note">${escapeHtml(a.note)}</small>` : ''}
-              ${renderAssignmentBrief(a.brief)}
-              <div class="assign-actions">
-                ${a.status !== '已完成' ? `<button class="assign-done-btn" data-assign-id="${escapeHtml(a.id)}" title="标记完成">✓</button>` : ''}
-                <button class="assign-cancel-btn" data-assign-id="${escapeHtml(a.id)}" title="取消认领">✕</button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `).join('');
+      const activeHtml = activeAssignments.length
+        ? renderAssignGroup(activeAssignments, true)
+        : '<div class="empty-state">暂无进行中的认领。</div>';
 
-      // 绑定按钮
+      const completedHtml = !pastMeeting && completedTodayAssignments.length
+        ? `<details class="assign-completed-section" open>
+            <summary class="assign-completed-toggle">今日已完成 ${completedTodayAssignments.length} 项</summary>
+            ${renderAssignGroup(completedTodayAssignments, false)}
+          </details>`
+        : '';
+
+      summaryEl.innerHTML = activeHtml + completedHtml;
+
       summaryEl.querySelectorAll('.assign-done-btn').forEach((btn) => {
+        btn.addEventListener('click', () => markAssignmentDone(btn.dataset.assignId).catch((e) => toast(e.message)));
+      });
+      summaryEl.querySelectorAll('.assign-ai-done-btn').forEach((btn) => {
         btn.addEventListener('click', () => markAssignmentDone(btn.dataset.assignId).catch((e) => toast(e.message)));
       });
       summaryEl.querySelectorAll('.assign-cancel-btn').forEach((btn) => {
@@ -1845,6 +1875,7 @@ async function claimSelectedTask() {
 }
 
 async function markAssignmentDone(id) {
+  const assignment = (state.assignments || []).find((a) => a.id === id);
   const payload = await api(`/api/assignments/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify({ status: '已完成' })
@@ -1852,6 +1883,24 @@ async function markAssignmentDone(id) {
   state.assignments = payload.assignments || state.assignments;
   renderAll();
   toast('已标记完成');
+
+  // 完成后建议认领下一个任务
+  if (assignment) {
+    const today = getTodayText();
+    const claimedTaskIds = new Set(
+      (state.assignments || []).filter((a) => a.date === today && a.owner === assignment.owner).map((a) => a.taskId)
+    );
+    const nextTask = getFocusedAssignmentTasks(20).find((t) => !claimedTaskIds.has(t.id));
+    if (nextTask) {
+      const assignableEl = document.querySelector('#assignableList');
+      const row = assignableEl?.querySelector(`[data-task-id="${CSS.escape(nextTask.id)}"]`)?.closest('.assignable-task-row');
+      if (row) {
+        row.classList.add('suggest-next');
+        row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        setTimeout(() => row.classList.remove('suggest-next'), 3000);
+      }
+    }
+  }
 }
 
 async function cancelAssignment(id) {
@@ -1873,6 +1922,20 @@ async function refreshAssignments() {
   renderPlanAdjustments();
   renderAiPm();
   toast('分工数据已刷新');
+}
+
+async function scanAiProgress() {
+  const btn = document.querySelector('[data-action="ai-progress-scan"]');
+  if (btn) { btn.disabled = true; btn.textContent = '分析中…'; }
+  try {
+    const payload = await api('/api/tasks/ai-progress', { method: 'POST' });
+    state.tasks = payload.tasks || state.tasks;
+    renderAll();
+    const count = (payload.suggestions || []).length;
+    toast(payload.message || (count ? `AI 分析完成，${count} 个任务建议标记完成` : 'AI 分析完成，进度已更新'));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'AI 分析进度'; }
+  }
 }
 
 // ── 晚报 ─────────────────────────────────────────────────────────
@@ -2339,6 +2402,9 @@ function bindEvents() {
   // 分工页
   document.querySelector('[data-action="refresh-assignments"]').addEventListener('click', () => {
     refreshAssignments().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="ai-progress-scan"]').addEventListener('click', () => {
+    scanAiProgress().catch((e) => toast(e.message));
   });
   document.querySelector('[data-action="back-to-assignment"]')?.addEventListener('click', () => {
     setRoute('assignment');

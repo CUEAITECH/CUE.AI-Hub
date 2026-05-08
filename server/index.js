@@ -143,7 +143,8 @@ function normalizeTask(input) {
     acceptance: input.acceptance || '待补充验收标准',
     createdAt: input.createdAt || now,
     updatedAt: now,
-    linkedRefs: Array.isArray(input.linkedRefs) ? input.linkedRefs : []
+    linkedRefs: Array.isArray(input.linkedRefs) ? input.linkedRefs : [],
+    aiProgressSuggestion: input.aiProgressSuggestion || null
   };
 }
 
@@ -268,6 +269,58 @@ function buildWeComRiskSummary(store, alerts) {
   ];
 
   return lines.join('\n');
+}
+
+// ─── AI 任务进度扫描 ──────────────────────────────────────────────────────────
+const AI_PROGRESS_SYSTEM = `你是任务进度评估助手。根据每个任务的验收标准和关联 Git 提交，评估完成度（0-100 整数）。
+
+评分标准：
+- 提交完整覆盖验收标准所有功能点 → 85-100
+- 核心功能已实现，边缘情况或测试待处理 → 65-84
+- 部分功能实现，主干仍未完成 → 30-64
+- 少量相关提交，主体未开始 → 10-29
+
+输出格式：JSON 数组，每项：{"taskId":"task_xxx","progress":75,"reason":"理由（20字内）","suggestComplete":false}
+suggestComplete 为 true 当且仅当 progress >= 80。只返回 JSON 数组，不要其他文字。`;
+
+async function estimateTasksProgress(store) {
+  const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成' && t.status !== '已取消');
+  if (!activeTasks.length) return [];
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const recentCommits = (store.activities || []).filter((a) => a.type === 'commit' && a.createdAt >= cutoff);
+  const semanticLinks = store.semanticLinks || {};
+  const linkedBySemanticTaskId = new Map();
+  for (const link of (semanticLinks.commitTaskLinks || [])) {
+    if (Number(link.confidence) >= 0.5) {
+      if (!linkedBySemanticTaskId.has(link.taskId)) linkedBySemanticTaskId.set(link.taskId, new Set());
+      linkedBySemanticTaskId.get(link.taskId).add(link.activityId);
+    }
+  }
+
+  const taskEntries = activeTasks.map((task) => {
+    const titleKey = task.title.toLowerCase().slice(0, 8);
+    const semanticIds = linkedBySemanticTaskId.get(task.id) || new Set();
+    const linked = recentCommits.filter((c) => {
+      const text = `${c.title || ''} ${(c.files || []).join(' ')}`.toLowerCase();
+      return semanticIds.has(c.id)
+        || text.includes(task.id.toLowerCase())
+        || (titleKey.length >= 4 && text.includes(titleKey));
+    });
+    return { task, commits: linked.slice(0, 6) };
+  }).filter((e) => e.commits.length > 0);
+
+  if (!taskEntries.length) return [];
+
+  const userPrompt = taskEntries.map(({ task, commits }) => [
+    `任务 ${task.id}：${task.title}`,
+    `验收：${task.acceptance || '未定'}`,
+    `当前进度：${task.progress || 0}%`,
+    `关联提交：\n${commits.map((c) => `  - ${c.title || c.id}`).join('\n')}`
+  ].join('\n')).join('\n---\n');
+
+  const raw = await callClaude(AI_PROGRESS_SYSTEM, userPrompt);
+  const parsed = raw ? parseJsonOutput(raw) : null;
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 // ─── 晚报生成（供 API 端点和调度器共用）───────────────────────────────────────
@@ -1252,6 +1305,35 @@ async function handleApi(req, res, url) {
       return store;
     });
     sendJson(res, 201, { task, tasks: nextStore.tasks });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/tasks/ai-progress') {
+    const store = await loadStore();
+    const results = await estimateTasksProgress(store);
+    if (!results.length) {
+      sendJson(res, 200, { tasks: store.tasks, suggestions: [], message: '无关联提交，无法估算进度。' });
+      return true;
+    }
+    const next = await updateStore((draft) => {
+      for (const r of results) {
+        const task = draft.tasks.find((t) => t.id === r.taskId);
+        if (!task) continue;
+        const newProgress = Math.max(0, Math.min(100, Number(r.progress) || 0));
+        task.progress = Math.max(task.progress || 0, newProgress);
+        task.aiProgressSuggestion = {
+          progress: newProgress,
+          reason: String(r.reason || '').slice(0, 80),
+          suggestComplete: !!r.suggestComplete,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return draft;
+    });
+    sendJson(res, 200, {
+      tasks: next.tasks,
+      suggestions: results.filter((r) => r.suggestComplete).map((r) => r.taskId)
+    });
     return true;
   }
 
