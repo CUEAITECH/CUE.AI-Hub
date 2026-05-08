@@ -1068,13 +1068,19 @@ function renderAssignmentBrief(brief) {
   `;
 }
 
-function renderBriefBlock(brief, hasAssignment, assignmentDone = false) {
+function renderBriefBlock(brief, hasAssignment, assignmentDone = false, assignmentId = null, briefAge = 0) {
   if (!brief) {
     if (!hasAssignment) {
       return '<div class=”empty-state”>还没有认领记录，在分工领取页点击名字认领后自动生成。</div>';
     }
     if (assignmentDone) {
       return '<div class=”empty-state”>任务已完成，细则未留存（认领时生成失败或为历史记录）。</div>';
+    }
+    if (briefAge > 30_000) {
+      return `<div class=”brief-failed”>
+        <span>细则生成失败</span>
+        ${assignmentId ? `<button class=”brief-retry-btn” data-assignment-id=”${escapeHtml(assignmentId)}”>重新生成</button>` : ''}
+      </div>`;
     }
     return '<div class=”brief-generating”><span class=”brief-spinner”></span>任务细则生成中，稍等片刻后刷新页面…</div>';
   }
@@ -1133,6 +1139,7 @@ function renderTaskDetail() {
   const brief = latestAssignment?.brief || null;
   const hasAssignment = Boolean(latestAssignment);
   const assignmentDone = latestAssignment?.status === '已完成' || task.status === '已完成';
+  const briefAge = latestAssignment ? Date.now() - new Date(latestAssignment.createdAt || 0).getTime() : 0;
   const progress = Number(task.progress) || 0;
   if (title) title.textContent = task.title;
   if (subtitle) {
@@ -1156,7 +1163,7 @@ function renderTaskDetail() {
 
     <article class="task-detail-card task-detail-main">
       <span>结构化任务规则</span>
-      ${renderBriefBlock(brief, hasAssignment, assignmentDone)}
+      ${renderBriefBlock(brief, hasAssignment, assignmentDone, latestAssignment?.id, briefAge)}
     </article>
 
     <article class="task-detail-card">
@@ -1171,6 +1178,21 @@ function renderTaskDetail() {
       </div>
     </article>
   `;
+
+  // 绑定"重新生成细则"按钮
+  content.querySelectorAll('.brief-retry-btn').forEach((btn) => {
+    btn.addEventListener('click', () => regenerateBrief(btn.dataset.assignmentId).catch((e) => toast(e.message)));
+  });
+}
+
+async function regenerateBrief(assignmentId) {
+  const btn = document.querySelector(`.brief-retry-btn[data-assignment-id="${CSS.escape(assignmentId)}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+  const payload = await api(`/api/assignments/${encodeURIComponent(assignmentId)}/brief`, { method: 'POST' });
+  state.assignments = payload.assignments || state.assignments;
+  renderTaskDetail();
+  scheduleBriefPoll();
+  toast('细则重新生成中，稍候刷新…');
 }
 
 function renderAssignments() {
@@ -2245,13 +2267,16 @@ function scheduleBriefPoll() {
   // 无认领、已有 brief、已完成任务 → 不轮询
   if (!latestAssignment || latestAssignment.brief) return;
   if (latestAssignment.status === '已完成' || task.status === '已完成') return;
+  // 创建超过 30 秒仍无 brief → 认定生成失败，停止轮询，让页面显示重试按钮
+  const age = Date.now() - new Date(latestAssignment.createdAt || 0).getTime();
+  if (age > 30_000) { renderTaskDetail(); return; }
   _briefPollTimer = setTimeout(async () => {
     try {
       const data = await api('/api/state');
       state.assignments = data.assignments || state.assignments;
       state.tasks = data.tasks || state.tasks;
       renderTaskDetail();
-      scheduleBriefPoll(); // 如果 brief 还没好继续轮询
+      scheduleBriefPoll();
     } catch { /* ignore */ }
   }, 4000);
 }

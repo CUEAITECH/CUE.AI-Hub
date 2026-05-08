@@ -3035,6 +3035,28 @@ select:focus {
   color: #fff;
 }
 
+.brief-failed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(180, 35, 24, 0.05);
+  border-left: 2px solid var(--red);
+  border-radius: 0 4px 4px 0;
+  color: var(--red);
+  font-size: 13px;
+}
+.brief-retry-btn {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--red);
+  background: transparent;
+  color: var(--red);
+  cursor: pointer;
+}
+.brief-retry-btn:hover { background: var(--red); color: #fff; }
+
 .assign-completed-section {
   margin-top: 12px;
   border-top: 1px solid var(--line);

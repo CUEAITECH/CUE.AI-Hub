@@ -863,6 +863,24 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  // POST /api/assignments/:id/brief — 重新触发细则生成（生成失败时用）
+  if (req.method === 'POST' && url.pathname.startsWith('/api/assignments/') && url.pathname.endsWith('/brief')) {
+    const id = decodeURIComponent(url.pathname.split('/').at(-2) || '');
+    const store = await loadStore();
+    const assignment = (store.assignments || []).find((a) => a.id === id);
+    if (!assignment) { sendError(res, 404, 'assignment not found'); return true; }
+    const task = (store.tasks || []).find((t) => t.id === assignment.taskId) || null;
+    sendJson(res, 202, { message: '细则生成已触发', assignments: store.assignments });
+    generateAssignmentBrief({ task, owner: assignment.owner, note: assignment.note, store })
+      .then((brief) => updateStore((draft) => {
+        const idx = (draft.assignments || []).findIndex((a) => a.id === id);
+        if (idx >= 0) { draft.assignments[idx].brief = brief; draft.assignments[idx].briefGeneratedBy = brief.generatedBy; }
+        return draft;
+      }))
+      .catch((err) => console.error('[Brief/Retry]', err.message));
+    return true;
+  }
+
   if (req.method === 'PATCH' && url.pathname.startsWith('/api/assignments/')) {
     const id = decodeURIComponent(url.pathname.split('/').pop());
     const { json } = await readBody(req);
