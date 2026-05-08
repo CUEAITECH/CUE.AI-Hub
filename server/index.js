@@ -288,25 +288,36 @@ async function estimateTasksProgress(store) {
   if (!activeTasks.length) return [];
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const recentCommits = (store.activities || []).filter((a) => a.type === 'commit' && a.createdAt >= cutoff);
-  const semanticLinks = store.semanticLinks || {};
-  const linkedBySemanticTaskId = new Map();
-  for (const link of (semanticLinks.commitTaskLinks || [])) {
-    if (Number(link.confidence) >= 0.5) {
-      if (!linkedBySemanticTaskId.has(link.taskId)) linkedBySemanticTaskId.set(link.taskId, new Set());
-      linkedBySemanticTaskId.get(link.taskId).add(link.activityId);
+
+  // 构建 task → 认领人 mapping（owner 匹配 commit 比关键词更可靠）
+  const taskOwners = new Map(); // taskId → Set<owner>
+  for (const a of (store.assignments || [])) {
+    if (!a.taskId || a.status === '已取消') continue;
+    if (!taskOwners.has(a.taskId)) taskOwners.set(a.taskId, new Set());
+    taskOwners.get(a.taskId).add(a.owner);
+  }
+
+  // semanticLinks 辅助
+  const semanticTaskIds = new Map();
+  for (const link of ((store.semanticLinks || {}).commitTaskLinks || [])) {
+    if (Number(link.confidence) >= 0.4) {
+      if (!semanticTaskIds.has(link.taskId)) semanticTaskIds.set(link.taskId, new Set());
+      semanticTaskIds.get(link.taskId).add(link.activityId);
     }
   }
 
   const taskEntries = activeTasks.map((task) => {
-    const titleKey = task.title.toLowerCase().slice(0, 8);
-    const semanticIds = linkedBySemanticTaskId.get(task.id) || new Set();
+    const owners = taskOwners.get(task.id) || new Set();
+    const semanticIds = semanticTaskIds.get(task.id) || new Set();
+    const titleWords = task.title.toLowerCase().replace(/[^一-龥a-z0-9]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
     const linked = recentCommits.filter((c) => {
       const text = `${c.title || ''} ${(c.files || []).join(' ')}`.toLowerCase();
       return semanticIds.has(c.id)
+        || (owners.size > 0 && owners.has(c.owner || c.actor || ''))
         || text.includes(task.id.toLowerCase())
-        || (titleKey.length >= 4 && text.includes(titleKey));
+        || titleWords.some((w) => text.includes(w));
     });
-    return { task, commits: linked.slice(0, 6) };
+    return { task, commits: linked.slice(0, 8) };
   }).filter((e) => e.commits.length > 0);
 
   if (!taskEntries.length) return [];
@@ -315,7 +326,8 @@ async function estimateTasksProgress(store) {
     `任务 ${task.id}：${task.title}`,
     `验收：${task.acceptance || '未定'}`,
     `当前进度：${task.progress || 0}%`,
-    `关联提交：\n${commits.map((c) => `  - ${c.title || c.id}`).join('\n')}`
+    `认领人：${[...( taskOwners.get(task.id) || [])].join('、') || task.owner || '未知'}`,
+    `关联提交：\n${commits.map((c) => `  - [${c.owner || c.actor || '?'}] ${c.title || c.id}`).join('\n')}`
   ].join('\n')).join('\n---\n');
 
   const raw = await callClaude(AI_PROGRESS_SYSTEM, userPrompt);
