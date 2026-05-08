@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 // 懒读取：ES module import 先于 .env 加载执行，所以不能在模块顶层取值
-function getModel() { return process.env.CLAUDE_MODEL || 'claude-sonnet-4-5'; }
+function getModel() { return process.env.CLAUDE_MODEL || 'claude-sonnet-4-6'; }
 let _client = null;
 
 function getClient() {
