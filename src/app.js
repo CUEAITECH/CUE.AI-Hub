@@ -1255,13 +1255,13 @@ function renderAssignments() {
   setOptions('#assignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
   setOptions('#assignmentTask', focusedTasks.length ? focusedTasks : activeTasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
 
-  // 今日已认领的任务 ID 集合（进行中，非已完成）
-  const claimedActiveTaskIds = new Set(
-    todayAssignments.filter((a) => a.status !== '已完成').map((a) => a.taskId)
-  );
-
   // 近期认领情况（今天 + 昨天未完成的延续）
   const recentAssignments = getRecentAssignments();
+
+  // 已认领且进行中的任务 ID 集合（含昨日延续），用于从建议池中排除
+  const claimedActiveTaskIds = new Set(
+    recentAssignments.filter((a) => a.status !== '已完成').map((a) => a.taskId)
+  );
   const activeAssignments = recentAssignments.filter((a) => a.status !== '已完成');
   const completedTodayAssignments = recentAssignments.filter((a) => a.date === today && a.status === '已完成');
   // 18:00 后隐藏已完成区域
