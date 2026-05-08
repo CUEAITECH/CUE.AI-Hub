@@ -1188,11 +1188,27 @@ function renderTaskDetail() {
 async function regenerateBrief(assignmentId) {
   const btn = document.querySelector(`.brief-retry-btn[data-assignment-id="${CSS.escape(assignmentId)}"]`);
   if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
-  const payload = await api(`/api/assignments/${encodeURIComponent(assignmentId)}/brief`, { method: 'POST' });
-  state.assignments = payload.assignments || state.assignments;
-  renderTaskDetail();
-  scheduleBriefPoll();
-  toast('细则重新生成中，稍候刷新…');
+  try {
+    await api(`/api/assignments/${encodeURIComponent(assignmentId)}/brief`, { method: 'POST' });
+    toast('细则生成中，最多等 20 秒…');
+    // 自行轮询，不走 scheduleBriefPoll 的年龄限制
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 4000));
+      const data = await api('/api/state');
+      state.assignments = data.assignments || state.assignments;
+      state.tasks = data.tasks || state.tasks;
+      const a = (state.assignments || []).find((x) => x.id === assignmentId);
+      if (a?.brief) {
+        renderTaskDetail();
+        toast('任务细则已生成 ✓');
+        return;
+      }
+    }
+    renderTaskDetail();
+    toast('生成超时，请稍后手动刷新页面');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '重新生成'; }
+  }
 }
 
 function renderAssignments() {
