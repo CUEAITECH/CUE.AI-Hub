@@ -1255,9 +1255,14 @@ function renderAssignments() {
   // 近期认领情况（今天 + 昨天未完成的延续）
   const recentAssignments = getRecentAssignments();
 
-  // 有近期认领记录的任务 ID 集合（非取消），从建议池排除（含已完成认领）
+  // Tab 1 排除集：近 3 天内有过非取消认领的任务（含已完成认领），防止任务次日重现
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+  const cutoffDate = threeDaysAgo.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
   const claimedActiveTaskIds = new Set(
-    recentAssignments.filter((a) => a.status !== '已取消').map((a) => a.taskId)
+    (state.assignments || [])
+      .filter((a) => a.date >= cutoffDate && a.status !== '已取消')
+      .map((a) => a.taskId)
   );
   const activeAssignments = recentAssignments.filter((a) => a.status !== '已完成');
   const completedTodayAssignments = recentAssignments.filter((a) => a.date === today && a.status === '已完成');
