@@ -1258,9 +1258,9 @@ function renderAssignments() {
   // 近期认领情况（今天 + 昨天未完成的延续）
   const recentAssignments = getRecentAssignments();
 
-  // 已认领且进行中的任务 ID 集合（含昨日延续），用于从建议池中排除
+  // 有近期认领记录的任务 ID 集合（非取消），从建议池排除（含已完成认领）
   const claimedActiveTaskIds = new Set(
-    recentAssignments.filter((a) => a.status !== '已完成').map((a) => a.taskId)
+    recentAssignments.filter((a) => a.status !== '已取消').map((a) => a.taskId)
   );
   const activeAssignments = recentAssignments.filter((a) => a.status !== '已完成');
   const completedTodayAssignments = recentAssignments.filter((a) => a.date === today && a.status === '已完成');
