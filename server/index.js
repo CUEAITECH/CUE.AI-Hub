@@ -57,6 +57,8 @@ import {
 } from './services/dailyBrief.js';
 import { buildHybridAnalysis } from './services/semanticLinker.js';
 import { generateAssignmentBrief } from './services/assignmentBrief.js';
+import { dispatchRoutes } from './routes/index.js';
+import { createSystemRoutes } from './routes/systemRoutes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -178,6 +180,23 @@ function formatList(items, formatter, emptyText, limit = 3) {
   if (!picked.length) return emptyText;
   return picked.map((item, index) => `${index + 1}. ${formatter(item)}`).join('\n');
 }
+
+const routeModules = [
+  createSystemRoutes({
+    loadStore,
+    scanRisks,
+    normalizeStageName,
+    buildMetrics,
+    buildStageChecklist,
+    buildOpenApiSpec,
+    sendJson,
+    port,
+    cueApiKey,
+    isWeComAvailable,
+    meetingHour,
+    hubUrl
+  })
+];
 
 function buildWeComProjectSummary(store, alerts) {
   const metrics = buildMetrics(store, alerts);
@@ -761,24 +780,7 @@ function githubSyncErrorHint(project, err) {
 }
 
 async function handleApi(req, res, url) {
-  if (req.method === 'GET' && url.pathname === '/api/health') {
-    sendJson(res, 200, { ok: true, name: 'CUE Project Hub', time: new Date().toISOString() });
-    return true;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/state') {
-    const store = await loadStore();
-    const alerts = scanRisks(store);
-    const currentStage = normalizeStageName(store.currentStage || {});
-    sendJson(res, 200, {
-      ...store,
-      currentStage,
-      alerts,
-      metrics: buildMetrics(store, alerts),
-      stageChecklist: buildStageChecklist({ ...store, currentStage })
-    });
-    return true;
-  }
+  if (await dispatchRoutes(routeModules, req, res, url)) return true;
 
   if (req.method === 'GET' && url.pathname === '/api/stage/checklist') {
     const store = await loadStore();
@@ -825,28 +827,6 @@ async function handleApi(req, res, url) {
       alerts,
       stageChecklist: buildStageChecklist(nextStore)
     });
-    return true;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/tasks') {
-    const store = await loadStore();
-    const status = url.searchParams.get('status');
-    const tasks = status ? store.tasks.filter((t) => t.status === status) : store.tasks;
-    sendJson(res, 200, { tasks });
-    return true;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/members') {
-    const store = await loadStore();
-    sendJson(res, 200, { members: store.members });
-    return true;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/openapi.json') {
-    const proto = req.headers['x-forwarded-proto'] || 'http';
-    const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${port}`;
-    const serverUrl = `${proto}://${host}`;
-    sendJson(res, 200, buildOpenApiSpec(serverUrl));
     return true;
   }
 
@@ -2073,19 +2053,6 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     if (progress >= 0 && progress <= 100) parts.push(`进度 → ${newProgress}%`);
     if (status) parts.push(`状态 → ${newStatus}`);
     sendJson(res, 200, { result: `✅ 已更新「${task.title}」：${parts.join('，')}` });
-    return true;
-  }
-
-  // GET /api/config — 返回前端需要的功能开关（不含密钥）
-  if (req.method === 'GET' && url.pathname === '/api/config') {
-    sendJson(res, 200, {
-      githubEnabled: Boolean(process.env.GITHUB_TOKEN),
-      apiKeyRequiredForWrites: Boolean(cueApiKey),
-      wecomEnabled: isWeComAvailable(),
-      llmEnabled: Boolean(process.env.ANTHROPIC_API_KEY),
-      meetingHour,
-      hubUrl
-    });
     return true;
   }
 
