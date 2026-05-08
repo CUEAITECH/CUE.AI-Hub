@@ -14,6 +14,10 @@ const checks = [
     validate: (json) => Array.isArray(json?.tasks) && json?.metrics && json?.stageChecklist
   },
   {
+    path: '/api/stage/checklist',
+    validate: (json) => Array.isArray(json?.nodes) || Array.isArray(json?.checklist)
+  },
+  {
     path: '/api/tasks',
     validate: (json) => Array.isArray(json?.tasks)
   },
@@ -44,6 +48,10 @@ const checks = [
   {
     path: '/api/reviews/queue',
     validate: (json) => Array.isArray(json?.queue)
+  },
+  {
+    path: '/api/plan-adjustments',
+    validate: (json) => Array.isArray(json?.adjustments)
   }
 ];
 

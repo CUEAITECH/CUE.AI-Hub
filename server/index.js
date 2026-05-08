@@ -66,6 +66,7 @@ import { createTaskRoutes } from './routes/taskRoutes.js';
 import { createReviewRoutes } from './routes/reviewRoutes.js';
 import { createStandupRoutes } from './routes/standupRoutes.js';
 import { createReportRoutes } from './routes/reportRoutes.js';
+import { createPlanningRoutes } from './routes/planningRoutes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -178,6 +179,21 @@ const routeModules = [
     isWeComAvailable,
     meetingHour,
     hubUrl
+  }),
+  createPlanningRoutes({
+    loadStore,
+    saveStore,
+    updateStore,
+    readBody,
+    sendJson,
+    sendError,
+    buildStageChecklist,
+    buildHybridAnalysis,
+    scanRisks,
+    buildMetrics,
+    generatePlanAlternatives,
+    normalizePlanStageUpdate,
+    applyPlanAdjustmentToStage
   }),
   createProjectRoutes({
     createId,
@@ -774,62 +790,6 @@ function githubSyncErrorHint(project, err) {
 async function handleApi(req, res, url) {
   if (await dispatchRoutes(routeModules, req, res, url)) return true;
 
-  if (req.method === 'GET' && url.pathname === '/api/stage/checklist') {
-    const store = await loadStore();
-    sendJson(res, 200, buildStageChecklist(store));
-    return true;
-  }
-
-  // 手动覆盖路径图节点状态（文档已完成但 hub 无证据时使用）
-  if (req.method === 'PATCH' && url.pathname.startsWith('/api/stage/checklist/')) {
-    const nodeId = decodeURIComponent(url.pathname.slice('/api/stage/checklist/'.length));
-    const { json } = await readBody(req);
-    const status = json?.status;
-    if (!status) { sendError(res, 400, 'status required'); return true; }
-    const next = await updateStore((draft) => {
-      if (!draft.checklistOverrides) draft.checklistOverrides = {};
-      if (status === 'reset') {
-        delete draft.checklistOverrides[nodeId];
-      } else {
-        draft.checklistOverrides[nodeId] = { status, by: json.by || '手动', at: new Date().toISOString() };
-      }
-      return draft;
-    });
-    sendJson(res, 200, buildStageChecklist(next));
-    return true;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/ai/refresh-analysis') {
-    const store = await loadStore();
-    const analysis = await buildHybridAnalysis(store);
-    const nextStore = await updateStore((draft) => ({
-      ...draft,
-      semanticLinks: analysis.semanticLinks || {},
-      riskAnalyses: analysis.riskAnalyses || [],
-      healthAnalysis: analysis.healthAnalysis || null,
-      aiAnalysisUpdatedAt: analysis.generatedAt
-    }));
-    const alerts = scanRisks(nextStore);
-    sendJson(res, 200, {
-      semanticLinks: nextStore.semanticLinks,
-      riskAnalyses: nextStore.riskAnalyses,
-      healthAnalysis: nextStore.healthAnalysis,
-      aiAnalysisUpdatedAt: nextStore.aiAnalysisUpdatedAt,
-      metrics: buildMetrics(nextStore, alerts),
-      alerts,
-      stageChecklist: buildStageChecklist(nextStore)
-    });
-    return true;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/risks/scan') {
-    const store = await loadStore();
-    const alerts = scanRisks(store);
-    const nextStore = await saveStore({ ...store, alerts });
-    sendJson(res, 200, { alerts, metrics: buildMetrics(nextStore, alerts) });
-    return true;
-  }
-
   if (req.method === 'POST' && url.pathname === '/api/webhooks/github') {
     const { raw, json } = await readBody(req);
     if (!json) {
@@ -883,77 +843,6 @@ async function handleApi(req, res, url) {
       reviews,
       metrics: buildMetrics(nextStore, scanRisks(nextStore))
     });
-    return true;
-  }
-
-  // ─── 计划调整建议 ─────────────────────────────────────────────────────────────
-
-  // GET /api/plan-adjustments — 获取最近计划调整建议列表（最多20条）
-  if (req.method === 'GET' && url.pathname === '/api/plan-adjustments') {
-    const store = await loadStore();
-    const adjustments = (store.planAdjustments || []).slice(0, 20);
-    sendJson(res, 200, { adjustments });
-    return true;
-  }
-
-  // POST /api/plan-adjustments/:id/alternatives — 懒加载备选方案
-  if (req.method === 'POST' && url.pathname.startsWith('/api/plan-adjustments/') && url.pathname.endsWith('/alternatives')) {
-    const id = decodeURIComponent(url.pathname.split('/')[3] || '');
-    const store = await loadStore();
-    const item = (store.planAdjustments || []).find((a) => a.id === id);
-    if (!item) { sendError(res, 404, 'not found'); return true; }
-    if (item.alternatives?.length) {
-      sendJson(res, 200, { alternatives: item.alternatives });
-      return true;
-    }
-    const alternatives = await generatePlanAlternatives(item);
-    await updateStore((draft) => {
-      const idx = (draft.planAdjustments || []).findIndex((a) => a.id === id);
-      if (idx >= 0) draft.planAdjustments[idx].alternatives = alternatives;
-      return draft;
-    });
-    sendJson(res, 200, { alternatives });
-    return true;
-  }
-
-  // POST /api/plan-adjustments/:id/decision — 人工审批大的开发计划调整
-  if (req.method === 'POST' && url.pathname.startsWith('/api/plan-adjustments/') && url.pathname.endsWith('/decision')) {
-    const id = decodeURIComponent(url.pathname.split('/')[3] || '');
-    const { json } = await readBody(req);
-    const decision = String(json?.decision || '').trim();
-    if (!['approved', 'rejected'].includes(decision)) {
-      sendError(res, 400, 'decision must be approved or rejected');
-      return true;
-    }
-    const decidedAt = new Date().toISOString();
-    const nextStore = await updateStore((draft) => {
-      const index = (draft.planAdjustments || []).findIndex((item) => item.id === id);
-      if (index < 0) return draft;
-      // 若传入 selectedAlternative，用其 stageUpdate 覆盖主方案
-      const base = draft.planAdjustments[index];
-      const alt = json?.selectedAlternative;
-      const nextAdjustment = {
-        ...base,
-        status: decision,
-        decidedAt,
-        decisionNote: String(json?.note || '').trim(),
-        selectedAlternativeTitle: alt?.title || null,
-        stageUpdate: (decision === 'approved' && alt?.stageUpdate) ? normalizePlanStageUpdate(alt.stageUpdate, 'major') : base.stageUpdate,
-        appliedAt: decision === 'approved' && (alt?.stageUpdate || base.stageUpdate) ? decidedAt : base.appliedAt
-      };
-      let nextDraft = draft;
-      if (decision === 'approved') {
-        nextDraft = applyPlanAdjustmentToStage(draft, nextAdjustment);
-      }
-      nextDraft.planAdjustments[index] = nextAdjustment;
-      return nextDraft;
-    });
-    const adjustment = (nextStore.planAdjustments || []).find((item) => item.id === id);
-    if (!adjustment) {
-      sendError(res, 404, 'plan adjustment not found');
-      return true;
-    }
-    sendJson(res, 200, { adjustment, adjustments: nextStore.planAdjustments || [] });
     return true;
   }
 
