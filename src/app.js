@@ -1236,15 +1236,29 @@ async function regenerateBrief(assignmentId) {
   }
 }
 
+function switchAssignTab(tabName) {
+  document.querySelectorAll('.assign-tab-btn').forEach((btn) => {
+    const active = btn.dataset.tab === tabName;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('.assign-tab-panel').forEach((panel) => {
+    panel.classList.toggle('active', panel.id === `tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+  });
+}
+
 function renderAssignments() {
   const today = getTodayText();
   const todayAssignments = getTodayAssignments();
-  const dateEl = document.querySelector('#assignmentDate');
-  if (dateEl) dateEl.textContent = today;
   const activeTasks = getAssignableTaskPool();
   const focusedTasks = getFocusedAssignmentTasks(10);
   setOptions('#assignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
   setOptions('#assignmentTask', focusedTasks.length ? focusedTasks : activeTasks, (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
+
+  // 今日已认领的任务 ID 集合（进行中，非已完成）
+  const claimedActiveTaskIds = new Set(
+    todayAssignments.filter((a) => a.status !== '已完成').map((a) => a.taskId)
+  );
 
   // 近期认领情况（今天 + 昨天未完成的延续）
   const recentAssignments = getRecentAssignments();
@@ -1288,6 +1302,10 @@ function renderAssignments() {
     `).join('');
   }
 
+  // 更新 Tab 2 徽章数
+  const badgeEl = document.querySelector('#assignClaimedCount');
+  if (badgeEl) badgeEl.textContent = activeAssignments.length || '';
+
   const summaryEl = document.querySelector('#assignmentSummary');
   if (summaryEl) {
     if (!activeAssignments.length && !completedTodayAssignments.length) {
@@ -1318,19 +1336,19 @@ function renderAssignments() {
     }
   }
 
-  // 可认领任务列表
+  // 可认领任务列表（已被今日进行中认领的任务移至 Tab 2，此处不显示）
   const assignableEl = document.querySelector('#assignableList');
   if (assignableEl) {
-    if (!activeTasks.length) {
-      assignableEl.innerHTML = '<div class="empty-state">暂无进行中的任务。</div>';
+    const suggestTasks = focusedTasks.filter((task) => !claimedActiveTaskIds.has(task.id));
+    if (!suggestTasks.length) {
+      assignableEl.innerHTML = '<div class="empty-state">今日建议任务已全部认领，在「已认领 / 未完成」查看进度。</div>';
     } else {
-      // 统计每个任务已有哪些人认领
       assignableEl.innerHTML = `
         <div class="assignment-focus-note">
-          <strong>可认领任务</strong>
-          <span>共 ${activeTasks.length} 个进行中任务，展示前 ${focusedTasks.length} 个，打回修复优先置顶。</span>
+          <strong>建议优先认领</strong>
+          <span>共 ${activeTasks.length} 个进行中任务，展示得分最高的 ${suggestTasks.length} 个。</span>
         </div>
-        ${focusedTasks.map((task) => {
+        ${suggestTasks.map((task) => {
         const claimants = todayAssignments.filter((a) => a.taskId === task.id);
         const claimedOwners = new Set(claimants.map((a) => a.owner));
         return `
@@ -1365,7 +1383,9 @@ function renderAssignments() {
           btn.disabled = true;
           btn.classList.add('claimed');
           btn.textContent = `${btn.dataset.owner} ✓`;
-          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, btn.dataset.owner).catch((e) => {
+          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, btn.dataset.owner).then(() => {
+            switchAssignTab('claimed');
+          }).catch((e) => {
             // 失败时回滚按钮状态
             btn.disabled = false;
             btn.classList.remove('claimed');
@@ -2481,7 +2501,11 @@ function bindEvents() {
     btn.addEventListener('click', () => setReportTab(btn.dataset.reportTab));
   });
 
-  // 分工页
+  // 分工页 — tab 切换
+  document.querySelectorAll('.assign-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => switchAssignTab(btn.dataset.tab));
+  });
+
   document.querySelector('[data-action="refresh-assignments"]').addEventListener('click', () => {
     refreshAssignments().catch((e) => toast(e.message));
   });

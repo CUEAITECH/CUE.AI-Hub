@@ -538,24 +538,25 @@
               </div>
             </div>
 
-            <div class="assignment-layout">
-              <!-- 左：可认领任务列表 -->
-              <div class="assignment-tasks">
-                <h3>今日建议任务 <small>默认只展示最该推进的一组任务</small></h3>
-                <div id="assignableList" class="assignable-list"></div>
+            <div class="assign-tab-wrap">
+              <div class="assign-tab-bar" role="tablist">
+                <button class="assign-tab-btn active" data-tab="suggest" role="tab" aria-selected="true">今日建议任务</button>
+                <button class="assign-tab-btn" data-tab="claimed" role="tab" aria-selected="false">已认领 / 未完成 <span id="assignClaimedCount" class="assign-tab-badge"></span></button>
               </div>
 
-              <!-- 右：今日认领情况 + 计划调整 -->
-              <div class="assignment-sidebar">
-                <div class="assignment-summary-wrap">
-                  <h3>今日认领情况 <span id="assignmentDate"></span></h3>
+              <div class="assign-tab-panels">
+                <div class="assign-tab-panel active" id="tabSuggest" role="tabpanel">
+                  <div id="assignableList" class="assignable-list"></div>
+                </div>
+                <div class="assign-tab-panel" id="tabClaimed" role="tabpanel">
                   <div id="assignmentSummary" class="assignment-summary"></div>
                 </div>
-                <div class="plan-adjust-wrap">
-                  <h3>AI 计划调整建议</h3>
-                  <div id="planAdjustList" class="plan-adjust-list"></div>
-                </div>
               </div>
+
+              <details class="plan-adjust-collapse">
+                <summary>AI 计划调整建议</summary>
+                <div id="planAdjustList" class="plan-adjust-list"></div>
+              </details>
             </div>
           </section>
         </section>
