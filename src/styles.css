@@ -2838,24 +2838,82 @@ select:focus {
   background: #2b2b2b;
 }
 
-.assignment-layout {
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 20px;
-  margin-top: 20px;
-  align-items: start;
+/* Assignment tab layout */
+.assign-tab-wrap { margin-top: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+.assign-tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0;
 }
-.assignment-tasks h3,
-.assignment-sidebar h3 {
+.assign-tab-btn {
+  position: relative;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 8px 18px;
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);
-  margin: 0 0 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.assign-tab-btn:hover { color: var(--text); }
+.assign-tab-btn.active { color: var(--text); border-bottom-color: var(--blue); }
+.assign-tab-badge {
+  background: var(--blue);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.assign-tab-badge:empty { display: none; }
+
+.assign-tab-panels { min-height: 200px; }
+.assign-tab-panel { display: none; }
+.assign-tab-panel.active { display: block; }
+
+/* Tab 2: 已认领/未完成 — full width, slightly more spacious */
+#tabClaimed .assignment-summary { max-width: 100%; }
+#tabClaimed .assign-group { max-width: 700px; }
+
+/* AI 计划调整建议 — collapsed at bottom */
+.plan-adjust-collapse {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 0;
+  overflow: hidden;
+}
+.plan-adjust-collapse summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.assignment-tasks h3 small { font-size: 11px; color: var(--dim); font-weight: 400; text-transform: none; }
-.assignment-sidebar { display: flex; flex-direction: column; gap: 20px; }
+.plan-adjust-collapse summary::-webkit-details-marker { display: none; }
+.plan-adjust-collapse summary::before { content: '▸'; font-size: 10px; transition: transform 0.15s; }
+.plan-adjust-collapse[open] summary::before { content: '▾'; }
+.plan-adjust-collapse .plan-adjust-list { padding: 0 16px 16px; }
 
 /* 可认领任务行 */
 .assignable-list { display: flex; flex-direction: column; gap: 8px; }
@@ -2910,13 +2968,6 @@ select:focus {
 .claim-btn:hover { background: #2b2b2b; }
 
 /* 认领情况 */
-.assignment-summary-wrap,
-.plan-adjust-wrap {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px;
-}
 .assign-group { margin-bottom: 12px; }
 .assign-owner { display: block; font-size: 13px; color: var(--text); margin-bottom: 6px; }
 .assign-item {
@@ -3106,7 +3157,6 @@ details[open] .assign-completed-toggle::before { content: '▾'; }
 .review-suggestion { font-size: 12px; color: #8899aa; margin: 4px 0 0; font-style: italic; }
 
 @media (max-width: 960px) {
-  .assignment-layout { grid-template-columns: 1fr; }
   .assignment-claim-bar { grid-template-columns: 1fr; }
   .stage-checklist-grid { grid-template-columns: 1fr; }
   .roadmap-summary,
