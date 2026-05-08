@@ -1079,7 +1079,7 @@ function renderBriefBlock(brief, hasAssignment, assignmentDone = false, assignme
     if (briefAge > 30_000) {
       return `<div class=”brief-failed”>
         <span>细则生成失败</span>
-        ${assignmentId ? `<button data-action=”brief-retry” data-assignment-id=”${escapeHtml(assignmentId)}” style=”font-size:12px;padding:3px 10px;border-radius:4px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;”>重新生成</button>` : ''}
+        ${assignmentId ? `<button onclick=”window.__briefRetry('${escapeHtml(assignmentId)}')” style=”font-size:12px;padding:3px 10px;border-radius:4px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;”>重新生成</button>` : ''}
       </div>`;
     }
     return '<div class=”brief-generating”><span class=”brief-spinner”></span>任务细则生成中，稍等片刻后刷新页面…</div>';
@@ -2333,17 +2333,15 @@ function bindEvents() {
     button.addEventListener('click', () => setRoute(button.dataset.route));
   });
 
-  // 事件委托：重新生成细则按钮（动态渲染，不能在 renderTaskDetail 里绑定）
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action="brief-retry"]');
-    if (!btn) return;
-    console.log('[Brief] Step 1 ✅ 按钮点击捕获，assignmentId =', btn.dataset.assignmentId);
-    toast(`[1/5] 按钮点击已捕获`);
-    regenerateBrief(btn.dataset.assignmentId).catch((err) => {
+  // 挂到 window，供动态渲染的 onclick 内联调用
+  window.__briefRetry = (assignmentId) => {
+    console.log('[Brief] Step 1 ✅ onclick 触发，assignmentId =', assignmentId);
+    toast('[1/5] 按钮点击已捕获');
+    regenerateBrief(assignmentId).catch((err) => {
       console.error('[Brief] ❌ 异常:', err);
       toast(`❌ ${err.message}`);
     });
-  });
+  };
 
   // 顶级导航组按钮点击：切换子菜单展开（不含总览）
   document.querySelectorAll('.nav-menu .nav-primary').forEach((btn) => {
