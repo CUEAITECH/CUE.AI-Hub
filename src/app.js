@@ -1071,18 +1071,18 @@ function renderAssignmentBrief(brief) {
 function renderBriefBlock(brief, hasAssignment, assignmentDone = false, assignmentId = null, briefAge = 0) {
   if (!brief) {
     if (!hasAssignment) {
-      return '<div class=”empty-state”>还没有认领记录，在分工领取页点击名字认领后自动生成。</div>';
+      return '<div class="empty-state">还没有认领记录，在分工领取页点击名字认领后自动生成。</div>';
     }
     if (assignmentDone) {
-      return '<div class=”empty-state”>任务已完成，细则未留存（认领时生成失败或为历史记录）。</div>';
+      return '<div class="empty-state">任务已完成，细则未留存（认领时生成失败或为历史记录）。</div>';
     }
     if (briefAge > 30_000) {
-      return `<div class=”brief-failed”>
+      return `<div class="brief-failed">
         <span>细则生成失败</span>
-        ${assignmentId ? `<button onclick=”window.__briefRetry('${escapeHtml(assignmentId)}')” style=”font-size:12px;padding:3px 10px;border-radius:4px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;”>重新生成</button>` : ''}
+        ${assignmentId ? `<button onclick="window.__briefRetry('${escapeHtml(assignmentId)}')" style="font-size:12px;padding:3px 10px;border-radius:4px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;">重新生成</button>` : ''}
       </div>`;
     }
-    return '<div class=”brief-generating”><span class=”brief-spinner”></span>任务细则生成中，稍等片刻后刷新页面…</div>';
+    return '<div class="brief-generating"><span class="brief-spinner"></span>任务细则生成中，稍等片刻后刷新页面…</div>';
   }
   const list = (items, ordered = false) => {
     const tag = ordered ? 'ol' : 'ul';
