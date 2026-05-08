@@ -2999,6 +2999,42 @@ select:focus {
 .assign-done-btn:hover { color: var(--green); border-color: var(--green); }
 .assign-cancel-btn:hover { color: var(--red); border-color: var(--red); }
 
+.assign-progress-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(15, 98, 254, 0.08);
+  color: var(--blue);
+  flex-shrink: 0;
+}
+.assign-ai-hint {
+  width: 100%;
+  font-size: 11px;
+  color: var(--cyan);
+  background: rgba(8, 127, 111, 0.06);
+  border-left: 2px solid var(--cyan);
+  padding: 3px 7px;
+  border-radius: 0 3px 3px 0;
+  margin: 3px 0;
+  line-height: 1.5;
+}
+.assign-ai-done-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--cyan);
+  background: rgba(8, 127, 111, 0.08);
+  color: var(--cyan);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.assign-ai-done-btn:hover {
+  background: var(--cyan);
+  color: #fff;
+}
+
 .assign-completed-section {
   margin-top: 12px;
   border-top: 1px solid var(--line);

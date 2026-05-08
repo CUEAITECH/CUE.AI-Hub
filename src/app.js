@@ -1197,19 +1197,26 @@ function renderAssignments() {
     return Object.entries(byOwner).map(([owner, items]) => `
       <div class="assign-group">
         <strong class="assign-owner">${escapeHtml(owner)}</strong>
-        ${items.map((a) => `
+        ${items.map((a) => {
+          const linkedTask = (state.tasks || []).find((t) => t.id === a.taskId);
+          const aiSug = linkedTask?.aiProgressSuggestion;
+          const showAiSuggest = showDoneBtn && a.status !== '已完成' && aiSug?.suggestComplete;
+          return `
           <div class="assign-item assign-${escapeHtml(a.status || '进行中')}">
             <span class="assign-title">${escapeHtml(a.taskTitle || '未知任务')}</span>
             <span class="assign-status-badge">${escapeHtml(a.status || '进行中')}</span>
+            ${linkedTask ? `<span class="assign-progress-badge">${linkedTask.progress || 0}%</span>` : ''}
             ${a.date !== today ? `<span class="assign-carryover-badge">续 ${a.date}</span>` : ''}
             ${a.note ? `<small class="assign-note">${escapeHtml(a.note)}</small>` : ''}
+            ${showAiSuggest ? `<div class="assign-ai-hint">🤖 AI 判断完成度 ${aiSug.progress}%：${escapeHtml(aiSug.reason)}</div>` : ''}
             ${renderAssignmentBrief(a.brief)}
             <div class="assign-actions">
-              ${showDoneBtn && a.status !== '已完成' ? `<button class="assign-done-btn" data-assign-id="${escapeHtml(a.id)}" title="标记完成">✓</button>` : ''}
+              ${showDoneBtn && a.status !== '已完成' && !showAiSuggest ? `<button class="assign-done-btn" data-assign-id="${escapeHtml(a.id)}" title="标记完成">✓</button>` : ''}
+              ${showAiSuggest ? `<button class="assign-ai-done-btn" data-assign-id="${escapeHtml(a.id)}" title="确认 AI 建议：标记完成">✓ 确认完成</button>` : ''}
               <button class="assign-cancel-btn" data-assign-id="${escapeHtml(a.id)}" title="取消认领">✕</button>
             </div>
-          </div>
-        `).join('')}
+          </div>`;
+        }).join('')}
       </div>
     `).join('');
   }
@@ -1233,6 +1240,9 @@ function renderAssignments() {
       summaryEl.innerHTML = activeHtml + completedHtml;
 
       summaryEl.querySelectorAll('.assign-done-btn').forEach((btn) => {
+        btn.addEventListener('click', () => markAssignmentDone(btn.dataset.assignId).catch((e) => toast(e.message)));
+      });
+      summaryEl.querySelectorAll('.assign-ai-done-btn').forEach((btn) => {
         btn.addEventListener('click', () => markAssignmentDone(btn.dataset.assignId).catch((e) => toast(e.message)));
       });
       summaryEl.querySelectorAll('.assign-cancel-btn').forEach((btn) => {
@@ -1914,6 +1924,20 @@ async function refreshAssignments() {
   toast('分工数据已刷新');
 }
 
+async function scanAiProgress() {
+  const btn = document.querySelector('[data-action="ai-progress-scan"]');
+  if (btn) { btn.disabled = true; btn.textContent = '分析中…'; }
+  try {
+    const payload = await api('/api/tasks/ai-progress', { method: 'POST' });
+    state.tasks = payload.tasks || state.tasks;
+    renderAll();
+    const count = (payload.suggestions || []).length;
+    toast(payload.message || (count ? `AI 分析完成，${count} 个任务建议标记完成` : 'AI 分析完成，进度已更新'));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'AI 分析进度'; }
+  }
+}
+
 // ── 晚报 ─────────────────────────────────────────────────────────
 
 async function generateEveningReport() {
@@ -2378,6 +2402,9 @@ function bindEvents() {
   // 分工页
   document.querySelector('[data-action="refresh-assignments"]').addEventListener('click', () => {
     refreshAssignments().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="ai-progress-scan"]').addEventListener('click', () => {
+    scanAiProgress().catch((e) => toast(e.message));
   });
   document.querySelector('[data-action="back-to-assignment"]')?.addEventListener('click', () => {
     setRoute('assignment');
