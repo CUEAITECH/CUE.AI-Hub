@@ -1182,26 +1182,43 @@ function renderTaskDetail() {
 }
 
 async function regenerateBrief(assignmentId) {
+  console.log('[Brief] Step 2 — assignmentId:', assignmentId);
+  if (!assignmentId || assignmentId === 'undefined') {
+    toast('❌ [2/5] assignmentId 为空，无法请求');
+    return;
+  }
+  toast('[2/5] assignmentId 确认: ' + assignmentId.slice(0, 16));
+
   const btn = document.querySelector(`[data-action="brief-retry"][data-assignment-id="${CSS.escape(assignmentId)}"]`);
   if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+
   try {
-    await api(`/api/assignments/${encodeURIComponent(assignmentId)}/brief`, { method: 'POST' });
-    toast('细则生成中，最多等 20 秒…');
-    // 自行轮询，不走 scheduleBriefPoll 的年龄限制
+    console.log('[Brief] Step 3 — 发起 API 请求...');
+    toast('[3/5] 发起 API 请求中...');
+    const payload = await api(`/api/assignments/${encodeURIComponent(assignmentId)}/brief`, { method: 'POST' });
+    console.log('[Brief] Step 3 ✅ API 响应:', payload?.message);
+    toast('[3/5] ✅ API 响应: ' + (payload?.message || 'ok'));
+
+    toast('[4/5] 开始轮询（最多 20 秒）...');
     for (let i = 0; i < 5; i++) {
       await new Promise((r) => setTimeout(r, 4000));
+      console.log(`[Brief] Step 4 — 第 ${i + 1} 次轮询...`);
       const data = await api('/api/state');
       state.assignments = data.assignments || state.assignments;
       state.tasks = data.tasks || state.tasks;
       const a = (state.assignments || []).find((x) => x.id === assignmentId);
+      console.log('[Brief] 轮询结果 brief:', a?.brief ? '有' : '无');
       if (a?.brief) {
         renderTaskDetail();
-        toast('任务细则已生成 ✓');
+        toast('[5/5] ✅ 任务细则已生成！');
         return;
       }
     }
     renderTaskDetail();
-    toast('生成超时，请稍后手动刷新页面');
+    toast('⚠️ [5/5] 生成超时，请手动刷新页面');
+  } catch (err) {
+    console.error('[Brief] ❌ 请求异常:', err);
+    throw err;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '重新生成'; }
   }
@@ -2320,7 +2337,12 @@ function bindEvents() {
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action="brief-retry"]');
     if (!btn) return;
-    regenerateBrief(btn.dataset.assignmentId).catch((err) => toast(err.message));
+    console.log('[Brief] Step 1 ✅ 按钮点击捕获，assignmentId =', btn.dataset.assignmentId);
+    toast(`[1/5] 按钮点击已捕获`);
+    regenerateBrief(btn.dataset.assignmentId).catch((err) => {
+      console.error('[Brief] ❌ 异常:', err);
+      toast(`❌ ${err.message}`);
+    });
   });
 
   // 顶级导航组按钮点击：切换子菜单展开（不含总览）
