@@ -247,7 +247,9 @@ export function normalizeAssignment(input, store) {
     status: input.status || '进行中',
     wecomStatus: input.wecomStatus || '待企业微信确认',
     createdAt: input.createdAt || now,
-    updatedAt: now
+    updatedAt: now,
+    brief: input.brief || null,
+    briefGeneratedBy: input.briefGeneratedBy || null
   };
 }
 
