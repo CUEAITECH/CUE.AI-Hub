@@ -18,6 +18,10 @@ const checks = [
     validate: (json) => Array.isArray(json?.tasks)
   },
   {
+    path: '/api/projects',
+    validate: (json) => Array.isArray(json?.projects)
+  },
+  {
     path: '/api/assignments',
     validate: (json) => Array.isArray(json?.assignments)
   },
