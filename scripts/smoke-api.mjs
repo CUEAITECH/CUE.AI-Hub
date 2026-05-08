@@ -26,6 +26,14 @@ const checks = [
     validate: (json) => Array.isArray(json?.assignments)
   },
   {
+    path: '/api/standups',
+    validate: (json) => Array.isArray(json?.standups)
+  },
+  {
+    path: '/api/reports/evening',
+    validate: (json) => Object.hasOwn(json || {}, 'date')
+  },
+  {
     path: '/api/wecom/tasks',
     validate: (json) => typeof json?.summary === 'string' && Array.isArray(json?.tasks)
   },

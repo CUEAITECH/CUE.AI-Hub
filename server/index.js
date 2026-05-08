@@ -64,6 +64,8 @@ import { createWeComRoutes } from './routes/wecomRoutes.js';
 import { createProjectRoutes } from './routes/projectRoutes.js';
 import { createTaskRoutes } from './routes/taskRoutes.js';
 import { createReviewRoutes } from './routes/reviewRoutes.js';
+import { createStandupRoutes } from './routes/standupRoutes.js';
+import { createReportRoutes } from './routes/reportRoutes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -153,10 +155,6 @@ function normalizeTask(input) {
     linkedRefs: Array.isArray(input.linkedRefs) ? input.linkedRefs : [],
     aiProgressSuggestion: input.aiProgressSuggestion || null
   };
-}
-
-function getDateParam(url) {
-  return url.searchParams.get('date') || todayText();
 }
 
 function addDaysText(dateText, days) {
@@ -253,6 +251,34 @@ const routeModules = [
     fetchCommitDetail,
     callClaude,
     parseJsonOutput
+  }),
+  createStandupRoutes({
+    loadStore,
+    updateStore,
+    readBody,
+    sendJson,
+    sendError,
+    normalizeStandup,
+    todayText,
+    callClaude,
+    isWeComAvailable,
+    sendWeComMarkdown
+  }),
+  createReportRoutes({
+    loadStore,
+    updateStore,
+    readBody,
+    sendJson,
+    buildMetrics,
+    scanRisks,
+    todayText,
+    callClaude,
+    isWeComAvailable,
+    pushReport,
+    sendWeComMarkdown,
+    buildMeetingSummaryWeComMsg,
+    generateEveningReport,
+    hubUrl
   })
 ];
 
@@ -796,84 +822,11 @@ async function handleApi(req, res, url) {
     return true;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/standups') {
-    const store = await loadStore();
-    const date = getDateParam(url);
-    sendJson(res, 200, {
-      date,
-      standups: (store.standups || []).filter((standup) => standup.date === date)
-    });
-    return true;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/standups') {
-    const { json } = await readBody(req);
-    const standup = normalizeStandup(json || {});
-    if (!standup.owner) {
-      sendError(res, 400, 'owner is required');
-      return true;
-    }
-
-    const nextStore = await updateStore((draft) => {
-      const existingIndex = (draft.standups || []).findIndex((item) => (
-        item.date === standup.date && item.owner === standup.owner
-      ));
-      if (existingIndex >= 0) {
-        draft.standups[existingIndex] = {
-          ...draft.standups[existingIndex],
-          ...standup,
-          id: draft.standups[existingIndex].id,
-          createdAt: draft.standups[existingIndex].createdAt
-        };
-      } else {
-        draft.standups = [standup, ...(draft.standups || [])].slice(0, 500);
-      }
-      return draft;
-    });
-    sendJson(res, 201, {
-      standup,
-      standups: (nextStore.standups || []).filter((item) => item.date === standup.date)
-    });
-    return true;
-  }
-
   if (req.method === 'POST' && url.pathname === '/api/risks/scan') {
     const store = await loadStore();
     const alerts = scanRisks(store);
     const nextStore = await saveStore({ ...store, alerts });
     sendJson(res, 200, { alerts, metrics: buildMetrics(nextStore, alerts) });
-    return true;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/reports/evening') {
-    const store = await loadStore();
-    const date = getDateParam(url);
-    const entry = (store.eveningReports || {})[date];
-    if (!entry) {
-      sendJson(res, 200, { date, report: null, error: '该日暂无晚报记录' });
-    } else {
-      sendJson(res, 200, { date, ...entry });
-    }
-    return true;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/reports/evening') {
-    const { json } = await readBody(req);
-    const date = json?.date || todayText();
-    // generateEveningReport 内部完成：规则引擎 + LLM + 快照持久化 + WeCom 推送
-    const finalEntry = await generateEveningReport(date);
-    // 重新读取已更新的 store 以返回最新 tasks/currentStage/alerts
-    const updatedStore = await loadStore();
-    const alerts = updatedStore.alerts || [];
-    sendJson(res, 201, {
-      date,
-      report: finalEntry,
-      wecomSent: isWeComAvailable(),
-      tasks: updatedStore.tasks,
-      currentStage: updatedStore.currentStage,
-      alerts,
-      metrics: buildMetrics(updatedStore, alerts)
-    });
     return true;
   }
 
@@ -930,185 +883,6 @@ async function handleApi(req, res, url) {
       reviews,
       metrics: buildMetrics(nextStore, scanRisks(nextStore))
     });
-    return true;
-  }
-
-  // GET /api/standups?date=YYYY-MM-DD — 获取某日站会记录
-  if (req.method === 'GET' && url.pathname === '/api/standups') {
-    const store = await loadStore();
-    const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
-    const standups = (store.standups || []).filter((s) => s.date === date);
-    sendJson(res, 200, { date, standups });
-    return true;
-  }
-
-  // POST /api/standups — 提交站会
-  if (req.method === 'POST' && url.pathname === '/api/standups') {
-    const { json } = await readBody(req);
-    if (!json?.owner) { sendError(res, 400, '缺少 owner 字段'); return true; }
-    const today = new Date().toISOString().slice(0, 10);
-    const standup = {
-      id: createId('standup'),
-      date: today,
-      owner: String(json.owner).trim(),
-      yesterday: String(json.yesterday || '').trim(),
-      today: String(json.today || '').trim(),
-      blockers: String(json.blockers || '').trim(),
-      isLeave: Boolean(json.isLeave),
-      proxy: String(json.proxy || '').trim(),
-      createdAt: new Date().toISOString()
-    };
-    const nextStore = await updateStore((store) => {
-      // 同一人同一天只保留最新一条
-      store.standups = (store.standups || []).filter(
-        (s) => !(s.owner === standup.owner && s.date === standup.date)
-      );
-      store.standups.unshift(standup);
-      store.standups = store.standups.slice(0, 500);
-      return store;
-    });
-    const todayStandups = (nextStore.standups || []).filter((s) => s.date === today);
-    sendJson(res, 201, { standup, count: todayStandups.length });
-    return true;
-  }
-
-  // POST /api/standups/summarize — LLM 汇总当日站会
-  if (req.method === 'POST' && url.pathname === '/api/standups/summarize') {
-    const store = await loadStore();
-    const today = new Date().toISOString().slice(0, 10);
-    const todayStandups = (store.standups || []).filter((s) => s.date === today);
-    if (!todayStandups.length) {
-      sendJson(res, 200, { date: today, summary: '今日暂无站会记录。', standups: [] });
-      return true;
-    }
-
-    const STANDUP_SYSTEM_PROMPT = `你是 CUE Project Hub 的异步站会 AI 主持人。
-根据团队成员提交的站会记录，生成一份简洁的中文日站总结，格式要求：
-1. 开头一句话概括整体状态（人数、阻塞数量）
-2. 按成员列出：昨日完成、今日计划、阻塞项（如有）
-3. 单独列出请假成员和交接人
-4. 末尾列出需要管理者关注的阻塞项（如有）
-输出纯文本 Markdown，不需要 JSON。`;
-
-    const userPrompt = `今天是 ${today}，以下是各成员的站会回复：\n\n${todayStandups.map((s) => `**${s.owner}**${s.isLeave ? '（请假，交接人：' + (s.proxy || '未指定') + '）' : ''}
-- 昨日：${s.yesterday || '未填写'}
-- 今日：${s.today || '未填写'}
-- 阻塞：${s.blockers || '无'}`).join('\n\n')}`;
-
-    const summary = await callClaude(STANDUP_SYSTEM_PROMPT, userPrompt) ||
-      todayStandups.map((s) => `${s.owner}：${s.today || '未填写今日计划'}`).join('；');
-
-    // 保存汇总到 store
-    await updateStore((draft) => {
-      draft.standupSummaries = draft.standupSummaries || {};
-      draft.standupSummaries[today] = { summary, generatedAt: new Date().toISOString() };
-      return draft;
-    });
-
-    // 推送到企业微信
-    if (isWeComAvailable()) {
-      await sendWeComMarkdown(`# 📋 ${today} 站会汇总\n\n${summary}`);
-    }
-
-    sendJson(res, 200, { date: today, summary, standups: todayStandups });
-    return true;
-  }
-
-  // POST /api/reports/daily — LLM 生成日报
-  if (req.method === 'POST' && url.pathname === '/api/reports/daily') {
-    const store = await loadStore();
-    const today = new Date().toISOString().slice(0, 10);
-    const alerts = scanRisks(store);
-    const metrics = buildMetrics(store, alerts);
-    const todayStandups = (store.standups || []).filter((s) => s.date === today);
-    const recentReviews = (store.reviews || []).slice(0, 10);
-    const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成');
-
-    const REPORT_SYSTEM_PROMPT = `你是 CUE Project Hub 的 AI 报告生成器，专为技术负责人和产品负责人生成简洁的研发日报。
-报告结构（Markdown 格式）：
-1. **今日交付概况**：健康度评分、核心指标（风险任务/待审阅/告警数）
-2. **任务进展**：列出进行中和高风险任务的状态
-3. **代码审阅摘要**：今日 Review 结论（阻断/警告数量）
-4. **站会要点**：团队动态、阻塞项（如有站会数据）
-5. **风险与行动项**：P1/P2 告警，建议行动
-报告要简洁专业，用中文，总长不超过 600 字。`;
-
-    const userPrompt = `生成 ${today} 的研发日报。
-
-数据如下：
-健康度：${metrics.healthScore ?? 0} 分
-高风险任务：${metrics.highRiskTasks ?? 0} 个
-待审阅：${metrics.pendingReviews ?? 0} 个
-紧急告警：${metrics.urgentAlerts ?? 0} 个
-
-进行中任务（前10条）：
-${activeTasks.slice(0, 10).map((t) => `- [${t.status}] ${t.title}（${t.owner}）进度 ${t.progress}% 风险:${t.risk}`).join('\n')}
-
-最近 AI Review：
-${recentReviews.map((r) => `- ${r.level} | ${r.title}（${r.owner}）分数:${r.score}`).join('\n')}
-
-今日站会（${todayStandups.length} 人回复）：
-${todayStandups.length ? todayStandups.map((s) => `- ${s.owner}：${s.blockers ? '⚠️ 阻塞：' + s.blockers : '无阻塞'}`).join('\n') : '暂无站会记录'}
-
-P1 告警：
-${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detail}`).join('\n') || '无'}`;
-
-    const report = await callClaude(REPORT_SYSTEM_PROMPT, userPrompt) ||
-      `# ${today} 研发日报\n\n健康度：${metrics.healthScore ?? 0} 分\n高风险任务：${metrics.highRiskTasks ?? 0} 个\n\n（LLM 生成失败，显示基础数据）`;
-
-    // 保存报告
-    await updateStore((draft) => {
-      draft.reports = draft.reports || {};
-      draft.reports[today] = { report, generatedAt: new Date().toISOString() };
-      return draft;
-    });
-
-    // 推送到企业微信
-    let wecomSent = false;
-    if (isWeComAvailable()) {
-      wecomSent = await pushReport(`# 📊 ${today} 研发日报\n\n${report}`);
-    }
-
-    sendJson(res, 200, { date: today, report, wecomSent });
-    return true;
-  }
-
-  // ─── 晚报分工 vs commits 对照总结 ─────────────────────────────────────────────
-
-  // GET /api/reports/compare?date=YYYY-MM-DD
-  if (req.method === 'GET' && url.pathname === '/api/reports/compare') {
-    const store = await loadStore();
-    const date = url.searchParams.get('date') || todayText();
-    const eveningEntry = (store.eveningReports || {})[date];
-    if (!eveningEntry) {
-      sendJson(res, 200, { date, error: '该日无晚报记录，请先生成晚报' });
-      return true;
-    }
-
-    // 使用晚报快照中的分工和提交记录，而非实时数据
-    const snapshotAssignments = eveningEntry.assignments || [];
-    const snapshotCommits = eveningEntry.commits || [];
-
-    const COMPARE_SYSTEM = `你是 CUE Project Hub 的对照分析 AI。根据当日晚报中记录的任务分工快照和实际 GitHub commit 记录，生成对照分析报告（Markdown）。
-对每个分工领取：判断是否有对应的 commit（通过提交者姓名匹配）。
-输出格式：
-1. **完成情况总览**：X 人领取，Y 人有 commit 支撑，Z 人无 commit 记录
-2. **逐条对照**：每个分工 → 完成 ✅ / 遗漏 ⚠️
-3. **结论**：需要跟进的成员和任务`;
-
-    const assignmentLines = snapshotAssignments.length
-      ? snapshotAssignments.map((a) => `- ${a.owner} 领取「${a.taskTitle}」状态:${a.status}`).join('\n')
-      : '无分工记录';
-    const commitLines = snapshotCommits.length
-      ? snapshotCommits.map((c) => `- ${c.owner || c.actor || '未知'}: ${c.title}`).join('\n')
-      : '无 commit 记录（晚报快照时刻）';
-
-    const comparison = await callClaude(
-      COMPARE_SYSTEM,
-      `${date} 晚报分工快照：\n${assignmentLines}\n\n快照时刻 commit 记录：\n${commitLines}`
-    ) || `# ${date} 对照分析\n\n分工：${snapshotAssignments.length} 条，提交：${snapshotCommits.length} 条\n\n（LLM 生成失败）`;
-
-    sendJson(res, 200, { date, comparison, assignments: snapshotAssignments, commits: snapshotCommits });
     return true;
   }
 
@@ -1180,86 +954,6 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
       return true;
     }
     sendJson(res, 200, { adjustment, adjustments: nextStore.planAdjustments || [] });
-    return true;
-  }
-
-  // ─── 晚会后总结 ───────────────────────────────────────────────────────────────
-
-  // POST /api/reports/meeting-summary — 晚会结束后手动触发，总结今日分工并推企微
-  if (req.method === 'POST' && url.pathname === '/api/reports/meeting-summary') {
-    const { json } = await readBody(req);
-    const date = json?.date || todayText();
-    const store = await loadStore();
-
-    const todayAssignments = (store.assignments || []).filter((a) => a.date === date);
-    const eveningEntry = (store.eveningReports || {})[date];
-    const nextTargets = eveningEntry?.nextTargets || [];
-
-    // LLM 生成会后总结（含分工+明日重点+待跟进，不超过 300 字，企微友好）
-    const SUMMARY_SYSTEM = `你是 CUE Project Hub 的晚会总结 AI。根据今日晚会的分工领取情况，生成简洁的会后总结。
-格式（纯 Markdown 列表，无表格，总长不超过 300 字）：
-## 今日分工
-- 成员名 → 「任务标题」
-（逐条列出，每人一行）
-## 明日重点
-（2-3 条最重要的技术目标）
-## 待跟进
-（有风险或未领取的，无则省略）
-要求：语言简洁，适合企业微信群消息。`;
-
-    const assignmentLines = todayAssignments.length
-      ? todayAssignments.map((a) => `- ${a.owner} → 「${a.taskTitle}」（${a.status}）`).join('\n')
-      : '今日暂无分工记录';
-    const targetLines = nextTargets.slice(0, 6)
-      .map((t) => `- ${t.priority} ${t.owner}：${t.taskTitle}`).join('\n') || '';
-
-    const summaryText = await callClaude(
-      SUMMARY_SYSTEM,
-      `${date} 晚会分工（共 ${todayAssignments.length} 条）：\n${assignmentLines}${
-        targetLines ? `\n\n晚报建议关注：\n${targetLines}` : ''
-      }`
-    );
-
-    // 存储会后总结
-    await updateStore((draft) => {
-      draft.reports = draft.reports || {};
-      draft.reports[date] = {
-        ...(draft.reports[date] || {}),
-        meetingSummary: summaryText || '',
-        meetingSummaryAt: new Date().toISOString()
-      };
-      return draft;
-    });
-
-    // 推送企微：使用 WeCom 格式化函数
-    let wecomSent = false;
-    if (isWeComAvailable()) {
-      const wecomMsg = buildMeetingSummaryWeComMsg(date, todayAssignments, summaryText || '', hubUrl);
-      wecomSent = await sendWeComMarkdown(wecomMsg).catch((err) => {
-        console.error('[WeCom] 会后总结推送失败:', err.message);
-        return false;
-      });
-    }
-
-    sendJson(res, 200, {
-      date,
-      summary: summaryText || '',
-      assignmentCount: todayAssignments.length,
-      wecomSent
-    });
-    return true;
-  }
-
-  // GET /api/reports/meeting-summary?date=YYYY-MM-DD — 获取指定日期会后总结
-  if (req.method === 'GET' && url.pathname === '/api/reports/meeting-summary') {
-    const store = await loadStore();
-    const date = url.searchParams.get('date') || todayText();
-    const dayReport = (store.reports || {})[date] || {};
-    sendJson(res, 200, {
-      date,
-      summary: dayReport.meetingSummary || null,
-      generatedAt: dayReport.meetingSummaryAt || null
-    });
     return true;
   }
 
