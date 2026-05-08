@@ -1068,12 +1068,15 @@ function renderAssignmentBrief(brief) {
   `;
 }
 
-function renderBriefBlock(brief, hasAssignment) {
+function renderBriefBlock(brief, hasAssignment, assignmentDone = false) {
   if (!brief) {
-    if (hasAssignment) {
-      return '<div class=”brief-generating”><span class=”brief-spinner”></span>任务细则生成中，稍等片刻后刷新页面…</div>';
+    if (!hasAssignment) {
+      return '<div class=”empty-state”>还没有认领记录，在分工领取页点击名字认领后自动生成。</div>';
     }
-    return '<div class=”empty-state”>还没有认领记录，在分工领取页点击名字认领后自动生成。</div>';
+    if (assignmentDone) {
+      return '<div class=”empty-state”>任务已完成，细则未留存（认领时生成失败或为历史记录）。</div>';
+    }
+    return '<div class=”brief-generating”><span class=”brief-spinner”></span>任务细则生成中，稍等片刻后刷新页面…</div>';
   }
   const list = (items, ordered = false) => {
     const tag = ordered ? 'ol' : 'ul';
@@ -1129,6 +1132,7 @@ function renderTaskDetail() {
   const latestAssignment = evidence.assignments[0] || null;
   const brief = latestAssignment?.brief || null;
   const hasAssignment = Boolean(latestAssignment);
+  const assignmentDone = latestAssignment?.status === '已完成' || task.status === '已完成';
   const progress = Number(task.progress) || 0;
   if (title) title.textContent = task.title;
   if (subtitle) {
@@ -1152,7 +1156,7 @@ function renderTaskDetail() {
 
     <article class="task-detail-card task-detail-main">
       <span>结构化任务规则</span>
-      ${renderBriefBlock(brief, hasAssignment)}
+      ${renderBriefBlock(brief, hasAssignment, assignmentDone)}
     </article>
 
     <article class="task-detail-card">
@@ -2238,7 +2242,9 @@ function scheduleBriefPoll() {
   if (!task) return;
   const evidence = getTaskEvidence(task);
   const latestAssignment = evidence.assignments[0] || null;
-  if (!latestAssignment || latestAssignment.brief) return; // 已有 brief，不轮询
+  // 无认领、已有 brief、已完成任务 → 不轮询
+  if (!latestAssignment || latestAssignment.brief) return;
+  if (latestAssignment.status === '已完成' || task.status === '已完成') return;
   _briefPollTimer = setTimeout(async () => {
     try {
       const data = await api('/api/state');
