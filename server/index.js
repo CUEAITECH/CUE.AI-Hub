@@ -786,6 +786,25 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  // 手动覆盖路径图节点状态（文档已完成但 hub 无证据时使用）
+  if (req.method === 'PATCH' && url.pathname.startsWith('/api/stage/checklist/')) {
+    const nodeId = decodeURIComponent(url.pathname.slice('/api/stage/checklist/'.length));
+    const { json } = await readBody(req);
+    const status = json?.status;
+    if (!status) { sendError(res, 400, 'status required'); return true; }
+    const next = await updateStore((draft) => {
+      if (!draft.checklistOverrides) draft.checklistOverrides = {};
+      if (status === 'reset') {
+        delete draft.checklistOverrides[nodeId];
+      } else {
+        draft.checklistOverrides[nodeId] = { status, by: json.by || '手动', at: new Date().toISOString() };
+      }
+      return draft;
+    });
+    sendJson(res, 200, buildStageChecklist(next));
+    return true;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/ai/refresh-analysis') {
     const store = await loadStore();
     const analysis = await buildHybridAnalysis(store);

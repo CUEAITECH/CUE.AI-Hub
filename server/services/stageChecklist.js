@@ -260,7 +260,22 @@ export function buildStageChecklist(store) {
   const activities = store.activities || [];
   const reviews = store.reviews || [];
   const assignments = store.assignments || [];
-  const checklist = checklistSource.map((item) => scoreChecklistItem(item, tasks, activities, reviews, assignments, store));
+  const overrides = store.checklistOverrides || {};
+  const checklist = checklistSource.map((item) => {
+    const scored = scoreChecklistItem(item, tasks, activities, reviews, assignments, store);
+    const ov = overrides[item.id];
+    if (!ov) return scored;
+    const ovProgress = ov.status === '已完成' ? 100 : scored.progress;
+    return {
+      ...scored,
+      status: ov.status,
+      progress: ovProgress,
+      gaps: ov.status === '已完成' ? [] : scored.gaps,
+      manualOverride: true,
+      overriddenBy: ov.by,
+      overriddenAt: ov.at
+    };
+  });
   const checklistProgress = checklist.length
     ? Math.round(checklist.reduce((sum, item) => sum + item.progress, 0) / checklist.length)
     : 0;

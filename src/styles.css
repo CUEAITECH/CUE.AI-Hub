@@ -3138,6 +3138,20 @@ details[open] .assign-completed-toggle::before { content: '▾'; }
   animation: suggest-pulse 1s ease-in-out 3;
 }
 
+.roadmap-override-section { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+.override-done-btn {
+  font-size: 12px; padding: 4px 10px; border-radius: 5px;
+  background: none; border: 1px solid var(--line); color: var(--muted);
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.override-done-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+.override-reset-btn {
+  font-size: 12px; padding: 4px 10px; border-radius: 5px;
+  background: none; border: 1px solid var(--line); color: var(--red);
+  cursor: pointer;
+}
+.override-badge { font-size: 11px; color: var(--cyan); background: rgba(8,127,111,0.08); border-radius: 4px; padding: 2px 7px; }
+
 .task-ai-progress-card { border-left: 3px solid var(--blue); }
 .task-ai-progress-card span small { font-size: 11px; color: var(--text-muted); margin-left: 8px; font-weight: 400; }
 .ai-progress-reason { margin: 6px 0 4px; font-size: 13px; color: var(--text); }
