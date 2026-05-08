@@ -45,6 +45,7 @@ function migrateStore(store) {
     planAdjustments: [],
     roadmapReviews: [],
     docTasks: {},
+    checklistOverrides: {},
     semanticLinks: {},
     riskAnalyses: [],
     healthAnalysis: null,

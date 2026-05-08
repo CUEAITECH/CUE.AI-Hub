@@ -447,6 +447,27 @@ function renderRoadmap() {
     laneEl.innerHTML = renderPhaseNodes(checklist.map((item, i) => ({ ...item, _globalIndex: i })));
   }
 
+  detailEl.onclick = async (e) => {
+    const doneBtn = e.target.closest('.override-done-btn');
+    const resetBtn = e.target.closest('.override-reset-btn');
+    const btn = doneBtn || resetBtn;
+    if (!btn) return;
+    const nodeId = btn.dataset.nodeId;
+    btn.disabled = true;
+    btn.textContent = '保存中…';
+    try {
+      const body = doneBtn ? { status: '已完成', by: '手动确认' } : { status: 'reset' };
+      const data = await api(`/api/stage/checklist/${encodeURIComponent(nodeId)}`, { method: 'PATCH', body: JSON.stringify(body) });
+      state.stageChecklist = data;
+      renderRoadmap();
+      toast(doneBtn ? '已标记为完成' : '已撤销覆盖');
+    } catch (err) {
+      toast(err.message);
+      btn.disabled = false;
+      btn.textContent = doneBtn ? '标记已完成（文档确认）' : '撤销覆盖';
+    }
+  };
+
   detailEl.innerHTML = checklist.map((item) => {
     const statusClass = roadmapStatusClass(item.status);
     const tasks = item.linkedTasks || [];
@@ -477,6 +498,13 @@ function renderRoadmap() {
           ${item.gaps?.length
             ? item.gaps.map((gap) => `<p>${escapeHtml(gap)}</p>`).join('')
             : '<p>证据链完整，继续推进验收。</p>'}
+        </div>
+        <div class="roadmap-detail-section roadmap-override-section">
+          ${item.manualOverride
+            ? `<span class="override-badge">手动标记：${escapeHtml(item.status)} · ${escapeHtml(item.overriddenBy || '')} ${item.overriddenAt ? new Date(item.overriddenAt).toLocaleDateString('zh-CN') : ''}</span>
+               <button class="override-reset-btn" data-node-id="${escapeHtml(item.id)}">撤销覆盖</button>`
+            : `<button class="override-done-btn" data-node-id="${escapeHtml(item.id)}">标记已完成（文档确认）</button>`
+          }
         </div>
       </article>
     `;
