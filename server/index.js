@@ -280,8 +280,8 @@ const AI_PROGRESS_SYSTEM = `你是任务进度评估助手。根据每个任务�
 - 部分功能实现，主干仍未完成 → 30-64
 - 少量相关提交，主体未开始 → 10-29
 
-输出格式：JSON 数组，每项：{"taskId":"task_xxx","progress":75,"reason":"理由（20字内）","suggestComplete":false}
-suggestComplete 为 true 当且仅当 progress >= 80。只返回 JSON 数组，不要其他文字。`;
+输出格式：JSON 数组，每项：{"taskId":"task_xxx","progress":75,"reason":"理由（20字内）","hint":"要提高进度还需要补充的内容（30字内）","suggestComplete":false}
+suggestComplete 为 true 当且仅当 progress >= 80。hint 说明提高进度需要哪些具体证据或操作（如：补充测试提交、PR合并、验收截图等）。只返回 JSON 数组，不要其他文字。`;
 
 async function estimateTasksProgress(store) {
   const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成' && t.status !== '已取消');
@@ -725,6 +725,7 @@ async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
           task.aiProgressSuggestion = {
             progress: newProgress,
             reason: String(r.reason || '').slice(0, 80),
+            hint: String(r.hint || '').slice(0, 100),
             suggestComplete: !!r.suggestComplete,
             updatedAt: new Date().toISOString()
           };
@@ -1374,6 +1375,7 @@ async function handleApi(req, res, url) {
         task.aiProgressSuggestion = {
           progress: newProgress,
           reason: String(r.reason || '').slice(0, 80),
+          hint: String(r.hint || '').slice(0, 100),
           suggestComplete: !!r.suggestComplete,
           updatedAt: new Date().toISOString()
         };

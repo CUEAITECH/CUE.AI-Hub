@@ -3087,6 +3087,12 @@ details[open] .assign-completed-toggle::before { content: '▾'; }
   animation: suggest-pulse 1s ease-in-out 3;
 }
 
+.task-ai-progress-card { border-left: 3px solid var(--blue); }
+.task-ai-progress-card span small { font-size: 11px; color: var(--text-muted); margin-left: 8px; font-weight: 400; }
+.ai-progress-reason { margin: 6px 0 4px; font-size: 13px; color: var(--text); }
+.ai-progress-hint { margin: 4px 0; font-size: 13px; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 8px; }
+.ai-progress-suggest { margin: 6px 0 0; font-size: 12px; color: var(--blue); font-style: italic; }
+
 /* AI 计划调整建议 */
 .plan-adjust-list { display: flex; flex-direction: column; gap: 10px; }
 .plan-adjust-item {

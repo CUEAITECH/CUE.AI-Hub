@@ -1166,6 +1166,18 @@ function renderTaskDetail() {
       ${renderBriefBlock(brief, hasAssignment, assignmentDone, latestAssignment?.id, briefAge)}
     </article>
 
+    ${(() => {
+      const sug = task.aiProgressSuggestion;
+      if (!sug) return '';
+      const updatedAt = sug.updatedAt ? new Date(sug.updatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+      return `<article class="task-detail-card task-ai-progress-card">
+      <span>AI 进度判断 · ${sug.progress}% <small>${updatedAt}</small></span>
+      ${sug.reason ? `<p class="ai-progress-reason"><strong>判断依据：</strong>${escapeHtml(sug.reason)}</p>` : ''}
+      ${sug.hint ? `<p class="ai-progress-hint"><strong>提高进度需补充：</strong>${escapeHtml(sug.hint)}</p>` : ''}
+      ${sug.suggestComplete ? '<p class="ai-progress-suggest">AI 建议标记为已完成，请在分工领取中确认。</p>' : ''}
+    </article>`;
+    })()}
+
     <article class="task-detail-card">
       <span>完成证据</span>
       <div class="evidence-list">
