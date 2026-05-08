@@ -1179,10 +1179,6 @@ function renderTaskDetail() {
     </article>
   `;
 
-  // 绑定"重新生成细则"按钮
-  content.querySelectorAll('.brief-retry-btn').forEach((btn) => {
-    btn.addEventListener('click', () => regenerateBrief(btn.dataset.assignmentId).catch((e) => toast(e.message)));
-  });
 }
 
 async function regenerateBrief(assignmentId) {
@@ -2318,6 +2314,13 @@ function toast(message) {
 function bindEvents() {
   document.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => setRoute(button.dataset.route));
+  });
+
+  // 事件委托：重新生成细则按钮（动态渲染，不能在 renderTaskDetail 里绑定）
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.brief-retry-btn');
+    if (!btn) return;
+    regenerateBrief(btn.dataset.assignmentId).catch((err) => toast(err.message));
   });
 
   // 顶级导航组按钮点击：切换子菜单展开（不含总览）
