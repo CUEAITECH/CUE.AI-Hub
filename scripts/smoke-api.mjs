@@ -32,6 +32,10 @@ const checks = [
   {
     path: '/api/wecom/summary',
     validate: (json) => typeof json?.summary === 'string' && json?.metrics
+  },
+  {
+    path: '/api/reviews/queue',
+    validate: (json) => Array.isArray(json?.queue)
   }
 ];
 
