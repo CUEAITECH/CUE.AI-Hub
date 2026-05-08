@@ -16,6 +16,18 @@ const checks = [
   {
     path: '/api/tasks',
     validate: (json) => Array.isArray(json?.tasks)
+  },
+  {
+    path: '/api/assignments',
+    validate: (json) => Array.isArray(json?.assignments)
+  },
+  {
+    path: '/api/wecom/tasks',
+    validate: (json) => typeof json?.summary === 'string' && Array.isArray(json?.tasks)
+  },
+  {
+    path: '/api/wecom/summary',
+    validate: (json) => typeof json?.summary === 'string' && json?.metrics
   }
 ];
 

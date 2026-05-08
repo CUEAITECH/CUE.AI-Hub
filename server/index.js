@@ -59,6 +59,8 @@ import { buildHybridAnalysis } from './services/semanticLinker.js';
 import { generateAssignmentBrief } from './services/assignmentBrief.js';
 import { dispatchRoutes } from './routes/index.js';
 import { createSystemRoutes } from './routes/systemRoutes.js';
+import { createAssignmentRoutes } from './routes/assignmentRoutes.js';
+import { createWeComRoutes } from './routes/wecomRoutes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -161,26 +163,6 @@ function addDaysText(dateText, days) {
   return date.toISOString().slice(0, 10);
 }
 
-function formatShanghaiTime(value) {
-  if (!value) return '暂无';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).format(date);
-}
-
-function formatList(items, formatter, emptyText, limit = 3) {
-  const picked = (items || []).slice(0, limit);
-  if (!picked.length) return emptyText;
-  return picked.map((item, index) => `${index + 1}. ${formatter(item)}`).join('\n');
-}
-
 const routeModules = [
   createSystemRoutes({
     loadStore,
@@ -195,100 +177,34 @@ const routeModules = [
     isWeComAvailable,
     meetingHour,
     hubUrl
+  }),
+  createAssignmentRoutes({
+    loadStore,
+    updateStore,
+    normalizeAssignment,
+    generateAssignmentBrief,
+    todayText,
+    readBody,
+    sendJson,
+    sendError
+  }),
+  createWeComRoutes({
+    createId,
+    loadStore,
+    updateStore,
+    readBody,
+    sendJson,
+    sendError,
+    isWeComAvailable,
+    sendWeComMarkdown,
+    scanRisks,
+    buildMetrics,
+    todayText,
+    normalizeStandup,
+    normalizeTask,
+    generateAssignmentBrief
   })
 ];
-
-function buildWeComProjectSummary(store, alerts) {
-  const metrics = buildMetrics(store, alerts);
-  const projects = store.projects || [];
-  const project = projects[0] || {};
-  const activeTasks = (store.tasks || [])
-    .filter((task) => task.status !== '已完成')
-    .sort((a, b) => (b.risk === '高') - (a.risk === '高') || (a.progress || 0) - (b.progress || 0));
-  const p1Alerts = alerts.filter((alert) => alert.severity === 'P1');
-  const recentActivities = (store.activities || []).filter((activity) => activity.type === 'commit');
-  const blockingReviews = (store.reviews || []).filter((review) => review.level === 'Block');
-
-  const projectLine = project.githubFullRepo || project.repository
-    ? `${project.name || project.repository}（${project.githubFullRepo || project.repository}）`
-    : '尚未配置真实仓库';
-
-  const lines = [
-    `项目状态：${projectLine}`,
-    `同步状态：${project.status || '待同步'}；分支：${project.branch || '未记录'}；最近同步：${formatShanghaiTime(project.lastSyncAt)}`,
-    `健康度：${metrics.healthScore} 分；高风险任务：${metrics.highRiskTasks} 个；P1 告警：${metrics.urgentAlerts} 个；待审阅：${metrics.pendingReviews} 条；今日提交：${metrics.commitsToday} 次；站会响应率：${metrics.standupResponseRate}`,
-    '',
-    '当前重点任务：',
-    formatList(
-      activeTasks,
-      (task) => `${task.owner || '未分配'}「${task.title}」${task.progress ?? 0}% / ${task.status || '待确认'} / 风险${task.risk || '未标注'} / 截止 ${task.due || '未定'}`,
-      '暂无未完成任务。',
-      5
-    ),
-    '',
-    '优先处理风险：',
-    formatList(
-      p1Alerts.length ? p1Alerts : alerts.filter((alert) => alert.severity === 'P2'),
-      (alert) => `${alert.severity} ${alert.target || '未指定'}：${alert.title}。${alert.detail || ''}`,
-      '当前无 P1/P2 风险。',
-      5
-    ),
-    '',
-    '最近提交：',
-    formatList(
-      recentActivities,
-      (activity) => `${activity.owner || activity.actor || '未知'}：${activity.title || '未命名提交'}（${formatShanghaiTime(activity.createdAt)}）`,
-      '暂无 GitHub 提交记录。',
-      5
-    ),
-    '',
-    blockingReviews.length
-      ? `AI Review 阻断：${blockingReviews.slice(0, 3).map((review) => `${review.owner || '未知'}「${review.title}」`).join('；')}`
-      : 'AI Review 阻断：暂无。'
-  ];
-
-  return lines.join('\n');
-}
-
-function buildWeComRiskSummary(store, alerts) {
-  const metrics = buildMetrics(store, alerts);
-  const counts = ['P1', 'P2', 'P3'].map((level) => `${level} ${alerts.filter((alert) => alert.severity === level).length}`).join(' / ');
-  const highRiskTasks = (store.tasks || []).filter((task) => task.risk === '高' || task.status === '高风险');
-  const staleTasks = alerts.filter((alert) => alert.id?.includes('idle'));
-  const noGitTasks = alerts.filter((alert) => alert.id?.includes('no_git'));
-
-  const lines = [
-    `风险摘要：${counts}；项目健康度 ${metrics.healthScore} 分。`,
-    '',
-    '最高优先级告警：',
-    formatList(
-      alerts.filter((alert) => alert.severity === 'P1'),
-      (alert) => `${alert.target || '未指定'}：${alert.title}。${alert.detail || ''}`,
-      '当前无 P1 告警。',
-      5
-    ),
-    '',
-    '高风险任务：',
-    formatList(
-      highRiskTasks,
-      (task) => `${task.owner || '未分配'}「${task.title}」${task.progress ?? 0}% / ${task.status || '待确认'} / 截止 ${task.due || '未定'}`,
-      '当前无高风险任务。',
-      5
-    ),
-    '',
-    '需要晚会确认：',
-    formatList(
-      [...staleTasks, ...noGitTasks],
-      (alert) => `${alert.target || '未指定'}：${alert.title}`,
-      '暂无需要晚会确认的停滞或无 Git 信号任务。',
-      5
-    ),
-    '',
-    '建议动作：晚会先处理 P1 阻断，再让无 Git 信号任务补关联 commit/PR，最后把超过 24 小时无更新的任务拆分、转派或重新领取。'
-  ];
-
-  return lines.join('\n');
-}
 
 // ─── AI 任务进度扫描 ──────────────────────────────────────────────────────────
 const AI_PROGRESS_SYSTEM = `你是任务进度评估助手。根据每个任务的验收标准和关联 Git 提交，评估完成度（0-100 整数）。
@@ -826,93 +742,6 @@ async function handleApi(req, res, url) {
       metrics: buildMetrics(nextStore, alerts),
       alerts,
       stageChecklist: buildStageChecklist(nextStore)
-    });
-    return true;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/assignments') {
-    const store = await loadStore();
-    const date = getDateParam(url);
-    sendJson(res, 200, {
-      date,
-      assignments: (store.assignments || []).filter((assignment) => assignment.date === date)
-    });
-    return true;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/assignments') {
-    const { json } = await readBody(req);
-    const store = await loadStore();
-    const assignment = normalizeAssignment(json || {}, store);
-    if (!assignment.owner || !assignment.taskTitle) {
-      sendError(res, 400, 'owner and task are required');
-      return true;
-    }
-
-    // 先保存，立即响应，brief 异步生成
-    const nextStore = await updateStore((draft) => {
-      draft.assignments = [assignment, ...(draft.assignments || [])].slice(0, 500);
-      return draft;
-    });
-    sendJson(res, 201, {
-      assignment,
-      assignments: (nextStore.assignments || []).filter((item) => item.date === assignment.date)
-    });
-
-    // 异步生成 brief，完成后回写
-    const task = (store.tasks || []).find((item) => item.id === assignment.taskId) || null;
-    generateAssignmentBrief({ task, owner: assignment.owner, note: assignment.note, store })
-      .then((brief) => updateStore((draft) => {
-        const idx = (draft.assignments || []).findIndex((a) => a.id === assignment.id);
-        if (idx >= 0) {
-          draft.assignments[idx].brief = brief;
-          draft.assignments[idx].briefGeneratedBy = brief.generatedBy;
-        }
-        return draft;
-      }))
-      .catch((err) => console.error('[Brief]', err.message));
-
-    return true;
-  }
-
-  // POST /api/assignments/:id/brief — 重新触发细则生成（生成失败时用）
-  if (req.method === 'POST' && url.pathname.startsWith('/api/assignments/') && url.pathname.endsWith('/brief')) {
-    const id = decodeURIComponent(url.pathname.split('/').at(-2) || '');
-    const store = await loadStore();
-    const assignment = (store.assignments || []).find((a) => a.id === id);
-    if (!assignment) { sendError(res, 404, 'assignment not found'); return true; }
-    const task = (store.tasks || []).find((t) => t.id === assignment.taskId) || null;
-    sendJson(res, 202, { message: '细则生成已触发', assignments: store.assignments });
-    generateAssignmentBrief({ task, owner: assignment.owner, note: assignment.note, store })
-      .then((brief) => updateStore((draft) => {
-        const idx = (draft.assignments || []).findIndex((a) => a.id === id);
-        if (idx >= 0) { draft.assignments[idx].brief = brief; draft.assignments[idx].briefGeneratedBy = brief.generatedBy; }
-        return draft;
-      }))
-      .catch((err) => console.error('[Brief/Retry]', err.message));
-    return true;
-  }
-
-  if (req.method === 'PATCH' && url.pathname.startsWith('/api/assignments/')) {
-    const id = decodeURIComponent(url.pathname.split('/').pop());
-    const { json } = await readBody(req);
-    let updated = null;
-    const nextStore = await updateStore((draft) => {
-      const index = (draft.assignments || []).findIndex((assignment) => assignment.id === id);
-      if (index === -1) return draft;
-      updated = normalizeAssignment({
-        ...draft.assignments[index],
-        ...(json || {}),
-        id,
-        createdAt: draft.assignments[index].createdAt
-      }, draft);
-      draft.assignments[index] = updated;
-      return draft;
-    });
-    if (!updated) sendError(res, 404, 'assignment not found');
-    else sendJson(res, 200, {
-      assignment: updated,
-      assignments: (nextStore.assignments || []).filter((item) => item.date === updated.date)
     });
     return true;
   }
@@ -1862,243 +1691,6 @@ ${alerts.filter((a) => a.severity === 'P1').map((a) => `- ${a.title}：${a.detai
     }
 
     sendJson(res, 200, { date: today, report, wecomSent });
-    return true;
-  }
-
-  // POST /api/wecom/push — 手动推送消息到企业微信
-  if (req.method === 'POST' && url.pathname === '/api/wecom/push') {
-    if (!isWeComAvailable()) {
-      sendError(res, 400, '未配置 WECOM_WEBHOOK_URL');
-      return true;
-    }
-    const { json } = await readBody(req);
-    const content = String(json?.content || '').trim();
-    if (!content) { sendError(res, 400, '缺少 content 字段'); return true; }
-    const ok = await sendWeComMarkdown(content);
-    sendJson(res, 200, { sent: ok });
-    return true;
-  }
-
-  // GET /api/wecom/summary — 企业微信 API 插件友好的项目摘要
-  if (req.method === 'GET' && url.pathname === '/api/wecom/summary') {
-    const store = await loadStore();
-    const alerts = scanRisks(store);
-    sendJson(res, 200, {
-      summary: buildWeComProjectSummary(store, alerts),
-      metrics: buildMetrics(store, alerts),
-      alertCount: alerts.length,
-      generatedAt: new Date().toISOString()
-    });
-    return true;
-  }
-
-  // GET /api/wecom/risks — 企业微信 API 插件友好的风险摘要
-  if (req.method === 'GET' && url.pathname === '/api/wecom/risks') {
-    const store = await loadStore();
-    const alerts = scanRisks(store);
-    sendJson(res, 200, {
-      summary: buildWeComRiskSummary(store, alerts),
-      metrics: buildMetrics(store, alerts),
-      alertCount: alerts.length,
-      generatedAt: new Date().toISOString()
-    });
-    return true;
-  }
-
-  // GET /api/wecom/tasks — 企微插件：返回当前可认领任务列表
-  if (req.method === 'GET' && url.pathname === '/api/wecom/tasks') {
-    const store = await loadStore();
-    const today = todayText();
-    const claimedToday = new Set((store.assignments || []).filter((a) => a.date === today).map((a) => a.taskId));
-    const active = (store.tasks || [])
-      .filter((t) => t.status !== '已完成')
-      .slice(0, 12)
-      .map((t) => ({
-        id: t.id,
-        title: t.title,
-        owner: t.owner || '未分配',
-        progress: t.progress || 0,
-        risk: t.risk || '低',
-        due: t.due || '未设置',
-        claimedToday: claimedToday.has(t.id)
-      }));
-    const lines = active.map((t, i) =>
-      `${i + 1}. 【${t.risk}风险】${t.title}（${t.owner} · ${t.progress}% · 截止${t.due}）${t.claimedToday ? ' ✅已认领' : ''}`
-    ).join('\n');
-    const summary = active.length ? `当前 ${active.length} 个进行中任务：\n${lines}` : '暂无进行中任务。';
-    sendJson(res, 200, {
-      summary,
-      result: summary,
-      tasks: active
-    });
-    return true;
-  }
-
-  // POST /api/wecom/claim — 企微插件：按关键词认领任务
-  if (req.method === 'POST' && url.pathname === '/api/wecom/claim') {
-    const { json } = await readBody(req);
-    const owner = String(json?.owner || '').trim();
-    const keyword = String(json?.taskKeyword || json?.taskTitle || json?.keyword || '').trim();
-    if (!owner || !keyword) {
-      sendJson(res, 200, { result: '❌ 请提供认领人姓名和任务关键词，例如：owner=田家铭 taskKeyword=TRTC' });
-      return true;
-    }
-    const store = await loadStore();
-    const kw = keyword.toLowerCase();
-    const task = (store.tasks || []).find((t) =>
-      t.status !== '已完成' && t.title.toLowerCase().includes(kw)
-    );
-    if (!task) {
-      const candidates = (store.tasks || []).filter((t) => t.status !== '已完成').slice(0, 5)
-        .map((t) => `「${t.title}」`).join('、');
-      sendJson(res, 200, { result: `❌ 未找到包含「${keyword}」的进行中任务。当前可认领：${candidates || '暂无'}` });
-      return true;
-    }
-    const today = todayText();
-    const already = (store.assignments || []).find(
-      (a) => a.owner === owner && a.taskId === task.id && a.date === today
-    );
-    if (already) {
-      sendJson(res, 200, { result: `ℹ️ ${owner} 今日已认领「${task.title}」，无需重复认领。` });
-      return true;
-    }
-    const assignment = {
-      id: createId('assign'),
-      date: today,
-      owner,
-      taskId: task.id,
-      taskTitle: task.title,
-      note: '',
-      status: '进行中',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    await updateStore((draft) => {
-      draft.assignments = (draft.assignments || []).filter(
-        (a) => !(a.owner === owner && a.taskId === task.id && a.date === today)
-      );
-      draft.assignments.unshift(assignment);
-      return draft;
-    });
-    // 异步生成 brief
-    generateAssignmentBrief({ task, owner, note: '', store })
-      .then((brief) => updateStore((draft) => {
-        const idx = (draft.assignments || []).findIndex((a) => a.id === assignment.id);
-        if (idx >= 0) { draft.assignments[idx].brief = brief; draft.assignments[idx].briefGeneratedBy = brief.generatedBy; }
-        return draft;
-      }))
-      .catch((err) => console.error('[Brief/WeComClaim]', err.message));
-    sendJson(res, 200, { result: `✅ ${owner} 已认领「${task.title}」，任务细则正在生成，稍后可在 Hub 查看。` });
-    return true;
-  }
-
-  // POST /api/wecom/standup — 企微插件：提交今日站会
-  if (req.method === 'POST' && url.pathname === '/api/wecom/standup') {
-    const { json } = await readBody(req);
-    const owner = String(json?.owner || '').trim();
-    if (!owner) {
-      sendJson(res, 200, { result: '❌ 请提供成员姓名（owner 字段）' });
-      return true;
-    }
-    const standup = normalizeStandup({
-      owner,
-      yesterday: String(json?.yesterday || '').trim(),
-      today: String(json?.today || '').trim(),
-      blockers: String(json?.blockers || '无').trim()
-    });
-    await updateStore((draft) => {
-      draft.standups = (draft.standups || []).filter(
-        (s) => !(s.owner === owner && s.date === standup.date)
-      );
-      draft.standups.unshift(standup);
-      draft.standups = draft.standups.slice(0, 500);
-      return draft;
-    });
-    const blockerLine = standup.blockers && standup.blockers !== '无' ? `\n⚠️ 阻塞：${standup.blockers}` : '';
-    sendJson(res, 200, { result: `✅ ${owner} 站会已提交（${standup.date}）\n昨日：${standup.yesterday || '未填写'}\n今日：${standup.today || '未填写'}${blockerLine}` });
-    return true;
-  }
-
-  // POST /api/wecom/progress — 企微插件：按关键词更新任务进度
-  if (req.method === 'POST' && url.pathname === '/api/wecom/progress') {
-    const { json } = await readBody(req);
-    const keyword = String(json?.taskKeyword || json?.taskTitle || '').trim();
-    const progress = Number(json?.progress ?? -1);
-    const status = String(json?.status || '').trim();
-    if (!keyword || (progress < 0 && !status)) {
-      sendJson(res, 200, { result: '❌ 请提供任务关键词（taskKeyword）和进度（progress 0-100）或状态（status）' });
-      return true;
-    }
-    const store = await loadStore();
-    const kw = keyword.toLowerCase();
-    const task = (store.tasks || []).find((t) => t.title.toLowerCase().includes(kw));
-    if (!task) {
-      sendJson(res, 200, { result: `❌ 未找到包含「${keyword}」的任务` });
-      return true;
-    }
-    const newProgress = progress >= 0 && progress <= 100 ? progress : task.progress;
-    const newStatus = status || task.status;
-    await updateStore((draft) => {
-      const idx = (draft.tasks || []).findIndex((t) => t.id === task.id);
-      if (idx >= 0) {
-        draft.tasks[idx] = normalizeTask({
-          ...draft.tasks[idx],
-          progress: newProgress,
-          status: newStatus
-        });
-      }
-      return draft;
-    });
-    const parts = [];
-    if (progress >= 0 && progress <= 100) parts.push(`进度 → ${newProgress}%`);
-    if (status) parts.push(`状态 → ${newStatus}`);
-    sendJson(res, 200, { result: `✅ 已更新「${task.title}」：${parts.join('，')}` });
-    return true;
-  }
-
-  // ─── 任务领取/分工系统 ────────────────────────────────────────────────────────
-
-  // GET /api/assignments?date=YYYY-MM-DD
-  if (req.method === 'GET' && url.pathname === '/api/assignments') {
-    const store = await loadStore();
-    const date = url.searchParams.get('date') || new Date().toISOString().slice(0, 10);
-    const assignments = (store.assignments || []).filter((a) => a.date === date);
-    sendJson(res, 200, { date, assignments });
-    return true;
-  }
-
-  // POST /api/assignments — 领取任务（此路由已由上方早期路由处理，此处为冗余定义，保留作降级）
-
-  // PATCH /api/assignments/:id — 更新领取状态
-  if (req.method === 'PATCH' && url.pathname.startsWith('/api/assignments/')) {
-    const id = decodeURIComponent(url.pathname.split('/').pop());
-    const { json } = await readBody(req);
-    const now = new Date().toISOString();
-    const nextStore = await updateStore((draft) => {
-      const index = (draft.assignments || []).findIndex((a) => a.id === id);
-      if (index === -1) return draft;
-      draft.assignments[index] = {
-        ...draft.assignments[index],
-        ...(json.status !== undefined ? { status: json.status } : {}),
-        ...(json.note !== undefined ? { note: json.note } : {}),
-        updatedAt: now
-      };
-      return draft;
-    });
-    const assignment = (nextStore.assignments || []).find((a) => a.id === id);
-    if (!assignment) { sendError(res, 404, 'assignment not found'); return true; }
-    sendJson(res, 200, { assignment });
-    return true;
-  }
-
-  // DELETE /api/assignments/:id — 取消领取
-  if (req.method === 'DELETE' && url.pathname.startsWith('/api/assignments/')) {
-    const id = decodeURIComponent(url.pathname.split('/').pop());
-    const nextStore = await updateStore((draft) => {
-      draft.assignments = (draft.assignments || []).filter((a) => a.id !== id);
-      return draft;
-    });
-    sendJson(res, 200, { deleted: id, assignments: nextStore.assignments || [] });
     return true;
   }
 
