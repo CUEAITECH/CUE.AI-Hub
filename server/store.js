@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultCurrentStage, defaultPhases, defaultStageChecklist, normalizeStageName, reassignChecklistPhaseIds } from './services/stageChecklist.js';
+import { rebindStoreExplicitRefs } from './services/bindingEngine.js';
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
@@ -237,7 +238,7 @@ export function migrateStore(store) {
       : task.acceptance
   }));
 
-  return next;
+  return rebindStoreExplicitRefs(next);
 }
 
 export async function loadStore() {

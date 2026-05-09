@@ -68,12 +68,12 @@ await test('phase1 migration creates top-level phases and deliverables without b
   assert.equal(migrated.phases[0].projectId, 'cue_ai_classroom');
   assert.equal(migrated.tasks[0].id, 'task_1');
   assert.equal(migrated.tasks[0].projectId, 'cue_ai_classroom');
-  assert.equal(migrated.tasks[0].deliverableId, null);
+  assert.equal(migrated.tasks[0].deliverableId, 'deliverable_alpha');
   assert.deepEqual(migrated.tasks[0].linkedRefs, ['CUEAITECH/Cue.AI#1']);
-  assert.equal(migrated.activities[0].deliverableId, null);
-  assert.equal(migrated.activities[0].taskId, null);
+  assert.equal(migrated.activities[0].deliverableId, 'deliverable_alpha');
+  assert.equal(migrated.activities[0].taskId, 'task_1');
   assert.equal(Object.hasOwn(migrated.activities[0], 'diff'), false);
-  assert.equal(migrated.assignments[0].deliverableId, null);
+  assert.equal(migrated.assignments[0].deliverableId, 'deliverable_alpha');
 });
 
 await test('phase0 compatibility keeps buildStageChecklist reading currentStage checklist', () => {
@@ -234,4 +234,40 @@ await test('phase2 activity and assignment writes persist explicit task and deli
   assert.equal(assignment.taskTitle, 'Alpha API');
   assert.equal(assignment.deliverableId, 'deliverable_alpha');
   assert.equal(assignment.projectId, 'cue_ai_classroom');
+});
+
+await test('phase2 migration backfills historical task, activity, and assignment bindings', () => {
+  const migrated = migrateStore({
+    currentStage: legacyStage,
+    deliverables: legacyStage.checklist,
+    tasks: [
+      {
+        id: 'task_historical',
+        title: 'Beta UI polish',
+        progress: 30,
+        projectId: 'cue_ai_classroom'
+      }
+    ],
+    activities: [
+      {
+        id: 'commit_historical',
+        type: 'commit',
+        title: 'finish task_historical',
+        files: ['src/ui.js']
+      }
+    ],
+    assignments: [
+      {
+        id: 'assign_historical',
+        taskId: 'task_historical',
+        owner: 'tester',
+        taskTitle: 'Beta UI polish'
+      }
+    ]
+  });
+
+  assert.equal(migrated.tasks[0].deliverableId, 'deliverable_beta');
+  assert.equal(migrated.activities[0].taskId, 'task_historical');
+  assert.equal(migrated.activities[0].deliverableId, 'deliverable_beta');
+  assert.equal(migrated.assignments[0].deliverableId, 'deliverable_beta');
 });

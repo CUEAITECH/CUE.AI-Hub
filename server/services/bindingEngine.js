@@ -42,6 +42,22 @@ function deliverableSignals(deliverable = {}) {
   ].map(normalize).filter((value) => value.length >= 3);
 }
 
+export function findDeliverableForTaskText(task, deliverables = []) {
+  const text = normalize([
+    task?.id,
+    task?.title,
+    task?.description,
+    task?.acceptance,
+    task?.sourceDoc,
+    task?.signal
+  ].join(' '));
+  if (!text) return null;
+  return deliverables.find((deliverable) => (
+    (deliverable.taskIds || []).includes(task?.id)
+    || deliverableSignals(deliverable).some((signal) => text.includes(signal))
+  )) || null;
+}
+
 export function findTaskForActivity(activity, tasks = []) {
   const explicit = tasks.find((task) => task.id && task.id === activity?.taskId);
   if (explicit) return explicit;
@@ -55,7 +71,7 @@ export function findDeliverableForTask(task, deliverables = []) {
   if (!task) return null;
   const explicit = deliverables.find((deliverable) => deliverable.id && deliverable.id === task.deliverableId);
   if (explicit) return explicit;
-  return deliverables.find((deliverable) => (deliverable.taskIds || []).includes(task.id)) || null;
+  return findDeliverableForTaskText(task, deliverables);
 }
 
 export function findDeliverableForActivity(activity, deliverables = []) {
@@ -81,6 +97,16 @@ export function bindActivityToExplicitRefs(activity, store = {}) {
   };
 }
 
+export function bindTaskToExplicitRefs(task, store = {}) {
+  const deliverables = store.deliverables || [];
+  const deliverable = findDeliverableForTask(task, deliverables);
+  return {
+    ...task,
+    projectId: task.projectId || deliverable?.projectId || DEFAULT_PROJECT_ID,
+    deliverableId: task.deliverableId || deliverable?.id || null
+  };
+}
+
 export function bindAssignmentToExplicitRefs(assignment, store = {}) {
   const tasks = store.tasks || [];
   const deliverables = store.deliverables || [];
@@ -95,4 +121,14 @@ export function bindAssignmentToExplicitRefs(assignment, store = {}) {
     taskTitle: assignment.taskTitle || task?.title || assignment.taskId || '临时任务',
     deliverableId: assignment.deliverableId || deliverable?.id || task?.deliverableId || null
   };
+}
+
+export function rebindStoreExplicitRefs(store = {}) {
+  const draft = { ...store };
+  const taskStore = { ...draft, tasks: draft.tasks || [], deliverables: draft.deliverables || [] };
+  draft.tasks = taskStore.tasks.map((task) => bindTaskToExplicitRefs(task, taskStore));
+  const enriched = { ...draft, tasks: draft.tasks };
+  draft.activities = (draft.activities || []).map((activity) => bindActivityToExplicitRefs(activity, enriched));
+  draft.assignments = (draft.assignments || []).map((assignment) => bindAssignmentToExplicitRefs(assignment, enriched));
+  return draft;
 }
