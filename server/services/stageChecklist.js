@@ -1,3 +1,5 @@
+import { textIncludesAny } from './bindingEngine.js';
+
 export const defaultPhases = [
   { id: 'phase_backend', title: '后端基础', status: '进行中' },
   { id: 'phase_integration', title: '多端联调', status: '待开始' },
@@ -87,11 +89,6 @@ export const defaultStageChecklist = [
   }
 ];
 
-function textIncludesAny(text, keywords = []) {
-  const normalized = String(text || '').toLowerCase();
-  return keywords.some((keyword) => normalized.includes(String(keyword).toLowerCase()));
-}
-
 function uniqueById(items) {
   const seen = new Set();
   return items.filter((item) => {
@@ -127,35 +124,53 @@ function linkReasonMap(links = []) {
 
 function scoreChecklistItem(item, tasks, activities, reviews, assignments, store) {
   const semantic = semanticLinksForStage(store, item.id);
-  const linkedTasks = tasks.filter((task) => (
-    semantic.taskIds.has(task.id)
-    || (item.taskIds || []).includes(task.id)
-    || textIncludesAny(`${task.title} ${task.acceptance} ${task.signal}`, item.keywords)
-  ));
+  const fkTasks = tasks.filter((task) => task.deliverableId === item.id);
+  const linkedTasks = fkTasks.length
+    ? fkTasks
+    : tasks.filter((task) => (
+        semantic.taskIds.has(task.id)
+        || (item.taskIds || []).includes(task.id)
+        || textIncludesAny(`${task.title} ${task.acceptance} ${task.signal}`, item.keywords)
+      ));
   const evidenceText = [
     item.title,
     item.acceptance,
     linkedTasks.map((task) => `${task.id} ${task.title}`).join(' ')
   ].join(' ');
-  const linkedActivities = uniqueById(activities.filter((activity) => (
+  const linkedTaskIds = new Set(linkedTasks.map((task) => task.id));
+  const fkActivities = uniqueById(activities.filter((activity) => (
     activity.type === 'commit'
     && (
-      semantic.activityIds.has(activity.id)
-      || textIncludesAny(`${activity.title} ${(activity.files || []).join(' ')}`, item.keywords)
-      || linkedTasks.some((task) => textIncludesAny(`${activity.title} ${(activity.files || []).join(' ')}`, [task.id, task.title]))
-      || semantic.commitTaskLinks.some((link) => link.activityId === activity.id && linkedTasks.some((task) => task.id === link.taskId))
-      || textIncludesAny(evidenceText, [activity.title])
+      activity.deliverableId === item.id
+      || (activity.taskId && linkedTaskIds.has(activity.taskId))
     )
   )));
+  const linkedActivities = fkActivities.length
+    ? fkActivities
+    : uniqueById(activities.filter((activity) => (
+        activity.type === 'commit'
+        && (
+          semantic.activityIds.has(activity.id)
+          || textIncludesAny(`${activity.title} ${(activity.files || []).join(' ')}`, item.keywords)
+          || linkedTasks.some((task) => textIncludesAny(`${activity.title} ${(activity.files || []).join(' ')}`, [task.id, task.title]))
+          || semantic.commitTaskLinks.some((link) => link.activityId === activity.id && linkedTasks.some((task) => task.id === link.taskId))
+          || textIncludesAny(evidenceText, [activity.title])
+        )
+      )));
+  const fkAssignments = assignments.filter((assignment) => (
+    assignment.deliverableId === item.id
+    || (assignment.taskId && linkedTaskIds.has(assignment.taskId))
+  ));
+  const linkedAssignments = fkAssignments.length
+    ? fkAssignments
+    : assignments.filter((assignment) => (
+        linkedTasks.some((task) => task.id === assignment.taskId)
+        || textIncludesAny(`${assignment.taskTitle} ${assignment.note}`, item.keywords)
+      ));
   const linkedReviews = uniqueById(reviews.filter((review) => (
     linkedActivities.some((activity) => review.activityId === activity.id || review.id === `review_${activity.sha}`)
     || linkedTasks.some((task) => textIncludesAny(`${review.title} ${(review.findings || []).join(' ')}`, [task.id, task.title]))
   )));
-  const linkedAssignments = assignments.filter((assignment) => (
-    linkedTasks.some((task) => task.id === assignment.taskId)
-    || textIncludesAny(`${assignment.taskTitle} ${assignment.note}`, item.keywords)
-  ));
-
   const taskProgress = linkedTasks.length
     ? Math.round(linkedTasks.reduce((sum, task) => sum + (Number(task.progress) || 0), 0) / linkedTasks.length)
     : 0;
@@ -219,7 +234,9 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
       }))
     },
     gaps,
-    linkMode: (semantic.taskIds.size || semantic.activityIds.size) ? 'hybrid' : 'rules'
+    linkMode: (fkTasks.length || fkActivities.length || fkAssignments.length)
+      ? 'fk'
+      : (semantic.taskIds.size || semantic.activityIds.size) ? 'hybrid' : 'rules'
   };
 }
 

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { migrateStore } from '../server/store.js';
 import { aggregateDeliverableProgress, buildStageChecklist } from '../server/services/stageChecklist.js';
 import { dispatchRoutes } from '../server/routes/index.js';
+import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
+import { normalizeAssignment } from '../server/services/dailyBrief.js';
 
 async function test(name, fn) {
   try {
@@ -146,4 +148,90 @@ await test('route dispatcher preserves phase0 ordered route handling', async () 
 
   assert.equal(handled, true);
   assert.deepEqual(calls, ['first', 'second']);
+});
+
+await test('phase2 checklist scoring prefers deliverable FK over keyword fallback', () => {
+  const store = migrateStore({
+    currentStage: legacyStage,
+    deliverables: legacyStage.checklist,
+    tasks: [
+      {
+        id: 'task_bound',
+        title: '完全不包含关键词的后端工作',
+        progress: 80,
+        status: '进行中',
+        deliverableId: 'deliverable_alpha'
+      },
+      {
+        id: 'task_keyword_noise',
+        title: 'alpha api 但属于其他交付项',
+        progress: 10,
+        status: '进行中',
+        deliverableId: 'deliverable_beta'
+      }
+    ],
+    activities: [
+      {
+        id: 'activity_bound',
+        type: 'commit',
+        title: 'unrelated commit title',
+        taskId: 'task_bound',
+        deliverableId: 'deliverable_alpha'
+      }
+    ],
+    assignments: [
+      {
+        id: 'assign_bound',
+        taskId: 'task_bound',
+        taskTitle: '完全不包含关键词的后端工作',
+        deliverableId: 'deliverable_alpha'
+      }
+    ]
+  });
+
+  const checklist = buildStageChecklist(store).checklist;
+  const alpha = checklist.find((item) => item.id === 'deliverable_alpha');
+  assert.equal(alpha.progress, 80);
+  assert.deepEqual(alpha.linkedTasks.map((task) => task.id), ['task_bound']);
+  assert.equal(alpha.evidence.commits[0].id, 'activity_bound');
+  assert.equal(alpha.evidence.assignments[0].id, 'assign_bound');
+  assert.equal(alpha.linkMode, 'fk');
+});
+
+await test('phase2 activity and assignment writes persist explicit task and deliverable bindings', () => {
+  const store = migrateStore({
+    currentStage: legacyStage,
+    deliverables: legacyStage.checklist.map((item) => ({
+      ...item,
+      taskIds: item.id === 'deliverable_alpha' ? ['task_alpha'] : []
+    })),
+    tasks: [
+      {
+        id: 'task_alpha',
+        title: 'Alpha API',
+        projectId: 'cue_ai_classroom',
+        deliverableId: 'deliverable_alpha'
+      }
+    ]
+  });
+
+  const activity = bindActivityToExplicitRefs({
+    id: 'commit_1',
+    type: 'commit',
+    title: 'finish task_alpha usersig api',
+    files: ['server/api.js']
+  }, store);
+  assert.equal(activity.taskId, 'task_alpha');
+  assert.equal(activity.deliverableId, 'deliverable_alpha');
+  assert.equal(activity.projectId, 'cue_ai_classroom');
+
+  const assignment = normalizeAssignment({
+    id: 'assign_alpha',
+    owner: 'tester',
+    taskId: 'task_alpha'
+  }, store);
+  assert.equal(assignment.taskId, 'task_alpha');
+  assert.equal(assignment.taskTitle, 'Alpha API');
+  assert.equal(assignment.deliverableId, 'deliverable_alpha');
+  assert.equal(assignment.projectId, 'cue_ai_classroom');
 });

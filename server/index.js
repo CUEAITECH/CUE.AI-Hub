@@ -64,6 +64,7 @@ import {
 } from './services/dailyBrief.js';
 import { buildHybridAnalysis } from './services/semanticLinker.js';
 import { generateAssignmentBrief } from './services/assignmentBrief.js';
+import { bindActivityToExplicitRefs } from './services/bindingEngine.js';
 import { dispatchRoutes } from './routes/index.js';
 import { createSystemRoutes } from './routes/systemRoutes.js';
 import { createAssignmentRoutes } from './routes/assignmentRoutes.js';
@@ -318,7 +319,8 @@ const routeModules = [
     persistPlanAdjustment,
     buildMetrics,
     scanRisks,
-    githubWebhookSecret
+    githubWebhookSecret,
+    bindActivityToExplicitRefs
   })
 ];
 
@@ -747,7 +749,7 @@ async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
       if (mergedActivityIds.has(activity.id)) return false;
       mergedActivityIds.add(activity.id);
       return true;
-    });
+    }).map((activity) => bindActivityToExplicitRefs(activity, draft));
     const newReviews = commitReviews.filter((review) => !existingReviewIds.has(review.id));
     addedActivityCount = projectActivities.filter((activity) => !existingActivityIds.has(activity.id)).length;
     addedReviewCount = newReviews.length;

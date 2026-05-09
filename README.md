@@ -146,6 +146,7 @@ server/services/
   planner.js                 AI 任务规划
   riskEngine.js              风险扫描 + 健康度计算
   semanticLinker.js          AI 语义关联分析（任务/阶段/commit）
+  bindingEngine.js           显式绑定引擎（activity/assignment → task/deliverable）
   dailyBrief.js              晚会作战包逻辑
   assignmentBrief.js         任务细则生成（异步）
   docsManager.js             AI 产品经理：读写目标仓库 docs/
@@ -161,7 +162,9 @@ index.html                   8 个页面 section
 
 **Phase 0 路由拆分状态：** 已完成。`server/index.js` 不再直接承载业务 API 分支，所有对外 API 已按领域拆到 `server/routes/*`。本阶段只做行为保持型重构，不改变现有 JSON 数据模型，也不启动 Deliverable/Phase 外键迁移。后续 Phase 1 才进入交付项中心数据模型迁移。
 
-**Phase 1 数据模型迁移状态：** 已完成兼容层。`migrateStore` 会从旧 `currentStage.checklist` 生成顶层 `deliverables[]`，从旧 `currentStage.phases` 生成顶层 `phases[]`，并为 `tasks`、`activities`、`assignments` 补齐 `deliverableId` / `projectId` 等 FK 字段。`GET /api/state` 已返回 `deliverables`、`phases` 和 `deliverableProgress`。旧路径图仍读取 `currentStage.checklist`，Phase 2 才切换到 FK-first 绑定引擎。
+**Phase 1 数据模型迁移状态：** 已完成兼容层。`migrateStore` 会从旧 `currentStage.checklist` 生成顶层 `deliverables[]`，从旧 `currentStage.phases` 生成顶层 `phases[]`，并为 `tasks`、`activities`、`assignments` 补齐 `deliverableId` / `projectId` 等 FK 字段。`GET /api/state` 已返回 `deliverables`、`phases` 和 `deliverableProgress`。
+
+**Phase 2 显式绑定引擎状态：** 已完成第一版。路径图评分已切换为 FK-first：任务优先按 `task.deliverableId` 关联交付项，commit 和 assignment 优先按 `activity.deliverableId` / `activity.taskId` / `assignment.deliverableId` / `assignment.taskId` 取证；没有显式 FK 时才回退到语义链接和关键词规则。GitHub 同步与 webhook 入库会尝试为新 activity 持久化 `taskId` / `deliverableId`，Hub 和企业微信认领任务时也会写入 `deliverableId`。回归测试覆盖 FK 优先、commit 绑定、assignment 绑定和 Phase 0/1 兼容路径。
 
 **数据存储：** `server/data/db.json`，进程内 in-memory cache，单例读写。
 

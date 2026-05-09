@@ -1,3 +1,5 @@
+import { bindAssignmentToExplicitRefs } from '../services/bindingEngine.js';
+
 function formatShanghaiTime(value) {
   if (!value) return '暂无';
   const date = new Date(value);
@@ -212,7 +214,7 @@ export function createWeComRoutes({
         sendJson(res, 200, { result: `ℹ️ ${owner} 今日已认领「${task.title}」，无需重复认领。` });
         return true;
       }
-      const assignment = {
+      const assignment = bindAssignmentToExplicitRefs({
         id: createId('assign'),
         date: today,
         owner,
@@ -222,7 +224,7 @@ export function createWeComRoutes({
         status: '进行中',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      };
+      }, store);
       await updateStore((draft) => {
         draft.assignments = (draft.assignments || []).filter(
           (item) => !(item.owner === owner && item.taskId === task.id && item.date === today)

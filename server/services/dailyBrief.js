@@ -1,3 +1,5 @@
+import { bindAssignmentToExplicitRefs } from './bindingEngine.js';
+
 const timezone = 'Asia/Shanghai';
 
 function formatDate(date = new Date()) {
@@ -237,7 +239,7 @@ export function todayText() {
 export function normalizeAssignment(input, store) {
   const now = new Date().toISOString();
   const task = getTask(store, input.taskId);
-  return {
+  return bindAssignmentToExplicitRefs({
     id: input.id || `assign_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     date: normalizeText(input.date, todayText()),
     owner: normalizeText(input.owner, task?.owner || '未分配'),
@@ -250,7 +252,7 @@ export function normalizeAssignment(input, store) {
     updatedAt: now,
     brief: input.brief || null,
     briefGeneratedBy: input.briefGeneratedBy || null
-  };
+  }, store);
 }
 
 export function normalizeStandup(input) {

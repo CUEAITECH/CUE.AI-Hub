@@ -11,7 +11,8 @@ export function createWebhookRoutes({
   persistPlanAdjustment,
   buildMetrics,
   scanRisks,
-  githubWebhookSecret
+  githubWebhookSecret,
+  bindActivityToExplicitRefs
 }) {
   return async function webhookRoutes(req, res, url) {
     if (req.method !== 'POST' || url.pathname !== '/api/webhooks/github') return false;
@@ -47,23 +48,27 @@ export function createWebhookRoutes({
       }
     }
 
+    let boundActivities = activities;
     const nextStore = await updateStore((store) => {
-      store.activities = [...activities, ...(store.activities || [])].slice(0, 500);
+      boundActivities = activities.map((activity) => (
+        bindActivityToExplicitRefs ? bindActivityToExplicitRefs(activity, store) : activity
+      ));
+      store.activities = [...boundActivities, ...(store.activities || [])].slice(0, 500);
       store.reviews = [...reviews, ...(store.reviews || [])].slice(0, 200);
       return store;
     });
 
-    if (activities.length > 0) {
-      generatePlanAdjustment(activities, nextStore).then((adjustment) => {
+    if (boundActivities.length > 0) {
+      generatePlanAdjustment(boundActivities, nextStore).then((adjustment) => {
         if (!adjustment) return null;
-        return persistPlanAdjustment(adjustment, activities, 'github-webhook');
+        return persistPlanAdjustment(adjustment, boundActivities, 'github-webhook');
       }).catch((err) => console.error('[PlanAdjust]', err.message));
     }
 
     sendJson(res, 202, {
       received: true,
       event: eventName,
-      activities,
+      activities: boundActivities,
       reviews,
       metrics: buildMetrics(nextStore, scanRisks(nextStore))
     });
