@@ -30,7 +30,14 @@ import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhoo
 import { scanLocalGitProject } from './services/localGit.js';
 import { scanGitHubProject, hasGitHubConfig, fetchCommitDetail } from './services/githubApi.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
-import { buildStageChecklist, normalizeStageName, normalizeStageShortName, defaultStageChecklist, reassignChecklistPhaseIds } from './services/stageChecklist.js';
+import {
+  aggregateDeliverableProgress,
+  buildStageChecklist,
+  normalizeStageName,
+  normalizeStageShortName,
+  defaultStageChecklist,
+  reassignChecklistPhaseIds
+} from './services/stageChecklist.js';
 import {
   isWeComAvailable,
   pushRiskAlerts,
@@ -173,6 +180,7 @@ const routeModules = [
     normalizeStageName,
     buildMetrics,
     buildStageChecklist,
+    aggregateDeliverableProgress,
     buildOpenApiSpec,
     sendJson,
     port,

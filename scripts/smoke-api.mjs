@@ -17,6 +17,7 @@ const checks = [
       && Array.isArray(json?.phases)
       && json?.metrics
       && json?.stageChecklist
+      && Array.isArray(json?.deliverableProgress?.deliverables)
     )
   },
   {

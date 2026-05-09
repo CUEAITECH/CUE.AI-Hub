@@ -223,6 +223,10 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
   };
 }
 
+function clampProgress(value) {
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
 /**
  * 统一分配 checklist 节点的 phaseId，并做节点数 rebalance（每 phase 上限 5 个）。
  * @param {Array} checklist
@@ -315,6 +319,93 @@ export function buildStageChecklist(store) {
       inProgress: checklist.filter((item) => item.status === '推进中').length,
       blocked: blockedCount,
       missingEvidence: missingEvidenceCount
+    }
+  };
+}
+
+export function aggregateDeliverableProgress(store) {
+  const rawDeliverables = Array.isArray(store.deliverables) && store.deliverables.length
+    ? store.deliverables
+    : [];
+  const deliverableSource = rawDeliverables.length
+    ? rawDeliverables
+    : buildStageChecklist(store).checklist.map((item) => ({
+        id: item.id,
+        projectId: 'cue_ai_classroom',
+        phaseId: item.phaseId,
+        title: item.title,
+        owner: item.owner,
+        acceptance: item.acceptance,
+        keywords: item.keywords || [],
+        taskIds: item.taskIds || []
+      }));
+  const tasks = store.tasks || [];
+  const activities = store.activities || [];
+  const reviews = store.reviews || [];
+  const assignments = store.assignments || [];
+  const overrides = store.checklistOverrides || {};
+
+  const deliverables = deliverableSource.map((deliverable) => {
+    const scored = scoreChecklistItem({
+      id: deliverable.id,
+      phaseId: deliverable.phaseId,
+      title: deliverable.title,
+      owner: deliverable.owner,
+      taskIds: deliverable.taskIds || [],
+      keywords: deliverable.keywords || [],
+      acceptance: deliverable.acceptance || ''
+    }, tasks, activities, reviews, assignments, store);
+    const manual = deliverable.manualOverride || overrides[deliverable.id] || null;
+    const status = manual?.status || scored.status || deliverable.status || '待补证据';
+    const progress = manual?.status === '已完成'
+      ? 100
+      : Math.max(clampProgress(deliverable.progress), clampProgress(scored.progress));
+    return {
+      ...deliverable,
+      status,
+      progress,
+      evidence: scored.evidence,
+      gaps: manual?.status === '已完成' ? [] : scored.gaps,
+      linkedTasks: scored.linkedTasks,
+      linkMode: scored.linkMode,
+      manualOverride: manual
+        ? { status: manual.status, by: manual.by, at: manual.at }
+        : null
+    };
+  });
+
+  const rawPhases = Array.isArray(store.phases) && store.phases.length
+    ? store.phases
+    : (store.currentStage?.phases?.length ? store.currentStage.phases : defaultPhases);
+  const phases = rawPhases.map((phase) => {
+    const nodes = deliverables.filter((item) => item.phaseId === phase.id);
+    if (!nodes.length) return { ...phase, progress: clampProgress(phase.progress), deliverableCount: 0 };
+    const allDone = nodes.every((item) => item.status === '已完成');
+    const anyBlocked = nodes.some((item) => item.status === '阻塞');
+    const anyRisk = nodes.some((item) => item.status === '高风险');
+    const anyActive = nodes.some((item) => item.status === '推进中');
+    return {
+      ...phase,
+      status: allDone ? '已完成' : anyBlocked ? '阻塞' : anyRisk ? '高风险' : anyActive ? '进行中' : phase.status || '待开始',
+      progress: Math.round(nodes.reduce((sum, item) => sum + clampProgress(item.progress), 0) / nodes.length),
+      deliverableCount: nodes.length
+    };
+  });
+
+  const progress = deliverables.length
+    ? Math.round(deliverables.reduce((sum, item) => sum + clampProgress(item.progress), 0) / deliverables.length)
+    : 0;
+
+  return {
+    phases,
+    deliverables,
+    metrics: {
+      total: deliverables.length,
+      done: deliverables.filter((item) => item.status === '已完成').length,
+      inProgress: deliverables.filter((item) => item.status === '推进中').length,
+      blocked: deliverables.filter((item) => item.status === '阻塞' || item.status === '高风险').length,
+      missingEvidence: deliverables.filter((item) => (item.gaps || []).length > 0).length,
+      progress
     }
   };
 }

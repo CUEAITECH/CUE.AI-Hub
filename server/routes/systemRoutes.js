@@ -4,6 +4,7 @@ export function createSystemRoutes({
   normalizeStageName,
   buildMetrics,
   buildStageChecklist,
+  aggregateDeliverableProgress,
   buildOpenApiSpec,
   sendJson,
   port,
@@ -27,7 +28,8 @@ export function createSystemRoutes({
         currentStage,
         alerts,
         metrics: buildMetrics(store, alerts),
-        stageChecklist: buildStageChecklist({ ...store, currentStage })
+        stageChecklist: buildStageChecklist({ ...store, currentStage }),
+        deliverableProgress: aggregateDeliverableProgress(store)
       });
       return true;
     }
