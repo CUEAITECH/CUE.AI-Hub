@@ -84,7 +84,7 @@ function normalizeDeliverableRecord(deliverable, overrides, now) {
   };
 }
 
-function migrateStore(store) {
+export function migrateStore(store) {
   const now = new Date().toISOString();
   const next = {
     tasks: [],
