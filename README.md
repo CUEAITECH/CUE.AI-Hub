@@ -161,6 +161,8 @@ index.html                   8 个页面 section
 
 **Phase 0 路由拆分状态：** 已完成。`server/index.js` 不再直接承载业务 API 分支，所有对外 API 已按领域拆到 `server/routes/*`。本阶段只做行为保持型重构，不改变现有 JSON 数据模型，也不启动 Deliverable/Phase 外键迁移。后续 Phase 1 才进入交付项中心数据模型迁移。
 
+**Phase 1 数据模型迁移状态：** 已完成兼容层。`migrateStore` 会从旧 `currentStage.checklist` 生成顶层 `deliverables[]`，从旧 `currentStage.phases` 生成顶层 `phases[]`，并为 `tasks`、`activities`、`assignments` 补齐 `deliverableId` / `projectId` 等 FK 字段。`GET /api/state` 已返回 `deliverables`、`phases` 和 `deliverableProgress`。旧路径图仍读取 `currentStage.checklist`，Phase 2 才切换到 FK-first 绑定引擎。
+
 **数据存储：** `server/data/db.json`，进程内 in-memory cache，单例读写。
 
 **LLM 调用：** 所有调用走 `callClaude(systemPrompt, userPrompt)`，返回文本或 `null`（失败/无 key 时）。System prompt 固定，不含日期/用户输入，保持 prompt cache 有效。每个调用方必须处理 `null` 并降级。
