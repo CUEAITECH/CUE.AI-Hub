@@ -122,6 +122,37 @@ function linkReasonMap(links = []) {
   ]));
 }
 
+function bindingSourceLabel(mode) {
+  if (mode === 'fk') return '显式 FK';
+  if (mode === 'hybrid') return 'AI 语义';
+  return '关键词兜底';
+}
+
+function bindingStrength(mode) {
+  if (mode === 'fk') return 'strong';
+  if (mode === 'hybrid') return 'medium';
+  return 'weak';
+}
+
+function buildBindingExplanation({ mode, fkTasks, fkActivities, fkAssignments, linkedTasks, linkedActivities, linkedAssignments, semantic, item }) {
+  const parts = [];
+  if (fkTasks.length) parts.push(`${fkTasks.length} 个任务通过 deliverableId 绑定`);
+  if (fkActivities.length) parts.push(`${fkActivities.length} 条 commit 通过 taskId/deliverableId 绑定`);
+  if (fkAssignments.length) parts.push(`${fkAssignments.length} 条认领通过 taskId/deliverableId 绑定`);
+  if (!parts.length && (semantic.taskIds.size || semantic.activityIds.size)) {
+    if (semantic.taskIds.size) parts.push(`${semantic.taskIds.size} 个任务来自 AI 语义关联`);
+    if (semantic.activityIds.size) parts.push(`${semantic.activityIds.size} 条 commit 来自 AI 语义关联`);
+  }
+  if (!parts.length) {
+    if (linkedTasks.length || linkedActivities.length || linkedAssignments.length) {
+      parts.push(`使用关键词兜底：${(item.keywords || []).slice(0, 4).join(' / ') || item.title}`);
+    } else {
+      parts.push('暂无强绑定证据，等待任务、commit 或认领记录补齐 FK');
+    }
+  }
+  return parts.join('；');
+}
+
 function scoreChecklistItem(item, tasks, activities, reviews, assignments, store) {
   const semantic = semanticLinksForStage(store, item.id);
   const fkTasks = tasks.filter((task) => task.deliverableId === item.id);
@@ -195,6 +226,9 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
 
   const taskReasons = linkReasonMap((store.semanticLinks || {}).taskStageLinks);
   const activityReasons = linkReasonMap((store.semanticLinks || {}).commitStageLinks);
+  const linkMode = (fkTasks.length || fkActivities.length || fkAssignments.length)
+    ? 'fk'
+    : (semantic.taskIds.size || semantic.activityIds.size) ? 'hybrid' : 'rules';
 
   return {
     ...item,
@@ -234,9 +268,34 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
       }))
     },
     gaps,
-    linkMode: (fkTasks.length || fkActivities.length || fkAssignments.length)
-      ? 'fk'
-      : (semantic.taskIds.size || semantic.activityIds.size) ? 'hybrid' : 'rules'
+    linkMode,
+    binding: {
+      mode: linkMode,
+      label: bindingSourceLabel(linkMode),
+      strength: bindingStrength(linkMode),
+      explanation: buildBindingExplanation({
+        mode: linkMode,
+        fkTasks,
+        fkActivities,
+        fkAssignments,
+        linkedTasks,
+        linkedActivities,
+        linkedAssignments,
+        semantic,
+        item
+      }),
+      counts: {
+        tasks: linkedTasks.length,
+        commits: linkedActivities.length,
+        reviews: linkedReviews.length,
+        assignments: linkedAssignments.length,
+        fkTasks: fkTasks.length,
+        fkCommits: fkActivities.length,
+        fkAssignments: fkAssignments.length,
+        semanticTasks: semantic.taskIds.size,
+        semanticCommits: semantic.activityIds.size
+      }
+    }
   };
 }
 
@@ -385,6 +444,7 @@ export function aggregateDeliverableProgress(store) {
       gaps: manual?.status === '已完成' ? [] : scored.gaps,
       linkedTasks: scored.linkedTasks,
       linkMode: scored.linkMode,
+      binding: scored.binding,
       manualOverride: manual
         ? { status: manual.status, by: manual.by, at: manual.at }
         : null

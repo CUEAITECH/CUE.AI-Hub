@@ -196,6 +196,10 @@ await test('phase2 checklist scoring prefers deliverable FK over keyword fallbac
   assert.equal(alpha.evidence.commits[0].id, 'activity_bound');
   assert.equal(alpha.evidence.assignments[0].id, 'assign_bound');
   assert.equal(alpha.linkMode, 'fk');
+  assert.equal(alpha.binding.label, '显式 FK');
+  assert.equal(alpha.binding.strength, 'strong');
+  assert.equal(alpha.binding.counts.fkTasks, 1);
+  assert.match(alpha.binding.explanation, /deliverableId/);
 });
 
 await test('phase2 activity and assignment writes persist explicit task and deliverable bindings', () => {
@@ -270,4 +274,25 @@ await test('phase2 migration backfills historical task, activity, and assignment
   assert.equal(migrated.activities[0].taskId, 'task_historical');
   assert.equal(migrated.activities[0].deliverableId, 'deliverable_beta');
   assert.equal(migrated.assignments[0].deliverableId, 'deliverable_beta');
+});
+
+await test('phase2 checklist exposes weak keyword fallback diagnostics', () => {
+  const store = {
+    currentStage: legacyStage,
+    deliverables: legacyStage.checklist,
+    tasks: [
+      {
+        id: 'task_keyword_only',
+        title: 'Alpha API',
+        progress: 15,
+        status: '进行中',
+        deliverableId: null
+      }
+    ]
+  };
+
+  const alpha = buildStageChecklist(store).checklist.find((item) => item.id === 'deliverable_alpha');
+  assert.equal(alpha.linkMode, 'rules');
+  assert.equal(alpha.binding.label, '关键词兜底');
+  assert.equal(alpha.binding.strength, 'weak');
 });

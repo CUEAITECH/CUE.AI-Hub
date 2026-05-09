@@ -164,7 +164,7 @@ index.html                   8 个页面 section
 
 **Phase 1 数据模型迁移状态：** 已完成兼容层。`migrateStore` 会从旧 `currentStage.checklist` 生成顶层 `deliverables[]`，从旧 `currentStage.phases` 生成顶层 `phases[]`，并为 `tasks`、`activities`、`assignments` 补齐 `deliverableId` / `projectId` 等 FK 字段。`GET /api/state` 已返回 `deliverables`、`phases` 和 `deliverableProgress`。
 
-**Phase 2 显式绑定引擎状态：** 已完成第一版，并已加入历史数据回填。路径图评分已切换为 FK-first：任务优先按 `task.deliverableId` 关联交付项，commit 和 assignment 优先按 `activity.deliverableId` / `activity.taskId` / `assignment.deliverableId` / `assignment.taskId` 取证；没有显式 FK 时才回退到语义链接和关键词规则。GitHub 同步与 webhook 入库会尝试为新 activity 持久化 `taskId` / `deliverableId`，Hub 和企业微信认领任务时也会写入 `deliverableId`。`migrateStore` 会在读库时调用 `rebindStoreExplicitRefs`，为旧 task、activity、assignment 尽量补齐 FK。回归测试覆盖 FK 优先、commit 绑定、assignment 绑定、历史回填和 Phase 0/1 兼容路径。
+**Phase 2 显式绑定引擎状态：** 已完成。路径图评分已切换为 FK-first：任务优先按 `task.deliverableId` 关联交付项，commit 和 assignment 优先按 `activity.deliverableId` / `activity.taskId` / `assignment.deliverableId` / `assignment.taskId` 取证；没有显式 FK 时才回退到语义链接和关键词规则。GitHub 同步与 webhook 入库会尝试为新 activity 持久化 `taskId` / `deliverableId`，Hub 和企业微信认领任务时也会写入 `deliverableId`。`migrateStore` 会在读库时调用 `rebindStoreExplicitRefs`，为旧 task、activity、assignment 尽量补齐 FK。`/api/state` 和 `/api/stage/checklist` 会返回每个节点的 `binding` 诊断信息，前端路径图显示“显式 FK / AI 语义 / 关键词兜底”的来源、强弱和解释。回归测试与 smoke 测试覆盖 FK 优先、commit 绑定、assignment 绑定、历史回填、绑定诊断和 Phase 0/1 兼容路径。
 
 **数据存储：** `server/data/db.json`，进程内 in-memory cache，单例读写。
 

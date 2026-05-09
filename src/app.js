@@ -350,6 +350,16 @@ function roadmapStatusClass(status) {
   return 'waiting';
 }
 
+function bindingClass(binding = {}) {
+  if (binding.strength === 'strong' || binding.mode === 'fk') return 'strong';
+  if (binding.strength === 'medium' || binding.mode === 'hybrid') return 'medium';
+  return 'weak';
+}
+
+function bindingLabel(binding = {}) {
+  return binding.label || (binding.mode === 'fk' ? '显式 FK' : binding.mode === 'hybrid' ? 'AI 语义' : '关键词兜底');
+}
+
 function renderRoadmap() {
   const summaryEl = document.querySelector('#roadmapSummary');
   const laneEl = document.querySelector('#roadmapLane');
@@ -407,6 +417,7 @@ function renderRoadmap() {
   function renderPhaseNodes(nodes) {
     return nodes.map((item) => {
       const statusClass = roadmapStatusClass(item.status);
+      const bindClass = bindingClass(item.binding);
       const progress = Math.max(0, Math.min(100, Number(item.progress) || 0));
       return `
         <article class="roadmap-node roadmap-${statusClass}">
@@ -417,6 +428,7 @@ function renderRoadmap() {
               <span>${roadmapStatusIcon(item.status)}</span>
             </div>
             <p>${escapeHtml(item.acceptance || '')}</p>
+            <span class="binding-pill binding-${bindClass}">${escapeHtml(bindingLabel(item.binding))}</span>
             <div class="roadmap-node-progress"><i style="width:${progress}%"></i></div>
             <small>${escapeHtml(item.owner || '未指定')} · ${progress}% · ${escapeHtml(item.status)}</small>
           </div>
@@ -474,6 +486,9 @@ function renderRoadmap() {
     const commits = item.evidence?.commits || [];
     const reviews = item.evidence?.reviews || [];
     const assignments = item.evidence?.assignments || [];
+    const binding = item.binding || {};
+    const bindClass = bindingClass(binding);
+    const bindingCounts = binding.counts || {};
     return `
       <article class="roadmap-detail roadmap-${statusClass}">
         <div class="roadmap-detail-head">
@@ -482,6 +497,13 @@ function renderRoadmap() {
             <h3>${escapeHtml(item.title)}</h3>
           </div>
           <b>${Number(item.progress) || 0}%</b>
+        </div>
+        <div class="roadmap-binding binding-${bindClass}">
+          <div>
+            <strong>${escapeHtml(bindingLabel(binding))}</strong>
+            <p>${escapeHtml(binding.explanation || '暂无绑定解释')}</p>
+          </div>
+          <small>任务 ${bindingCounts.tasks || 0} · Commit ${bindingCounts.commits || 0} · 认领 ${bindingCounts.assignments || 0}</small>
         </div>
         <div class="roadmap-detail-section">
           <strong>任务</strong>

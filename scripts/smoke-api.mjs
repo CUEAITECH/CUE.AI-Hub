@@ -18,11 +18,15 @@ const checks = [
       && json?.metrics
       && json?.stageChecklist
       && Array.isArray(json?.deliverableProgress?.deliverables)
+      && (json.stageChecklist.checklist || []).every((item) => item.binding?.mode && item.binding?.label)
     )
   },
   {
     path: '/api/stage/checklist',
-    validate: (json) => Array.isArray(json?.nodes) || Array.isArray(json?.checklist)
+    validate: (json) => {
+      const nodes = json?.nodes || json?.checklist || [];
+      return Array.isArray(nodes) && nodes.every((item) => item.binding?.mode && item.binding?.strength);
+    }
   },
   {
     path: '/api/tasks',
