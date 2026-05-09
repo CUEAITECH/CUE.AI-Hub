@@ -4,6 +4,7 @@ import { aggregateDeliverableProgress, buildStageChecklist } from '../server/ser
 import { dispatchRoutes } from '../server/routes/index.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
 import { normalizeAssignment } from '../server/services/dailyBrief.js';
+import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc } from '../server/services/docsManager.js';
 
 async function test(name, fn) {
   try {
@@ -295,4 +296,45 @@ await test('phase2 checklist exposes weak keyword fallback diagnostics', () => {
   assert.equal(alpha.linkMode, 'rules');
   assert.equal(alpha.binding.label, '关键词兜底');
   assert.equal(alpha.binding.strength, 'weak');
+});
+
+await test('phase3 progress doc parser reads completion suggestions', () => {
+  const items = parseProgressDoc([
+    '- ✅ **后端模块化重构**（成员A）',
+    '- 🔶 `P0` **TRTC全链路联调**',
+    '- ⬜ **iPhone 输出端**'
+  ].join('\n'));
+
+  assert.deepEqual(items, [
+    { title: '后端模块化重构', docStatus: '已完成' },
+    { title: 'TRTC全链路联调', docStatus: '进行中' },
+    { title: 'iPhone 输出端', docStatus: '未开始' }
+  ]);
+});
+
+await test('phase3 progress markdown is deliverable first', () => {
+  const markdown = buildProgressMarkdown(
+    { id: 'cue_ai_classroom', name: 'Cue.AI' },
+    [],
+    [{ title: '旧任务', status: 'completed' }],
+    [],
+    '2026-05-09',
+    [
+      { id: 'd1', phaseId: 'phase_backend', title: '后端模块化重构', owner: '成员A', status: '已完成', acceptance: '后端验收' },
+      { id: 'd2', phaseId: 'phase_trtc', title: 'TRTC全链路联调', owner: '全员', status: '推进中', docSuggestComplete: true }
+    ]
+  );
+
+  assert.match(markdown, /## phase_backend/);
+  assert.match(markdown, /- ✅ \*\*后端模块化重构\*\*/);
+  assert.match(markdown, /- 🔶 \*\*TRTC全链路联调\*\*/);
+  assert.match(markdown, /文档侧已标记完成，等待 Hub 人工确认。/);
+  assert.match(markdown, /2 交付项/);
+});
+
+await test('phase3 task parser ignores progress tracking doc', async () => {
+  const tasks = await parseDocsForTasks([
+    { path: 'docs/阶段进度追踪.md', name: '阶段进度追踪.md', content: '- ✅ **后端模块化重构**' }
+  ]);
+  assert.deepEqual(tasks, []);
 });

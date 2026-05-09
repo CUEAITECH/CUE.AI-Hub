@@ -51,6 +51,7 @@ export function createProjectRoutes({
   buildMetrics,
   fetchProjectDocs,
   parseDocsForTasks,
+  parseProgressDoc,
   parsePhasesFromDocs,
   selectDailyDocTasks,
   buildProgressMarkdown,
@@ -59,6 +60,47 @@ export function createProjectRoutes({
   reassignChecklistPhaseIds,
   todayText
 }) {
+  function slugId(prefix, value) {
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w\u3400-\u9fff]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40);
+    return `${prefix}_${normalized || createId('node').replace(/^node_/, '')}`;
+  }
+
+  function normalizeTitle(value) {
+    return String(value || '').replace(/\s+/g, '').replace(/[【】()[\]（）]/g, '').toLowerCase();
+  }
+
+  function findDeliverableByTitle(deliverables = [], title = '') {
+    const key = normalizeTitle(title);
+    if (!key) return null;
+    return deliverables.find((item) => {
+      const candidate = normalizeTitle(item.title);
+      return candidate === key || candidate.includes(key) || key.includes(candidate);
+    }) || null;
+  }
+
+  function applyProgressDocSuggestions(draft, docs) {
+    const progressDoc = (docs || []).find((doc) => String(doc.name || doc.path || '').includes('阶段进度追踪'));
+    if (!progressDoc) return 0;
+    const progressItems = parseProgressDoc(progressDoc.content || '');
+    let suggested = 0;
+    draft.deliverables = draft.deliverables || [];
+    for (const item of progressItems) {
+      if (item.docStatus !== '已完成') continue;
+      const deliverable = findDeliverableByTitle(draft.deliverables, item.title);
+      if (!deliverable || deliverable.status === '已完成' || deliverable.manualOverride?.status === '已完成') continue;
+      deliverable.docSuggestComplete = true;
+      deliverable.docStatus = item.docStatus;
+      deliverable.docStatusUpdatedAt = new Date().toISOString();
+      suggested++;
+    }
+    return suggested;
+  }
+
   async function runProjectSync(project, scanOptions) {
     if (hasGitHubConfig(project)) {
       return scanGitHubProject(project, scanOptions);
@@ -87,23 +129,50 @@ export function createProjectRoutes({
     }
 
     const storeSnap = await loadStore();
+    const planDocs = docs.filter((doc) => !String(doc.name || doc.path || '').includes('阶段进度追踪'));
     const existingNodes = (storeSnap.currentStage?.checklist?.length
       ? storeSnap.currentStage.checklist : defaultStageChecklist
     ).map((node) => ({ id: node.id, title: node.title, phaseId: node.phaseId }));
-    const parsedPhasesResult = await parsePhasesFromDocs(docs, parsedTasks, existingNodes);
+    const parsedPhasesResult = await parsePhasesFromDocs(planDocs, parsedTasks, existingNodes);
     const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
     const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
 
     let imported = 0;
+    let createdDeliverables = 0;
+    let docSuggestions = 0;
     const nextStore = await updateStore((draft) => {
       const existing = draft.tasks || [];
+      draft.deliverables = draft.deliverables || [];
       for (const task of importCandidates) {
+        let deliverable = findDeliverableByTitle(draft.deliverables, task.deliverableTitle || task.title);
+        if (!deliverable && (task.deliverableTitle || task.title)) {
+          deliverable = {
+            id: slugId('deliverable', task.deliverableTitle || task.title),
+            projectId,
+            phaseId: parsedPhasesResult?.nodes?.find((node) => normalizeTitle(node.title) === normalizeTitle(task.deliverableTitle))?.phaseId || null,
+            title: task.deliverableTitle || task.title,
+            owner: task.owner || '',
+            acceptance: task.description || '',
+            keywords: [task.title, task.deliverableTitle, task.sourceDoc].filter(Boolean),
+            status: task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '推进中' : '待补证据',
+            progress: task.status === 'completed' ? 100 : task.status === 'in_progress' ? 35 : 0,
+            sourceDocPath: task.sourceDoc || '',
+            docSuggestComplete: false,
+            manualOverride: null,
+            taskIds: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          draft.deliverables.push(deliverable);
+          createdDeliverables++;
+        }
         const duplicate = existing.find(
           (item) => item.title === task.title && item.sourceDoc === task.sourceDoc
         );
         if (!duplicate) {
+          const taskId = createId('task');
           existing.unshift({
-            id: createId('task'),
+            id: taskId,
             title: task.title,
             owner: task.owner || '',
             priority: task.priority || 'P1',
@@ -112,16 +181,26 @@ export function createProjectRoutes({
             dueDate: task.dueDate || '',
             sourceDoc: task.sourceDoc || '',
             projectId,
+            deliverableId: deliverable?.id || null,
             acceptance: '',
             createdAt: new Date().toISOString()
           });
+          if (deliverable && !deliverable.taskIds?.includes(taskId)) {
+            deliverable.taskIds = [...(deliverable.taskIds || []), taskId];
+          }
           imported++;
+        } else if (deliverable && !duplicate.deliverableId) {
+          duplicate.deliverableId = deliverable.id;
+          if (!deliverable.taskIds?.includes(duplicate.id)) {
+            deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
+          }
         }
       }
       draft.tasks = existing;
       if (!draft.docTasks) draft.docTasks = {};
       draft.docTasks[projectId] = parsedTasks;
       mergeStageChecklist(draft, parsedPhasesResult, defaultStageChecklist, reassignChecklistPhaseIds);
+      docSuggestions = applyProgressDocSuggestions(draft, docs);
       return draft;
     });
 
@@ -137,7 +216,9 @@ export function createProjectRoutes({
         )
       )),
       candidates: parsedTasks,
-      phases: parsedPhasesResult?.phases?.length || 0
+      phases: parsedPhasesResult?.phases?.length || 0,
+      createdDeliverables,
+      docSuggestComplete: docSuggestions
     };
   }
 
@@ -314,12 +395,13 @@ export function createProjectRoutes({
 
       const docTasks = (store.docTasks || {})[projectId] || [];
       const hubTasks = (store.tasks || []).filter((task) => task.projectId === projectId);
+      const deliverables = (store.deliverables || []).filter((item) => item.projectId === projectId);
       const today = todayText();
       const todayAssignments = (store.assignments || []).filter((assignment) =>
         assignment.date === today && assignment.projectId === projectId
       );
 
-      const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today);
+      const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today, deliverables);
       await writeProgressToGitHub(owner, repo, markdown);
 
       sendJson(res, 200, { written: true, path: 'docs/阶段进度追踪.md', date: today });
@@ -361,7 +443,9 @@ export function createProjectRoutes({
           imported: docsResult.imported,
           selected: docsResult.selected || 0,
           totalCandidates: docsResult.totalCandidates || 0,
-          phases: docsResult.phases || 0
+          phases: docsResult.phases || 0,
+          createdDeliverables: docsResult.createdDeliverables || 0,
+          docSuggestComplete: docsResult.docSuggestComplete || 0
         };
       } catch (err) {
         result.steps.syncDocs = { ok: false, error: err.message };
@@ -372,11 +456,12 @@ export function createProjectRoutes({
         const { owner, repo } = getProjectRepo(project);
         const docTasks = (freshStore.docTasks || {})[projectId] || [];
         const hubTasks = (freshStore.tasks || []).filter((task) => task.projectId === projectId);
+        const deliverables = (freshStore.deliverables || []).filter((item) => item.projectId === projectId);
         const today = todayText();
         const todayAssignments = (freshStore.assignments || []).filter((assignment) =>
           assignment.date === today && assignment.projectId === projectId
         );
-        const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today);
+        const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today, deliverables);
         await writeProgressToGitHub(owner, repo, markdown);
         result.steps.updateDocs = { ok: true };
       } catch (err) {

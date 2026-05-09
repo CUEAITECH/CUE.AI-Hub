@@ -50,6 +50,7 @@ import { buildOpenApiSpec } from './data/openapi.js';
 import {
   fetchProjectDocs,
   parseDocsForTasks,
+  parseProgressDoc,
   parsePhasesFromDocs,
   selectDailyDocTasks,
   buildProgressMarkdown,
@@ -222,6 +223,7 @@ const routeModules = [
     buildMetrics,
     fetchProjectDocs,
     parseDocsForTasks,
+    parseProgressDoc,
     parsePhasesFromDocs,
     selectDailyDocTasks,
     buildProgressMarkdown,

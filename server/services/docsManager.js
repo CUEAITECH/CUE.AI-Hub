@@ -21,9 +21,13 @@ const SKIP_DOC_PATTERNS = [
   '核心指标',
   '技术选型',
   '功能优先级',
-  '阶段进度追踪',
   'README',
 ];
+
+export function isProgressDoc(doc = {}) {
+  return String(doc.path || doc.name || '').endsWith(PROGRESS_DOC_PATH)
+    || String(doc.name || '').includes('阶段进度追踪');
+}
 
 function authHeaders() {
   const token = process.env.GITHUB_TOKEN;
@@ -94,6 +98,7 @@ const PARSE_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理助手，
     "owner": "负责人（中文名或方向标签，未明确写 '待认领'）",
     "priority": "P0|P1|P2",
     "sourceDoc": "来源文档路径",
+    "deliverableTitle": "所属交付项标题（从文档章节/模块/里程碑推断，20字以内）",
     "description": "任务描述（50字以内）",
     "dueDate": "截止日期（YYYY-MM-DD 格式，无则留空）",
     "status": "pending|in_progress|completed"
@@ -116,9 +121,10 @@ const PARSE_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理助手，
  * @returns {Promise<Array>} 任务列表，失败时返回 []
  */
 export async function parseDocsForTasks(docs) {
-  if (!docs.length) return [];
+  const planDocs = (docs || []).filter((doc) => !isProgressDoc(doc));
+  if (!planDocs.length) return [];
 
-  const userPrompt = docs.map((d) =>
+  const userPrompt = planDocs.map((d) =>
     `=== 文档：${d.path} ===\n${d.content.slice(0, 3000)}`
   ).join('\n\n');
 
@@ -136,6 +142,21 @@ export async function parseDocsForTasks(docs) {
     console.error('[DocsManager] LLM 输出解析失败:', e.message, raw.slice(0, 300));
     return [];
   }
+}
+
+export function parseProgressDoc(markdownContent = '') {
+  const items = [];
+  for (const line of String(markdownContent || '').split('\n')) {
+    const match = line.match(/^[-*]\s*(✅|🔶|⬜)\s*(?:`P[0-2]`\s*)?\*\*(.+?)\*\*/)
+      || line.match(/^[-*]\s*(✅|🔶|⬜)\s*(.+?)\s*$/);
+    if (!match) continue;
+    const docStatus = match[1] === '✅' ? '已完成' : match[1] === '🔶' ? '进行中' : '未开始';
+    items.push({
+      title: String(match[2] || '').replace(/（.+?）$/, '').trim(),
+      docStatus
+    });
+  }
+  return items;
 }
 
 const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负责从开发计划文档中提炼完整的开发阶段路线图，并为每个阶段分配路径图检查节点。
@@ -320,13 +341,43 @@ export function selectDailyDocTasks(tasks, limit = 8) {
  * @param {string} date - YYYY-MM-DD
  * @returns {string}
  */
-export function buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, date) {
+export function buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, date, deliverables = []) {
   const lines = [
     `# ${project.name || project.id} 阶段进度追踪`,
     '',
     `> 最后更新：${date}（由 CUE Project Hub AI 产品经理自动生成）`,
     '',
   ];
+
+  if (Array.isArray(deliverables) && deliverables.length) {
+    const byPhase = {};
+    for (const deliverable of deliverables) {
+      const key = deliverable.phaseId || '未分阶段';
+      if (!byPhase[key]) byPhase[key] = [];
+      byPhase[key].push(deliverable);
+    }
+
+    for (const [phaseId, items] of Object.entries(byPhase)) {
+      lines.push(`## ${phaseId}`);
+      lines.push('');
+      for (const deliverable of items) {
+        const status = deliverable.manualOverride?.status || deliverable.status || '待补证据';
+        const icon = status === '已完成' ? '✅' : ['推进中', '进行中', '高风险', '阻塞'].includes(status) ? '🔶' : '⬜';
+        const ownerStr = deliverable.owner ? `（${deliverable.owner}）` : '';
+        lines.push(`- ${icon} **${deliverable.title}**${ownerStr}`);
+        if (deliverable.acceptance) lines.push(`  - ${deliverable.acceptance}`);
+        if (deliverable.docSuggestComplete) lines.push('  - 文档侧已标记完成，等待 Hub 人工确认。');
+      }
+      lines.push('');
+    }
+
+    const total = deliverables.length;
+    const done = deliverables.filter((item) => (item.manualOverride?.status || item.status) === '已完成').length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    lines.push('---');
+    lines.push(`**总进度：${done}/${total} 交付项完成（${pct}%）** | 数据源：[CUE Project Hub](${process.env.HUB_URL || 'https://hub.cueai.top'})`);
+    return lines.join('\n');
+  }
 
   // 按 sourceDoc 分组
   const byDoc = {};
