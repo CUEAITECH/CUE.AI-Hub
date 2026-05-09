@@ -11,7 +11,13 @@ const checks = [
   },
   {
     path: '/api/state',
-    validate: (json) => Array.isArray(json?.tasks) && json?.metrics && json?.stageChecklist
+    validate: (json) => (
+      Array.isArray(json?.tasks)
+      && Array.isArray(json?.deliverables)
+      && Array.isArray(json?.phases)
+      && json?.metrics
+      && json?.stageChecklist
+    )
   },
   {
     path: '/api/stage/checklist',

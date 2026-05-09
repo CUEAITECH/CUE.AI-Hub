@@ -17,6 +17,7 @@ const legacyCueAiRepoAliases = new Set([
 ]);
 const legacyHubReviewRepos = new Set(['cue-project-hub', 'cue-project-hub-api', 'CUEAITECH/CUE-Project-Hub', 'CUEAITECH/CUE.AI-Hub']);
 const seedDemoReviewIds = new Set(['review_001', 'review_002', 'review_003']);
+const defaultProjectId = 'cue_ai_classroom';
 
 let cache = null;
 
@@ -30,7 +31,61 @@ async function writeJson(path, data) {
   await writeFile(path, `${JSON.stringify(data, null, 2)}\n`);
 }
 
+function normalizePhaseRecord(phase) {
+  return {
+    ...phase,
+    projectId: phase.projectId || defaultProjectId
+  };
+}
+
+function deliverableFromChecklistNode(node, overrides, now) {
+  const override = overrides[node.id] || null;
+  return {
+    id: node.id,
+    projectId: defaultProjectId,
+    phaseId: node.phaseId || null,
+    title: node.title || '',
+    owner: node.owner || '',
+    acceptance: node.acceptance || '',
+    keywords: Array.isArray(node.keywords) ? node.keywords : [],
+    status: '待补证据',
+    progress: 0,
+    sourceDocPath: node.sourceDocPath || '',
+    docSuggestComplete: false,
+    manualOverride: override
+      ? { status: override.status, by: override.by, at: override.at }
+      : null,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function normalizeDeliverableRecord(deliverable, overrides, now) {
+  const override = overrides[deliverable.id] || deliverable.manualOverride || null;
+  return {
+    ...deliverable,
+    projectId: deliverable.projectId || defaultProjectId,
+    phaseId: deliverable.phaseId || null,
+    title: deliverable.title || '',
+    owner: deliverable.owner || '',
+    acceptance: deliverable.acceptance || '',
+    keywords: Array.isArray(deliverable.keywords) ? deliverable.keywords : [],
+    status: deliverable.status || '待补证据',
+    progress: Number.isFinite(Number(deliverable.progress))
+      ? Math.max(0, Math.min(100, Number(deliverable.progress)))
+      : 0,
+    sourceDocPath: deliverable.sourceDocPath || '',
+    docSuggestComplete: Boolean(deliverable.docSuggestComplete),
+    manualOverride: override
+      ? { status: override.status, by: override.by, at: override.at }
+      : null,
+    createdAt: deliverable.createdAt || now,
+    updatedAt: deliverable.updatedAt || now
+  };
+}
+
 function migrateStore(store) {
+  const now = new Date().toISOString();
   const next = {
     tasks: [],
     members: [],
@@ -45,6 +100,8 @@ function migrateStore(store) {
     planAdjustments: [],
     roadmapReviews: [],
     docTasks: {},
+    deliverables: [],
+    phases: [],
     checklistOverrides: {},
     semanticLinks: {},
     riskAnalyses: [],
@@ -53,9 +110,9 @@ function migrateStore(store) {
     ...store
   };
 
-  if (!next.projects.some((project) => project.id === 'cue_ai_classroom')) {
+  if (!next.projects.some((project) => project.id === defaultProjectId)) {
     next.projects.unshift({
-      id: 'cue_ai_classroom',
+      id: defaultProjectId,
       name: 'Cue.AI',
       githubOwner: 'CUEAITECH',
       repository: 'Cue.AI',
@@ -71,7 +128,7 @@ function migrateStore(store) {
   // 迁移：为已有项目补充 githubOwner / githubFullRepo 字段
   next.projects = next.projects.map((p) => {
     if (
-      p.id === 'cue_ai_classroom'
+      p.id === defaultProjectId
       && (
         !p.githubOwner
         || p.githubFullRepo === 'dirtortian/OmniNexus-Edu-copilot'
@@ -97,7 +154,11 @@ function migrateStore(store) {
     return p;
   });
 
-  next.activities = (next.activities || []).map(({ diff, ...activity }) => activity);
+  next.activities = (next.activities || []).map(({ diff, ...activity }) => ({
+    ...activity,
+    deliverableId: activity.deliverableId || null,
+    taskId: activity.taskId || null
+  }));
   next.reviews = (next.reviews || [])
     .filter((review) => !(seedDemoReviewIds.has(review.id) && legacyHubReviewRepos.has(review.repo)))
     .map((review) => {
@@ -112,11 +173,16 @@ function migrateStore(store) {
     id: String(task.id || '').startsWith('undefined_')
       ? String(task.id).replace(/^undefined_/, 'task_')
       : task.id,
+    deliverableId: task.deliverableId || null,
+    projectId: task.projectId || defaultProjectId,
     linkedRefs: (task.linkedRefs || []).map((ref) => (
       String(ref).startsWith('cue-project-hub#') ? String(ref).replace('cue-project-hub#', `${cueAiRepo}#`) : ref
     ))
   }));
-  next.assignments = next.assignments || [];
+  next.assignments = (next.assignments || []).map((assignment) => ({
+    ...assignment,
+    deliverableId: assignment.deliverableId || null
+  }));
   next.standups = next.standups || [];
   next.eveningReports = next.eveningReports || {};
   next.reports = next.reports || {};
@@ -155,6 +221,15 @@ function migrateStore(store) {
     next.currentStage.phases,
     {}
   );
+  const sourcePhases = Array.isArray(next.currentStage.phases) && next.currentStage.phases.length
+    ? next.currentStage.phases
+    : defaultPhases;
+  next.phases = Array.isArray(next.phases) && next.phases.length
+    ? next.phases.map(normalizePhaseRecord)
+    : sourcePhases.map(normalizePhaseRecord);
+  next.deliverables = Array.isArray(next.deliverables) && next.deliverables.length
+    ? next.deliverables.map((deliverable) => normalizeDeliverableRecord(deliverable, next.checklistOverrides || {}, now))
+    : next.currentStage.checklist.map((node) => deliverableFromChecklistNode(node, next.checklistOverrides || {}, now));
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
     acceptance: task.acceptance === 'PR diff 可输出 Pass、Warning、Block、Escalate 四级结论。'
