@@ -145,7 +145,7 @@ AI 建议：${review.suggestion || '无'}`;
           progress: 0,
           reviewId: id,
           repo: review.repo || null,
-          projectId: 'cue_ai_classroom',
+          projectId: review.projectId || 'cue_ai_classroom',
           createdAt: new Date().toISOString()
         };
       }

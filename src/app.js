@@ -24,6 +24,8 @@ const state = {
   healthAnalysis: null,
   stageChecklist: null,
   reviewQueue: [],
+  currentProjectId: localStorage.getItem('cue_currentProjectId') || '',
+  currentProject: null,
   config: { githubEnabled: false, apiKeyRequiredForWrites: false, wecomEnabled: false, llmEnabled: false }
 };
 
@@ -211,6 +213,36 @@ function getReviewLevelLabel(level) {
   return level || '未知';
 }
 
+function getCurrentProjectId() {
+  return state.currentProjectId || state.projects[0]?.id || 'cue_ai_classroom';
+}
+
+function syncCurrentProject(projectId = '') {
+  const fallback = state.projects[0]?.id || 'cue_ai_classroom';
+  const requested = projectId || state.currentProjectId || fallback;
+  const exists = (state.projects || []).some((project) => project.id === requested);
+  state.currentProjectId = exists ? requested : fallback;
+  state.currentProject = (state.projects || []).find((project) => project.id === state.currentProjectId) || null;
+  if (state.currentProjectId) localStorage.setItem('cue_currentProjectId', state.currentProjectId);
+}
+
+function renderProjectSwitcher() {
+  const select = document.querySelector('#projectSelect');
+  if (!select) return;
+  select.innerHTML = (state.projects || []).map((project) => `
+    <option value="${escapeHtml(project.id)}">${escapeHtml(project.name || project.id)}</option>
+  `).join('');
+  select.value = getCurrentProjectId();
+}
+
+async function switchProject(projectId) {
+  syncCurrentProject(projectId);
+  selectedTaskId = '';
+  await loadState();
+  renderAll();
+  toast(`已切换到 ${state.currentProject?.name || state.currentProjectId}`);
+}
+
 function getTodayAssignments() {
   const today = getTodayText();
   return (state.assignments || []).filter((a) => a.date === today);
@@ -265,9 +297,10 @@ function getDeliverableForTask(task) {
 }
 
 function isCueAiTask(task) {
-  return task?.projectId === 'cue_ai_classroom'
-    || task?.repo === 'CUEAITECH/Cue.AI'
-    || task?.githubFullRepo === 'CUEAITECH/Cue.AI'
+  const currentProject = state.currentProject || {};
+  return task?.projectId === getCurrentProjectId()
+    || (currentProject.githubFullRepo && task?.repo === currentProject.githubFullRepo)
+    || (currentProject.githubFullRepo && task?.githubFullRepo === currentProject.githubFullRepo)
     || String(task?.sourceDoc || '').startsWith('docs/');
 }
 
@@ -596,7 +629,7 @@ function renderTasks() {
 
 function renderCueAiProject() {
   const panel = document.querySelector('#cueAiProject');
-  const project = state.projects.find((item) => item.id === 'cue_ai_classroom');
+  const project = state.projects.find((item) => item.id === getCurrentProjectId());
 
   if (!project) {
     panel.innerHTML = '<div class="empty-state">尚未配置 Cue.AI 仓库。</div>';
@@ -631,7 +664,7 @@ function renderCueAiProject() {
 function renderActivities() {
   const list = document.querySelector('#activityList');
   const projectActivities = state.activities
-    .filter((activity) => activity.projectId === 'cue_ai_classroom')
+    .filter((activity) => !activity.projectId || activity.projectId === getCurrentProjectId())
     .slice(0, 5);
 
   if (!projectActivities.length) {
@@ -1820,12 +1853,14 @@ function renderAll() {
 // ── 业务逻辑 ─────────────────────────────────────────────────
 
 async function loadState() {
-  const payload = await api('/api/state');
+  const storedProjectId = localStorage.getItem('cue_currentProjectId') || state.currentProjectId || '';
+  const payload = await api(storedProjectId ? `/api/state?projectId=${encodeURIComponent(storedProjectId)}` : '/api/state');
   state.tasks = payload.tasks || [];
   state.members = payload.members || [];
   state.reviews = payload.reviews || [];
   state.alerts = payload.alerts || [];
   state.projects = payload.projects || [];
+  syncCurrentProject(payload.currentProjectId || storedProjectId);
   state.activities = payload.activities || [];
   state.assignments = payload.assignments || [];
   state.standups = payload.standups || [];
@@ -1837,15 +1872,17 @@ async function loadState() {
   state.riskAnalyses = payload.riskAnalyses || [];
   state.healthAnalysis = payload.healthAnalysis || null;
   state.stageChecklist = payload.stageChecklist || null;
+  renderProjectSwitcher();
   setText('#syncStatus', '本地 API 已连接');
 
   // 并行加载站会、配置、计划调整建议（assignments 已在 /api/state 全量返回，不重复拉）
+  const projectQuery = getCurrentProjectId() ? `?projectId=${encodeURIComponent(getCurrentProjectId())}` : '';
   const [standupPayload, config, adjustPayload, eveningPayload, checklistPayload] = await Promise.all([
     api('/api/standups').catch(() => ({ standups: [] })),
     api('/api/config').catch(() => ({})),
     api('/api/plan-adjustments').catch(() => ({ adjustments: [] })),
     api('/api/reports/evening').catch(() => ({ report: null })),
-    api('/api/stage/checklist').catch(() => null)
+    api(`/api/stage/checklist${projectQuery}`).catch(() => null)
   ]);
 
   state.standups = standupPayload.standups || [];
@@ -2189,7 +2226,7 @@ async function generateMeetingSummary() {
 // ── AI 产品经理：从文档导入任务 ──────────────────────────────
 async function syncDocsToHub() {
   toast('正在从目标仓库 docs/ 解析任务...');
-  const projectId = state.currentProject?.id || 'cue_ai_classroom';
+  const projectId = getCurrentProjectId();
   const payload = await api(`/api/projects/${projectId}/sync-docs`, { method: 'POST', body: '{}' });
   if (payload.imported === 0) {
     toast(payload.message || '没有新任务导入（已全部存在或文档无可执行任务）');
@@ -2202,7 +2239,7 @@ async function syncDocsToHub() {
 // ── AI 产品经理：写回进度文档 ─────────────────────────────────
 async function updateDocsProgress() {
   toast('正在生成阶段进度追踪并写回 GitHub...');
-  const projectId = state.currentProject?.id || 'cue_ai_classroom';
+  const projectId = getCurrentProjectId();
   const payload = await api(`/api/projects/${projectId}/update-docs`, { method: 'POST', body: '{}' });
   if (payload.written) {
     toast(`docs/阶段进度追踪.md 已更新（${payload.date}）`);
@@ -2232,7 +2269,7 @@ async function decidePlanAdjustment(id, decision, selectedAlternative = null) {
     method: 'POST',
     body: JSON.stringify(body)
   });
-  const nextState = await api('/api/state');
+  const nextState = await api(`/api/state?projectId=${encodeURIComponent(getCurrentProjectId())}`);
   state.planAdjustments = payload.adjustments || state.planAdjustments;
   state.currentStage = nextState.currentStage || state.currentStage;
   state.stageChecklist = nextState.stageChecklist || state.stageChecklist;
@@ -2303,15 +2340,16 @@ async function syncSignals() {
 }
 
 async function syncCueAiGit(options = {}) {
-  const project = state.projects.find((p) => p.id === 'cue_ai_classroom');
+  const projectId = getCurrentProjectId();
+  const project = state.projects.find((p) => p.id === projectId);
   const useGitHub = project?.githubOwner;
   const endpoint = useGitHub
-    ? '/api/projects/cue_ai_classroom/sync-github'
-    : '/api/projects/cue_ai_classroom/sync-local-git';
+    ? `/api/projects/${encodeURIComponent(projectId)}/sync-github`
+    : `/api/projects/${encodeURIComponent(projectId)}/sync-local-git`;
 
   if (!options.silent) setText('#syncStatus', useGitHub ? '正在同步 GitHub 远端...' : '正在同步本地 Git...');
   const payload = await api(endpoint, { method: 'POST', body: '{}' });
-  const nextState = await api('/api/state');
+  const nextState = await api(`/api/state?projectId=${encodeURIComponent(projectId)}`);
   state.tasks = nextState.tasks || [];
   state.members = nextState.members || [];
   state.reviews = nextState.reviews || [];
@@ -2463,6 +2501,10 @@ function toast(message) {
 // ── 事件绑定 ─────────────────────────────────────────────────
 
 function bindEvents() {
+  document.querySelector('#projectSelect')?.addEventListener('change', (event) => {
+    switchProject(event.target.value).catch((error) => toast(error.message));
+  });
+
   document.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => setRoute(button.dataset.route));
   });
@@ -2634,7 +2676,7 @@ function bindEvents() {
     button.textContent = '扫描中...';
     try {
       toast('开始一键扫描，通常需要 60-90 秒，请稍候…');
-      const projectId = state.currentProject?.id || 'cue_ai_classroom';
+      const projectId = getCurrentProjectId();
       const result = await api(`/api/projects/${projectId}/daily-scan`, { method: 'POST', body: '{}' });
       const steps = result.steps || {};
       const msgs = [];

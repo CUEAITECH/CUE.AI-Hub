@@ -22,6 +22,16 @@ const checks = [
     )
   },
   {
+    path: '/api/state?projectId=cue_ai_classroom',
+    validate: (json) => (
+      json?.currentProjectId === 'cue_ai_classroom'
+      && Array.isArray(json?.projects)
+      && Array.isArray(json?.tasks)
+      && Array.isArray(json?.deliverables)
+      && json?.stageChecklist
+    )
+  },
+  {
     path: '/api/stage/checklist',
     validate: (json) => {
       const nodes = json?.nodes || json?.checklist || [];

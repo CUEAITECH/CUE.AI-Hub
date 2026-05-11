@@ -73,9 +73,9 @@ function buildFallbackBrief({ task, owner, note, stage, project }) {
 }
 
 export async function generateAssignmentBrief({ task, owner, note, store }) {
-  const projectId = task?.projectId || 'cue_ai_classroom';
+  const projectId = task?.projectId || (store.projects || [])[0]?.id || 'cue_ai_classroom';
   const project = (store.projects || []).find((item) => item.id === projectId)
-    || (store.projects || []).find((item) => item.githubFullRepo === 'CUEAITECH/Cue.AI')
+    || (store.projects || [])[0]
     || null;
   const stage = store.currentStage || {};
   const fallback = buildFallbackBrief({ task, owner, note, stage, project });
@@ -92,7 +92,7 @@ export async function generateAssignmentBrief({ task, owner, note, store }) {
     project: {
       id: project?.id || projectId,
       name: project?.name || 'Cue.AI',
-      repo: project?.githubFullRepo || 'CUEAITECH/Cue.AI'
+      repo: project?.githubFullRepo || project?.repository || ''
     },
     stage: {
       name: stage?.name || 'Cue.AI 双设备课堂 MVP / TRTC 联调阶段',

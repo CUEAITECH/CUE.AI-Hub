@@ -51,6 +51,18 @@
       "status": "待同步",
       "lastSyncAt": "",
       "summary": "Cue.AI 主仓库，作为项目中枢的真实研发交付试点项目。"
+    },
+    {
+      "id": "cue_ai_hub",
+      "name": "CUE.AI Hub",
+      "githubOwner": "CUEAITECH",
+      "repository": "CUE.AI-Hub",
+      "githubFullRepo": "CUEAITECH/CUE.AI-Hub",
+      "localPath": "",
+      "branch": "",
+      "status": "待同步",
+      "lastSyncAt": "",
+      "summary": "项目中枢自身仓库，用于多项目切换、独立同步和 Phase 4 回归验证。"
     }
   ],
   "activities": [],

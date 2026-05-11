@@ -16,7 +16,26 @@ export function createPlanningRoutes({
   return async function planningRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/stage/checklist') {
       const store = await loadStore();
-      sendJson(res, 200, buildStageChecklist(store));
+      const requestedProjectId = url.searchParams.get('projectId') || '';
+      const projectIds = (store.projects || []).map((project) => project.id);
+      const projectId = requestedProjectId
+        ? (projectIds.includes(requestedProjectId) ? requestedProjectId : projectIds[0] || requestedProjectId)
+        : '';
+      const byProject = (items = []) => projectId
+        ? items.filter((item) => !item.projectId || item.projectId === projectId)
+        : items;
+      const scopedStore = projectId
+        ? {
+            ...store,
+            tasks: byProject(store.tasks || []),
+            reviews: byProject(store.reviews || []),
+            activities: byProject(store.activities || []),
+            assignments: byProject(store.assignments || []),
+            deliverables: byProject(store.deliverables || []),
+            phases: byProject(store.phases || [])
+          }
+        : store;
+      sendJson(res, 200, buildStageChecklist(scopedStore));
       return true;
     }
 

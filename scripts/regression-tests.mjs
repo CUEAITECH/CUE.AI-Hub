@@ -3,6 +3,7 @@ import { migrateStore } from '../server/store.js';
 import { aggregateDeliverableProgress, buildStageChecklist } from '../server/services/stageChecklist.js';
 import { dispatchRoutes } from '../server/routes/index.js';
 import { createAssignmentRoutes } from '../server/routes/assignmentRoutes.js';
+import { createSystemRoutes } from '../server/routes/systemRoutes.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
 import { normalizeAssignment } from '../server/services/dailyBrief.js';
 import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc } from '../server/services/docsManager.js';
@@ -371,4 +372,66 @@ await test('phase3.2 assignment completion confirms linked task completion', asy
   assert.equal(responsePayload.task.status, '已完成');
   assert.equal(responsePayload.task.progress, 100);
   assert.equal(store.tasks[0].completionSource, 'assignment');
+});
+
+await test('phase4 state route filters project scoped records while keeping project switch list', async () => {
+  const store = migrateStore({
+    projects: [
+      { id: 'project_one', name: 'Project One' },
+      { id: 'project_two', name: 'Project Two' }
+    ],
+    currentStage: legacyStage,
+    phases: [
+      { id: 'phase_one', title: 'One', projectId: 'project_one' },
+      { id: 'phase_two', title: 'Two', projectId: 'project_two' }
+    ],
+    deliverables: [
+      { id: 'deliverable_one', title: 'One deliverable', phaseId: 'phase_one', projectId: 'project_one' },
+      { id: 'deliverable_two', title: 'Two deliverable', phaseId: 'phase_two', projectId: 'project_two' }
+    ],
+    tasks: [
+      { id: 'task_one', title: 'One task', projectId: 'project_one', deliverableId: 'deliverable_one' },
+      { id: 'task_two', title: 'Two task', projectId: 'project_two', deliverableId: 'deliverable_two' }
+    ],
+    activities: [
+      { id: 'commit_one', type: 'commit', title: 'one', projectId: 'project_one' },
+      { id: 'commit_two', type: 'commit', title: 'two', projectId: 'project_two' }
+    ],
+    assignments: [
+      { id: 'assign_one', taskId: 'task_one', taskTitle: 'One task', projectId: 'project_one' },
+      { id: 'assign_two', taskId: 'task_two', taskTitle: 'Two task', projectId: 'project_two' }
+    ],
+    reviews: [
+      { id: 'review_one', title: 'one', projectId: 'project_one' },
+      { id: 'review_two', title: 'two', projectId: 'project_two' }
+    ]
+  });
+  let responsePayload = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    scanRisks: () => [],
+    normalizeStageName: (stage) => stage,
+    buildMetrics: (scopedStore) => ({ taskCount: scopedStore.tasks.length }),
+    buildStageChecklist,
+    aggregateDeliverableProgress,
+    buildOpenApiSpec: () => ({}),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    port: 0,
+    cueApiKey: '',
+    isWeComAvailable: () => false,
+    meetingHour: 18,
+    hubUrl: ''
+  });
+
+  const handled = await route({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/state?projectId=project_two'));
+  assert.equal(handled, true);
+  assert.equal(responsePayload.currentProjectId, 'project_two');
+  const projectIds = responsePayload.projects.map((project) => project.id);
+  assert.equal(projectIds.includes('project_one'), true);
+  assert.equal(projectIds.includes('project_two'), true);
+  assert.deepEqual(responsePayload.tasks.map((task) => task.id), ['task_two']);
+  assert.deepEqual(responsePayload.activities.map((activity) => activity.id), ['commit_two']);
+  assert.deepEqual(responsePayload.assignments.map((assignment) => assignment.id), ['assign_two']);
+  assert.deepEqual(responsePayload.reviews.map((review) => review.id), ['review_two']);
+  assert.equal(responsePayload.metrics.taskCount, 1);
 });

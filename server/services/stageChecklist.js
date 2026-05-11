@@ -411,7 +411,7 @@ export function aggregateDeliverableProgress(store) {
     ? rawDeliverables
     : buildStageChecklist(store).checklist.map((item) => ({
         id: item.id,
-        projectId: 'cue_ai_classroom',
+        projectId: (store.projects || [])[0]?.id || 'cue_ai_classroom',
         phaseId: item.phaseId,
         title: item.title,
         owner: item.owner,

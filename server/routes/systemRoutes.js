@@ -21,15 +21,38 @@ export function createSystemRoutes({
 
     if (req.method === 'GET' && url.pathname === '/api/state') {
       const store = await loadStore();
-      const alerts = scanRisks(store);
-      const currentStage = normalizeStageName(store.currentStage || {});
+      const requestedProjectId = url.searchParams.get('projectId') || '';
+      const projectIds = (store.projects || []).map((project) => project.id);
+      const projectId = requestedProjectId
+        ? (projectIds.includes(requestedProjectId) ? requestedProjectId : projectIds[0] || requestedProjectId)
+        : '';
+      const byProject = (items = []) => projectId
+        ? items.filter((item) => !item.projectId || item.projectId === projectId)
+        : items;
+      const scopedStore = projectId
+        ? {
+            ...store,
+            tasks: byProject(store.tasks || []),
+            reviews: byProject(store.reviews || []),
+            activities: byProject(store.activities || []),
+            assignments: byProject(store.assignments || []),
+            standups: byProject(store.standups || []),
+            alerts: byProject(store.alerts || []),
+            deliverables: byProject(store.deliverables || []),
+            phases: byProject(store.phases || [])
+          }
+        : store;
+      const alerts = scanRisks(scopedStore);
+      const currentStage = normalizeStageName(scopedStore.currentStage || {});
       sendJson(res, 200, {
-        ...store,
+        ...scopedStore,
+        projects: store.projects || [],
+        currentProjectId: projectId || (store.projects || [])[0]?.id || '',
         currentStage,
         alerts,
-        metrics: buildMetrics(store, alerts),
-        stageChecklist: buildStageChecklist({ ...store, currentStage }),
-        deliverableProgress: aggregateDeliverableProgress(store)
+        metrics: buildMetrics(scopedStore, alerts),
+        stageChecklist: buildStageChecklist({ ...scopedStore, currentStage }),
+        deliverableProgress: aggregateDeliverableProgress(scopedStore)
       });
       return true;
     }
