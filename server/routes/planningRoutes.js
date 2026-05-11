@@ -117,22 +117,62 @@ export function createPlanningRoutes({
         })[0];
       }
 
+      // 模糊相似度：两个标题是否"近似重复"
+      // 判定条件：一个是另一个的子串（包含关系），且长度差 ≤ 8 个字符
+      // 例：'ipad开始/结束课堂' 与 'ipad开始/结束课堂控制' 长度差 2，前者是后者子串 → 近似重复
+      function isFuzzyDuplicate(a, b) {
+        const lenDiff = Math.abs(a.length - b.length);
+        if (lenDiff > 8) return false;
+        if (a.length === 0 || b.length === 0) return false;
+        return a.includes(b) || b.includes(a);
+      }
+
       const next = await updateStore((draft) => {
         const tasks = draft.tasks || [];
-        // 按 normalizeTitle 分组
+        // 第一轮：按 normalizeTitle 精确分组
         const groups = new Map();
         for (const task of tasks) {
           const key = normTitle(task.title);
           if (!groups.has(key)) groups.set(key, []);
           groups.get(key).push(task);
         }
-        const survivors = [];
+        let afterExact = [];
         let removed = 0;
         for (const group of groups.values()) {
           const best = pickBest(group);
-          survivors.push(best);
+          afterExact.push(best);
           removed += group.length - 1;
         }
+
+        // 第二轮：模糊近似去重（含子串关系）
+        // 按 normTitle 长度升序排列，让更短的标题优先被认定为"主任务"
+        const sorted = afterExact.slice().sort((a, b) => normTitle(a.title).length - normTitle(b.title).length);
+        const fuzzyGroups = [];
+        const assigned = new Set();
+        for (let i = 0; i < sorted.length; i++) {
+          if (assigned.has(sorted[i].id)) continue;
+          const group = [sorted[i]];
+          const keyA = normTitle(sorted[i].title);
+          for (let j = i + 1; j < sorted.length; j++) {
+            if (assigned.has(sorted[j].id)) continue;
+            const keyB = normTitle(sorted[j].title);
+            if (isFuzzyDuplicate(keyA, keyB)) {
+              group.push(sorted[j]);
+              assigned.add(sorted[j].id);
+            }
+          }
+          assigned.add(sorted[i].id);
+          fuzzyGroups.push(group);
+        }
+        let fuzzyRemoved = 0;
+        const survivors = [];
+        for (const group of fuzzyGroups) {
+          const best = pickBest(group);
+          survivors.push(best);
+          fuzzyRemoved += group.length - 1;
+        }
+        removed += fuzzyRemoved;
+
         // 修正占位符 owner
         let fixedOwners = 0;
         draft.tasks = survivors.map((task) => {
@@ -149,13 +189,13 @@ export function createPlanningRoutes({
           }
           return d;
         });
-        draft._cleanupLog = { removed, fixedOwners, survivors: survivors.length, at: new Date().toISOString() };
+        draft._cleanupLog = { removed, fixedOwners, survivors: survivors.length, fuzzyRemoved, at: new Date().toISOString() };
         return draft;
       });
       sendJson(res, 200, {
         ok: true,
         ...(next._cleanupLog || {}),
-        message: `去重完成：保留 ${next._cleanupLog?.survivors} 个任务，清除 ${next._cleanupLog?.removed} 个重复，修正 ${next._cleanupLog?.fixedOwners} 个占位符 owner`
+        message: `去重完成：保留 ${next._cleanupLog?.survivors} 个任务，清除 ${next._cleanupLog?.removed} 个重复（其中模糊去重 ${next._cleanupLog?.fuzzyRemoved} 个），修正 ${next._cleanupLog?.fixedOwners} 个占位符 owner`
       });
       return true;
     }

@@ -160,9 +160,13 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
   const linkedTasks = fkTasks.length
     ? fkTasks
     : tasks.filter((task) => (
-        semantic.taskIds.has(task.id)
-        || (item.taskIds || []).includes(task.id)
-        || textIncludesAny(`${task.title} ${task.acceptance} ${task.signal}`, item.keywords)
+        // 已经显式绑定到其他交付项的任务，不参与关键词兜底，避免跨节点污染
+        (!task.deliverableId || task.deliverableId === item.id)
+        && (
+          semantic.taskIds.has(task.id)
+          || (item.taskIds || []).includes(task.id)
+          || textIncludesAny(`${task.title} ${task.acceptance} ${task.signal}`, item.keywords)
+        )
       ));
   const evidenceText = [
     item.title,
