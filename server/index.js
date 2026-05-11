@@ -210,6 +210,7 @@ const routeModules = [
     sendJson,
     sendError,
     buildStageChecklist,
+    aggregateDeliverableProgress,
     buildHybridAnalysis,
     scanRisks,
     buildMetrics,

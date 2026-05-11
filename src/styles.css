@@ -1641,6 +1641,19 @@ select:focus {
   line-height: 1.55;
 }
 
+.roadmap-doc-suggest {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 4px 0 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 122, 85, 0.08);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .binding-pill {
   display: inline-flex;
   align-items: center;

@@ -6,6 +6,7 @@ export function createPlanningRoutes({
   sendJson,
   sendError,
   buildStageChecklist,
+  aggregateDeliverableProgress,
   buildHybridAnalysis,
   scanRisks,
   buildMetrics,
@@ -51,9 +52,24 @@ export function createPlanningRoutes({
         } else {
           draft.checklistOverrides[nodeId] = { status, by: json.by || '手动', at: new Date().toISOString() };
         }
+        if (Array.isArray(draft.deliverables)) {
+          draft.deliverables = draft.deliverables.map((deliverable) => {
+            if (deliverable.id !== nodeId) return deliverable;
+            return {
+              ...deliverable,
+              manualOverride: status === 'reset'
+                ? null
+                : { status, by: json.by || '手动', at: new Date().toISOString() },
+              updatedAt: new Date().toISOString()
+            };
+          });
+        }
         return draft;
       });
-      sendJson(res, 200, buildStageChecklist(next));
+      sendJson(res, 200, {
+        stageChecklist: buildStageChecklist(next),
+        deliverableProgress: aggregateDeliverableProgress(next)
+      });
       return true;
     }
 
@@ -75,7 +91,8 @@ export function createPlanningRoutes({
         aiAnalysisUpdatedAt: nextStore.aiAnalysisUpdatedAt,
         metrics: buildMetrics(nextStore, alerts),
         alerts,
-        stageChecklist: buildStageChecklist(nextStore)
+        stageChecklist: buildStageChecklist(nextStore),
+        deliverableProgress: aggregateDeliverableProgress(nextStore)
       });
       return true;
     }

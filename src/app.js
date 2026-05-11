@@ -19,10 +19,13 @@ const state = {
   assignments: [],
   planAdjustments: [],
   docTasks: {},
+  deliverables: [],
+  phases: [],
   semanticLinks: {},
   riskAnalyses: [],
   healthAnalysis: null,
   stageChecklist: null,
+  deliverableProgress: null,
   reviewQueue: [],
   currentProjectId: localStorage.getItem('cue_currentProjectId') || '',
   currentProject: null,
@@ -313,9 +316,20 @@ function getTaskEvidence(task) {
 
 function getDeliverableForTask(task) {
   if (!task) return null;
-  return (state.deliverables || []).find((item) => item.id === task.deliverableId)
-    || (state.stageChecklist?.checklist || []).find((item) => item.id === task.deliverableId)
+  return getRoadmapDeliverables().find((item) => item.id === task.deliverableId)
     || null;
+}
+
+function getRoadmapDeliverables() {
+  return state.deliverableProgress?.deliverables?.length
+    ? state.deliverableProgress.deliverables
+    : (state.deliverables?.length ? state.deliverables : (state.stageChecklist?.checklist || []));
+}
+
+function getRoadmapPhases() {
+  return state.deliverableProgress?.phases?.length
+    ? state.deliverableProgress.phases
+    : state.phases?.length ? state.phases : state.stageChecklist?.phases || [];
 }
 
 function isCueAiTask(task) {
@@ -331,7 +345,7 @@ function getAssignableTaskPool() {
 }
 
 function getFocusedAssignmentTasks(limit = 8) {
-  const stageTaskIds = new Set((state.stageChecklist?.checklist || [])
+  const stageTaskIds = new Set(getRoadmapDeliverables()
     .filter((item) => ['阻塞', '高风险', '待补证据', '推进中'].includes(item.status))
     .flatMap((item) => item.linkedTasks || [])
     .map((task) => task.id));
@@ -371,7 +385,8 @@ function renderMetrics() {
 function renderStage() {
   const stage = state.currentStage || {};
   const checklistStage = state.stageChecklist?.stage || {};
-  const progress = Math.max(0, Math.min(100, Number(checklistStage.progress ?? stage.progress) || 0));
+  const deliverableProgress = Number(state.deliverableProgress?.metrics?.progress);
+  const progress = Math.max(0, Math.min(100, Number.isFinite(deliverableProgress) ? deliverableProgress : Number(checklistStage.progress ?? stage.progress) || 0));
   setText('#stageName', stage.shortName || checklistStage.shortName || stage.name || 'MVP / TRTC 联调');
   setText('#stageProgressText', `${progress}%`);
   setText('#meetingStageProgress', `阶段进度 ${progress}%`);
@@ -431,29 +446,32 @@ function renderRoadmap() {
   if (!summaryEl || !laneEl || !detailEl) return;
 
   const stage = state.stageChecklist?.stage || state.currentStage || {};
-  const metrics = state.stageChecklist?.metrics || {};
-  const checklist = state.stageChecklist?.checklist || [];
-  const phases = state.stageChecklist?.phases || [];
+  const metrics = state.deliverableProgress?.metrics || state.stageChecklist?.metrics || {};
+  const deliverables = getRoadmapDeliverables();
+  const phases = getRoadmapPhases();
   const activeTasks = (state.tasks || []).filter((task) => task.status !== '已完成');
   const todayClaims = getTodayAssignments();
 
-  if (!checklist.length) {
+  if (!deliverables.length) {
     summaryEl.innerHTML = '<div class="empty-state">暂无阶段路线。</div>';
     laneEl.innerHTML = '';
     detailEl.innerHTML = '';
     return;
   }
 
+  const fkCount = deliverables.filter((item) => item.linkMode === 'fk').length;
+  const fallbackCount = deliverables.filter((item) => item.linkMode === 'rules').length;
+
   summaryEl.innerHTML = `
     <article>
       <span>当前副本</span>
-      <strong>${escapeHtml(stage.name || 'Cue.AI 双设备课堂 MVP / TRTC 联调阶段')}</strong>
+      <strong title="${escapeHtml(stage.name || '')}">${escapeHtml(stage.shortName || stage.name || 'MVP / TRTC 联调')}</strong>
       <small>${escapeHtml(stage.status || '进行中')} · 目标 ${escapeHtml(stage.targetDate || '待确认')}</small>
     </article>
     <article>
-      <span>路线进度</span>
-      <strong>${Number(stage.progress) || 0}%</strong>
-      <small>${metrics.done || 0}/${metrics.total || checklist.length} 节点完成</small>
+      <span>交付进度</span>
+      <strong>${Number(metrics.progress ?? stage.progress) || 0}%</strong>
+      <small>${metrics.done || 0}/${metrics.total || deliverables.length} 交付项完成</small>
     </article>
     <article>
       <span>今日领取</span>
@@ -461,16 +479,16 @@ function renderRoadmap() {
       <small>${activeTasks.length} 个任务仍在推进</small>
     </article>
     <article>
-      <span>卡点</span>
-      <strong>${metrics.blocked || 0}</strong>
-      <small>${metrics.missingEvidence || 0} 个节点缺证据</small>
+      <span>绑定来源</span>
+      <strong>${fkCount}/${deliverables.length}</strong>
+      <small>${fallbackCount} 个关键词兜底</small>
     </article>
   `;
 
-  // 按阶段分组渲染节点
+  // 按阶段分组渲染交付项
   const nodesByPhase = Object.fromEntries(phases.map((p) => [p.id, []]));
   const unphased = [];
-  checklist.forEach((item, index) => {
+  deliverables.forEach((item, index) => {
     if (item.phaseId && nodesByPhase[item.phaseId]) {
       nodesByPhase[item.phaseId].push({ ...item, _globalIndex: index });
     } else {
@@ -484,7 +502,7 @@ function renderRoadmap() {
       const bindClass = bindingClass(item.binding);
       const progress = Math.max(0, Math.min(100, Number(item.progress) || 0));
       return `
-        <article class="roadmap-node roadmap-${statusClass}">
+        <article class="roadmap-node roadmap-deliverable roadmap-${statusClass}">
           <div class="roadmap-node-index">${item._globalIndex + 1}</div>
           <div class="roadmap-node-body">
             <div class="roadmap-node-top">
@@ -492,9 +510,10 @@ function renderRoadmap() {
               <span>${roadmapStatusIcon(item.status)}</span>
             </div>
             <p>${escapeHtml(item.acceptance || '')}</p>
+            ${item.docSuggestComplete ? '<span class="roadmap-doc-suggest">文档侧已完成待确认</span>' : ''}
             <span class="binding-pill binding-${bindClass}">${escapeHtml(bindingLabel(item.binding))}</span>
             <div class="roadmap-node-progress"><i style="width:${progress}%"></i></div>
-            <small>${escapeHtml(item.owner || '未指定')} · ${progress}% · ${escapeHtml(item.status)}</small>
+            <small>${escapeHtml(item.owner || '未指定')} · ${progress}% · ${escapeHtml(item.status)} · ${item.linkedTasks?.length || 0} 个任务</small>
           </div>
         </article>`;
     }).join('');
@@ -515,12 +534,12 @@ function renderRoadmap() {
             ${phase.progress != null ? `<div class="roadmap-phase-progress"><i style="width:${phase.progress}%"></i></div>` : ''}
           </div>
           <div class="roadmap-phase-nodes">
-            ${nodes.length ? renderPhaseNodes(nodes) : '<p class="muted-line" style="padding:8px 12px">暂无节点</p>'}
+            ${nodes.length ? renderPhaseNodes(nodes) : '<p class="muted-line" style="padding:8px 12px">暂无交付项</p>'}
           </div>
         </section>`;
     }).join('') + (unphased.length ? `<section class="roadmap-phase roadmap-phase-other"><div class="roadmap-phase-header">其他</div><div class="roadmap-phase-nodes">${renderPhaseNodes(unphased)}</div></section>` : '');
   } else {
-    laneEl.innerHTML = renderPhaseNodes(checklist.map((item, i) => ({ ...item, _globalIndex: i })));
+    laneEl.innerHTML = renderPhaseNodes(deliverables.map((item, i) => ({ ...item, _globalIndex: i })));
   }
 
   detailEl.onclick = async (e) => {
@@ -534,7 +553,8 @@ function renderRoadmap() {
     try {
       const body = doneBtn ? { status: '已完成', by: '手动确认' } : { status: 'reset' };
       const data = await api(`/api/stage/checklist/${encodeURIComponent(nodeId)}`, { method: 'PATCH', body: JSON.stringify(body) });
-      state.stageChecklist = data;
+      state.stageChecklist = data.stageChecklist || data;
+      state.deliverableProgress = data.deliverableProgress || state.deliverableProgress;
       renderRoadmap();
       toast(doneBtn ? '已标记为完成' : '已撤销覆盖');
     } catch (err) {
@@ -544,7 +564,7 @@ function renderRoadmap() {
     }
   };
 
-  detailEl.innerHTML = checklist.map((item) => {
+  detailEl.innerHTML = deliverables.map((item) => {
     const statusClass = roadmapStatusClass(item.status);
     const tasks = item.linkedTasks || [];
     const commits = item.evidence?.commits || [];
@@ -587,7 +607,7 @@ function renderRoadmap() {
         </div>
         <div class="roadmap-detail-section roadmap-override-section">
           ${item.manualOverride
-            ? `<span class="override-badge">手动标记：${escapeHtml(item.status)} · ${escapeHtml(item.overriddenBy || '')} ${item.overriddenAt ? new Date(item.overriddenAt).toLocaleDateString('zh-CN') : ''}</span>
+            ? `<span class="override-badge">手动标记：${escapeHtml(item.status)} · ${escapeHtml(item.overriddenBy || item.manualOverride?.by || '')} ${item.overriddenAt || item.manualOverride?.at ? new Date(item.overriddenAt || item.manualOverride.at).toLocaleDateString('zh-CN') : ''}</span>
                <button class="override-reset-btn" data-node-id="${escapeHtml(item.id)}">撤销覆盖</button>`
             : `<button class="override-done-btn" data-node-id="${escapeHtml(item.id)}">标记已完成（文档确认）</button>`
           }
@@ -1883,6 +1903,8 @@ async function loadState() {
   state.alerts = payload.alerts || [];
   state.projects = payload.projects || [];
   syncCurrentProject(payload.currentProjectId || storedProjectId);
+  state.deliverables = payload.deliverables || [];
+  state.phases = payload.phases || [];
   state.activities = payload.activities || [];
   state.assignments = payload.assignments || [];
   state.standups = payload.standups || [];
@@ -1894,6 +1916,7 @@ async function loadState() {
   state.riskAnalyses = payload.riskAnalyses || [];
   state.healthAnalysis = payload.healthAnalysis || null;
   state.stageChecklist = payload.stageChecklist || null;
+  state.deliverableProgress = payload.deliverableProgress || null;
   renderProjectSwitcher();
   setText('#syncStatus', '本地 API 已连接');
 
@@ -2276,6 +2299,7 @@ async function refreshAiAnalysis() {
   state.alerts = payload.alerts || state.alerts;
   state.metrics = payload.metrics || state.metrics;
   state.stageChecklist = payload.stageChecklist || state.stageChecklist;
+  state.deliverableProgress = payload.deliverableProgress || state.deliverableProgress;
   state.semanticLinks = payload.semanticLinks || state.semanticLinks;
   state.riskAnalyses = payload.riskAnalyses || state.riskAnalyses;
   state.healthAnalysis = payload.healthAnalysis || state.healthAnalysis;
@@ -2295,6 +2319,7 @@ async function decidePlanAdjustment(id, decision, selectedAlternative = null) {
   state.planAdjustments = payload.adjustments || state.planAdjustments;
   state.currentStage = nextState.currentStage || state.currentStage;
   state.stageChecklist = nextState.stageChecklist || state.stageChecklist;
+  state.deliverableProgress = nextState.deliverableProgress || state.deliverableProgress;
   state.metrics = nextState.metrics || state.metrics;
   state.alerts = nextState.alerts || state.alerts;
   renderPlanAdjustments();
@@ -2377,6 +2402,8 @@ async function syncCueAiGit(options = {}) {
   state.reviews = nextState.reviews || [];
   state.alerts = payload.alerts || nextState.alerts || [];
   state.projects = nextState.projects || [];
+  state.deliverables = nextState.deliverables || [];
+  state.phases = nextState.phases || [];
   state.activities = nextState.activities || [];
   state.assignments = nextState.assignments || [];
   state.standups = nextState.standups || [];
@@ -2385,6 +2412,7 @@ async function syncCueAiGit(options = {}) {
   state.metrics = payload.metrics || nextState.metrics || {};
   state.planAdjustments = nextState.planAdjustments || state.planAdjustments;
   state.stageChecklist = nextState.stageChecklist || state.stageChecklist;
+  state.deliverableProgress = nextState.deliverableProgress || state.deliverableProgress;
   renderAll();
   const srcLabel = payload.source === 'github-api' ? 'GitHub 远端' : '本地 Git';
   setText('#syncStatus', `已同步 (${srcLabel}) · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`);
