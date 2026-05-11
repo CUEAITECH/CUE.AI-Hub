@@ -26,6 +26,7 @@ const state = {
   reviewQueue: [],
   currentProjectId: localStorage.getItem('cue_currentProjectId') || '',
   currentProject: null,
+  isAuthenticated: sessionStorage.getItem('cueHubAuthenticated') === 'true',
   config: { githubEnabled: false, apiKeyRequiredForWrites: false, wecomEnabled: false, llmEnabled: false }
 };
 
@@ -227,7 +228,7 @@ function syncCurrentProject(projectId = '') {
 }
 
 function renderProjectSwitcher() {
-  const select = document.querySelector('#projectSelect');
+  const select = document.querySelector('#loginProjectSelect');
   if (!select) return;
   select.innerHTML = (state.projects || []).map((project) => `
     <option value="${escapeHtml(project.id)}">${escapeHtml(project.name || project.id)}</option>
@@ -235,12 +236,33 @@ function renderProjectSwitcher() {
   select.value = getCurrentProjectId();
 }
 
-async function switchProject(projectId) {
+function setAuthVisible(isAuthenticated) {
+  state.isAuthenticated = Boolean(isAuthenticated);
+  document.body.classList.toggle('authenticated', state.isAuthenticated);
+}
+
+async function loadLoginProjects() {
+  const payload = await api('/api/projects');
+  state.projects = payload.projects || [];
+  syncCurrentProject(localStorage.getItem('cue_currentProjectId') || state.projects[0]?.id || '');
+  renderProjectSwitcher();
+}
+
+async function login(event) {
+  event.preventDefault();
+  const projectId = document.querySelector('#loginProjectSelect')?.value || '';
+  const username = document.querySelector('#loginUsername')?.value.trim() || '';
+  const password = document.querySelector('#loginPassword')?.value || '';
+  if (!projectId) { toast('请选择项目'); return; }
+  const payload = await api('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password, projectId })
+  });
+  sessionStorage.setItem('cueHubAuthenticated', 'true');
+  sessionStorage.setItem('cueHubUser', payload.user || username);
   syncCurrentProject(projectId);
-  selectedTaskId = '';
+  setAuthVisible(true);
   await loadState();
-  renderAll();
-  toast(`已切换到 ${state.currentProject?.name || state.currentProjectId}`);
 }
 
 function getTodayAssignments() {
@@ -659,18 +681,6 @@ function renderCueAiProject() {
       </div>
     </a>
   `;
-}
-
-function renderProjectConfig() {
-  const project = state.currentProject || state.projects.find((item) => item.id === getCurrentProjectId());
-  const setValue = (selector, value) => {
-    const input = document.querySelector(selector);
-    if (input) input.value = value || '';
-  };
-  setValue('#projectNameInput', project?.name || '');
-  setValue('#projectRepoInput', project?.githubFullRepo || (project?.githubOwner && project?.repository ? `${project.githubOwner}/${project.repository}` : project?.repository || ''));
-  setValue('#projectLocalPathInput', project?.localPath || '');
-  setValue('#projectSummaryInput', project?.summary || '');
 }
 
 function renderActivities() {
@@ -1844,7 +1854,6 @@ function renderAll() {
   renderStage();
   renderRoadmap();
   renderCueAiProject();
-  renderProjectConfig();
   renderActivities();
   renderTasks();
   renderRisks();
@@ -2382,60 +2391,6 @@ async function syncCueAiGit(options = {}) {
   if (!options.silent) toast(`同步完成（${srcLabel}）：${payload.addedActivities || 0} 条 commit，${payload.addedReviews || 0} 条 AI Review`);
 }
 
-function readProjectForm() {
-  const fullRepo = document.querySelector('#projectRepoInput')?.value.trim() || '';
-  const [githubOwner = '', repository = ''] = fullRepo.includes('/') ? fullRepo.split('/') : ['', fullRepo];
-  return {
-    name: document.querySelector('#projectNameInput')?.value.trim() || '',
-    githubFullRepo: fullRepo,
-    githubOwner,
-    repository,
-    localPath: document.querySelector('#projectLocalPathInput')?.value.trim() || '',
-    summary: document.querySelector('#projectSummaryInput')?.value.trim() || ''
-  };
-}
-
-async function createProjectFromForm() {
-  const body = readProjectForm();
-  if (!body.name && !body.githubFullRepo && !body.localPath) {
-    toast('先填写项目名称或仓库地址');
-    return;
-  }
-  const payload = await api('/api/projects', { method: 'POST', body: JSON.stringify(body) });
-  state.projects = [...state.projects.filter((project) => project.id !== payload.project.id), payload.project];
-  syncCurrentProject(payload.project.id);
-  await loadState();
-  renderAll();
-  toast(`已新增项目：${payload.project.name}`);
-}
-
-async function saveCurrentProject() {
-  const projectId = getCurrentProjectId();
-  const body = readProjectForm();
-  const payload = await api(`/api/projects/${encodeURIComponent(projectId)}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ ...body, resetSync: true })
-  });
-  state.projects = state.projects.map((project) => project.id === projectId ? payload.project : project);
-  syncCurrentProject(projectId);
-  await loadState();
-  renderAll();
-  toast(`已保存项目配置：${payload.project.name}`);
-}
-
-async function deleteCurrentProject() {
-  const projectId = getCurrentProjectId();
-  if (!projectId) return;
-  const projectName = state.currentProject?.name || projectId;
-  if (!confirm(`删除项目「${projectName}」？仅空项目可删除，已有任务/提交/分工的项目会被后端拒绝。`)) return;
-  const payload = await api(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
-  state.projects = payload.projects || state.projects.filter((project) => project.id !== projectId);
-  syncCurrentProject(state.projects[0]?.id || '');
-  await loadState();
-  renderAll();
-  toast(`已删除项目：${projectName}`);
-}
-
 async function createMeetingAssignment() {
   const taskId = document.querySelector('#meetingAssignmentTask').value;
   const task = state.tasks.find((item) => item.id === taskId);
@@ -2568,8 +2523,11 @@ function toast(message) {
 // ── 事件绑定 ─────────────────────────────────────────────────
 
 function bindEvents() {
-  document.querySelector('#projectSelect')?.addEventListener('change', (event) => {
-    switchProject(event.target.value).catch((error) => toast(error.message));
+  document.querySelector('#loginForm')?.addEventListener('submit', (event) => {
+    login(event).catch((error) => {
+      setText('#loginHint', error.message === 'invalid credentials' ? '账号或密码不正确。' : error.message);
+      toast(error.message);
+    });
   });
 
   document.querySelectorAll('[data-route]').forEach((button) => {
@@ -2616,15 +2574,6 @@ function bindEvents() {
   });
   document.querySelector('[data-action="sync"]').addEventListener('click', () => {
     syncCueAiGit().catch((e) => toast(e.message));
-  });
-  document.querySelector('[data-action="create-project"]')?.addEventListener('click', () => {
-    createProjectFromForm().catch((e) => toast(e.message));
-  });
-  document.querySelector('[data-action="save-project"]')?.addEventListener('click', () => {
-    saveCurrentProject().catch((e) => toast(e.message));
-  });
-  document.querySelector('[data-action="delete-project"]')?.addEventListener('click', () => {
-    deleteCurrentProject().catch((e) => toast(e.message));
   });
   document.querySelectorAll('[data-action="sync-cue-ai"]').forEach((button) => button.addEventListener('click', () => {
     syncCueAiGit().catch((e) => toast(e.message));
@@ -2802,7 +2751,17 @@ window.loadReviewSolutions = loadReviewSolutions;
 window.resolveReview = resolveReview;
 window.selectSolution = selectSolution;
 window.openReviewDetail = openReviewDetail;
-loadState().catch((error) => {
+
+async function initApp() {
+  setAuthVisible(state.isAuthenticated);
+  await loadLoginProjects();
+  if (!state.isAuthenticated) return;
+  await loadState();
+}
+
+initApp().catch((error) => {
+  setAuthVisible(false);
+  setText('#loginHint', `无法连接服务器：${error.message}`);
   setText('#syncStatus', '本地 API 未启动');
   renderRisks();
   renderMeeting();
@@ -2810,6 +2769,7 @@ loadState().catch((error) => {
 });
 
 window.setInterval(() => {
+  if (!state.isAuthenticated) return;
   syncCueAiGit({ silent: true }).catch(() => {
     setText('#syncStatus', '自动抓取暂不可用，等待下次重试');
   });

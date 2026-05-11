@@ -438,6 +438,46 @@ await test('phase4 state route filters project scoped records while keeping proj
   assert.equal(responsePayload.metrics.taskCount, 1);
 });
 
+await test('phase4 auth route validates hub login credentials', async () => {
+  const originalUser = process.env.HUB_LOGIN_USER;
+  const originalPassword = process.env.HUB_LOGIN_PASSWORD;
+  process.env.HUB_LOGIN_USER = 'tester';
+  process.env.HUB_LOGIN_PASSWORD = 'secret';
+  let requestJson = { username: 'tester', password: 'secret' };
+  let responsePayload = null;
+  let responseStatus = null;
+  const route = createSystemRoutes({
+    loadStore: async () => migrateStore({}),
+    readBody: async () => ({ json: requestJson }),
+    scanRisks: () => [],
+    normalizeStageName: (stage) => stage,
+    buildMetrics: () => ({}),
+    buildStageChecklist,
+    aggregateDeliverableProgress,
+    buildOpenApiSpec: () => ({}),
+    sendJson: (_res, status, payload) => { responseStatus = status; responsePayload = payload; },
+    port: 0,
+    cueApiKey: '',
+    isWeComAvailable: () => false,
+    meetingHour: 18,
+    hubUrl: ''
+  });
+
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
+  assert.equal(responseStatus, 200);
+  assert.equal(responsePayload.ok, true);
+
+  requestJson = { username: 'tester', password: 'wrong' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
+  assert.equal(responseStatus, 401);
+  assert.equal(responsePayload.ok, false);
+
+  if (originalUser === undefined) delete process.env.HUB_LOGIN_USER;
+  else process.env.HUB_LOGIN_USER = originalUser;
+  if (originalPassword === undefined) delete process.env.HUB_LOGIN_PASSWORD;
+  else process.env.HUB_LOGIN_PASSWORD = originalPassword;
+});
+
 await test('phase4 project routes create, update, and guard deletion of linked projects', async () => {
   let requestJson = {};
   let store = migrateStore({

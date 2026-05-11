@@ -10,6 +10,13 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。�
 
 ## 核心功能
 
+### 外层登录与项目入口
+- 访问 Hub 时先进入独立登录页，选择要管理的项目，再输入内部账号密码
+- 登录成功后进入单一项目上下文，页面内不再显示仓库切换、仓库新增或仓库删除入口
+- 当前项目 ID 会保存在浏览器本地，下次进入时默认使用上一次选择的项目
+- 登录接口：`POST /api/auth/login`
+- 默认开发账号：`admin / cueai`，生产环境必须通过 `HUB_LOGIN_USER`、`HUB_LOGIN_PASSWORD` 覆盖
+
 ### 任务看板
 - 创建、编辑、删除任务，追踪进度、负责人、风险等级和截止日期
 - 关联 GitHub commit / PR / branch 作为完成证据
@@ -78,6 +85,8 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。�
 | `GITHUB_TOKEN` | GitHub PAT，缺失时匿名限速 60次/小时 |
 | `WECOM_WEBHOOK_URL` | 企业微信群机器人 Webhook |
 | `CUE_API_KEY` | 写接口鉴权（可选，不配置则写接口开放） |
+| `HUB_LOGIN_USER` | Hub 外层登录账号（默认 `admin`，生产必须覆盖） |
+| `HUB_LOGIN_PASSWORD` | Hub 外层登录密码（默认 `cueai`，生产必须覆盖） |
 | `MEETING_HOUR` | 晚会时间（默认 18），作战包在 `MEETING_HOUR-1:45` 推送 |
 | `PORT` | 服务端口（默认 4317） |
 | `HUB_URL` | 对外访问地址，用于企微消息链接 |
@@ -169,6 +178,8 @@ index.html                   8 个页面 section
 **Phase 3 双向文档同步状态：** 已完成第一刀。`fetchProjectDocs` 会读取 `docs/阶段进度追踪.md`，但 `parseDocsForTasks` 不再从该文件生成任务；`parseProgressDoc` 只读取 ✅/🔶/⬜ 状态。`sync-docs` 会按 `deliverableTitle` 查找或创建 deliverable，并把导入任务写入 `deliverableId`；如果进度文档将某个交付项标为 ✅，Hub 只写入 `docSuggestComplete`，等待人工确认，不会自动完成。`update-docs` 已切换为 deliverable-first，从 `store.deliverables` 生成阶段进度追踪文档。
 
 **Phase 3.2 任务完成确认状态：** 已完成。分工领取或任务详情中的“确认任务完成”会先更新 assignment，再同步把关联 task 标记为 `已完成`、`progress=100`，并记录 `completionSource=assignment`。任务详情会展示所属 deliverable、文档侧完成建议和完成证据；路径图只提示交付项/文档状态，不替代成员对具体任务的完成确认。
+
+**Phase 4 多项目上下文状态：** 已完成前两刀。`GET /api/state?projectId=...` 和 `GET /api/stage/checklist?projectId=...` 已按项目过滤任务、提交、分工、审阅、风险、阶段和交付项，同时保留完整 `projects[]` 供入口选择。`projectRoutes` 支持项目创建、更新和保守删除；默认项目和已有研发数据的项目不能删除。企业微信插件接口 `summary`、`risks`、`tasks`、`claim`、`standup`、`progress` 均支持 `projectId`，OpenAPI 已暴露该参数。前端入口已改为外层登录页：先选择项目并登录，进入后固定在该项目上下文，不再在 Hub 内显示项目切换或新增仓库入口。下一刀计划是把普通任务、分工、站会、风险扫描 API 全部统一支持 `projectId`，让前端、企微和直接 API 调用保持完全一致。
 
 **数据存储：** `server/data/db.json`，进程内 in-memory cache，单例读写。
 

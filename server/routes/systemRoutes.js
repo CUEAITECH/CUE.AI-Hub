@@ -1,5 +1,6 @@
 export function createSystemRoutes({
   loadStore,
+  readBody = async () => ({ json: {} }),
   scanRisks,
   normalizeStageName,
   buildMetrics,
@@ -16,6 +17,24 @@ export function createSystemRoutes({
   return async function systemRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(res, 200, { ok: true, name: 'CUE Project Hub', time: new Date().toISOString() });
+      return true;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/login') {
+      const { json } = await readBody(req);
+      const username = String(json?.username || '').trim();
+      const password = String(json?.password || '');
+      const expectedUser = process.env.HUB_LOGIN_USER || 'admin';
+      const expectedPassword = process.env.HUB_LOGIN_PASSWORD || 'cueai';
+      if (username !== expectedUser || password !== expectedPassword) {
+        sendJson(res, 401, { ok: false, error: 'invalid credentials' });
+        return true;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        user: username,
+        token: Buffer.from(`${username}:${Date.now()}`).toString('base64')
+      });
       return true;
     }
 

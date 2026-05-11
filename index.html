@@ -7,6 +7,31 @@
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
+    <section class="auth-shell" id="authShell">
+      <div class="auth-panel">
+        <div>
+          <span class="eyebrow">CUE AI Project Hub</span>
+          <h1>进入项目中枢</h1>
+          <p>先选择本次要管理的项目，再使用内部账号登录。进入后 Hub 将固定在该项目上下文内。</p>
+        </div>
+        <form class="auth-form" id="loginForm">
+          <label>
+            <span>项目</span>
+            <select id="loginProjectSelect" aria-label="选择项目"></select>
+          </label>
+          <label>
+            <span>账号</span>
+            <input id="loginUsername" type="text" autocomplete="username" placeholder="admin" required />
+          </label>
+          <label>
+            <span>密码</span>
+            <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••" required />
+          </label>
+          <button type="submit">进入 Hub</button>
+          <small id="loginHint">项目列表会从服务器自动读取。</small>
+        </form>
+      </div>
+    </section>
     <div class="app-shell">
       <header class="topbar">
         <div class="header-main">
@@ -43,10 +68,6 @@
             </div>
           </nav>
           <div class="topbar-actions">
-            <label class="project-switcher">
-              <span>项目</span>
-              <select id="projectSelect" aria-label="选择项目"></select>
-            </label>
             <span class="status-pill" id="syncStatus">本地 API 未连接</span>
             <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
             <button class="primary-action" type="button" data-action="sync">同步信号</button>
@@ -116,31 +137,6 @@
                 </div>
               </div>
               <div class="cue-ai-project compact" id="cueAiProject"></div>
-              <div class="project-config-panel" id="projectConfigPanel">
-                <div class="project-config-grid">
-                  <label>
-                    <span>名称</span>
-                    <input id="projectNameInput" type="text" aria-label="项目名称" placeholder="Cue.AI" />
-                  </label>
-                  <label>
-                    <span>GitHub 仓库</span>
-                    <input id="projectRepoInput" type="text" aria-label="GitHub 仓库" placeholder="CUEAITECH/Cue.AI" />
-                  </label>
-                  <label>
-                    <span>本地路径</span>
-                    <input id="projectLocalPathInput" type="text" aria-label="本地路径" placeholder="/opt/project 或留空" />
-                  </label>
-                  <label>
-                    <span>说明</span>
-                    <input id="projectSummaryInput" type="text" aria-label="项目说明" placeholder="这个项目的研发目标" />
-                  </label>
-                </div>
-                <div class="project-config-actions">
-                  <button type="button" data-action="create-project">新增项目</button>
-                  <button type="button" data-action="save-project">保存当前项目</button>
-                  <button type="button" data-action="delete-project">删除空项目</button>
-                </div>
-              </div>
             </section>
 
             <section class="panel activity-panel dashboard-activity">
