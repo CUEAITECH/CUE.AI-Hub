@@ -168,6 +168,8 @@ index.html                   8 个页面 section
 
 **Phase 3 双向文档同步状态：** 已完成第一刀。`fetchProjectDocs` 会读取 `docs/阶段进度追踪.md`，但 `parseDocsForTasks` 不再从该文件生成任务；`parseProgressDoc` 只读取 ✅/🔶/⬜ 状态。`sync-docs` 会按 `deliverableTitle` 查找或创建 deliverable，并把导入任务写入 `deliverableId`；如果进度文档将某个交付项标为 ✅，Hub 只写入 `docSuggestComplete`，等待人工确认，不会自动完成。`update-docs` 已切换为 deliverable-first，从 `store.deliverables` 生成阶段进度追踪文档。
 
+**Phase 3.2 任务完成确认状态：** 已完成。分工领取或任务详情中的“确认任务完成”会先更新 assignment，再同步把关联 task 标记为 `已完成`、`progress=100`，并记录 `completionSource=assignment`。任务详情会展示所属 deliverable、文档侧完成建议和完成证据；路径图只提示交付项/文档状态，不替代成员对具体任务的完成确认。
+
 **数据存储：** `server/data/db.json`，进程内 in-memory cache，单例读写。
 
 **LLM 调用：** 所有调用走 `callClaude(systemPrompt, userPrompt)`，返回文本或 `null`（失败/无 key 时）。System prompt 固定，不含日期/用户输入，保持 prompt cache 有效。每个调用方必须处理 `null` 并降级。

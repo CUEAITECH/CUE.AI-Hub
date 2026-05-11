@@ -161,10 +161,19 @@ function normalizeTask(input) {
     progress: Number.isFinite(Number(input.progress)) ? Math.max(0, Math.min(100, Number(input.progress))) : 0,
     signal: input.signal || '等待更新',
     acceptance: input.acceptance || '待补充验收标准',
+    description: input.description || '',
+    dueDate: input.dueDate || '',
+    sourceDoc: input.sourceDoc || '',
+    projectId: input.projectId || 'cue_ai_classroom',
+    deliverableId: input.deliverableId || null,
+    priority: input.priority || '',
     createdAt: input.createdAt || now,
     updatedAt: now,
     linkedRefs: Array.isArray(input.linkedRefs) ? input.linkedRefs : [],
-    aiProgressSuggestion: input.aiProgressSuggestion || null
+    aiProgressSuggestion: input.aiProgressSuggestion || null,
+    completedBy: input.completedBy || '',
+    completedAt: input.completedAt || '',
+    completionSource: input.completionSource || ''
   };
 }
 

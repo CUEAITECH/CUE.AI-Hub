@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { migrateStore } from '../server/store.js';
 import { aggregateDeliverableProgress, buildStageChecklist } from '../server/services/stageChecklist.js';
 import { dispatchRoutes } from '../server/routes/index.js';
+import { createAssignmentRoutes } from '../server/routes/assignmentRoutes.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
 import { normalizeAssignment } from '../server/services/dailyBrief.js';
 import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc } from '../server/services/docsManager.js';
@@ -337,4 +338,37 @@ await test('phase3 task parser ignores progress tracking doc', async () => {
     { path: 'docs/阶段进度追踪.md', name: '阶段进度追踪.md', content: '- ✅ **后端模块化重构**' }
   ]);
   assert.deepEqual(tasks, []);
+});
+
+await test('phase3.2 assignment completion confirms linked task completion', async () => {
+  let store = migrateStore({
+    currentStage: legacyStage,
+    tasks: [
+      { id: 'task_confirm', title: '确认完成任务', owner: 'tester', progress: 40, status: '进行中' }
+    ],
+    assignments: [
+      { id: 'assign_confirm', taskId: 'task_confirm', taskTitle: '确认完成任务', owner: 'tester', date: '2026-05-11', status: '进行中' }
+    ]
+  });
+  let responsePayload = null;
+  const route = createAssignmentRoutes({
+    loadStore: async () => store,
+    updateStore: async (mutator) => {
+      store = await mutator(structuredClone(store));
+      return store;
+    },
+    normalizeAssignment,
+    generateAssignmentBrief: async () => ({}),
+    todayText: () => '2026-05-11',
+    readBody: async () => ({ json: { status: '已完成' } }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); }
+  });
+
+  const handled = await route({ method: 'PATCH' }, {}, new URL('http://localhost/api/assignments/assign_confirm'));
+  assert.equal(handled, true);
+  assert.equal(responsePayload.assignment.status, '已完成');
+  assert.equal(responsePayload.task.status, '已完成');
+  assert.equal(responsePayload.task.progress, 100);
+  assert.equal(store.tasks[0].completionSource, 'assignment');
 });

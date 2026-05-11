@@ -2279,6 +2279,50 @@ select:focus {
   line-height: 1.5;
 }
 
+.task-doc-suggest {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.06);
+  padding: 10px;
+  margin-top: 12px;
+}
+
+.task-doc-suggest strong {
+  color: #2563eb;
+  font-size: 12px;
+}
+
+.task-doc-suggest span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.task-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.task-confirm-done-btn {
+  border: 1px solid rgba(15, 122, 85, 0.32);
+  border-radius: 6px;
+  background: rgba(15, 122, 85, 0.08);
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.task-done-mark {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .task-brief-full {
   display: grid;
   gap: 16px;

@@ -154,6 +154,7 @@ function buildBindingExplanation({ mode, fkTasks, fkActivities, fkAssignments, l
 }
 
 function scoreChecklistItem(item, tasks, activities, reviews, assignments, store) {
+  const deliverableRecord = (store.deliverables || []).find((deliverable) => deliverable.id === item.id) || null;
   const semantic = semanticLinksForStage(store, item.id);
   const fkTasks = tasks.filter((task) => task.deliverableId === item.id);
   const linkedTasks = fkTasks.length
@@ -232,6 +233,9 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
 
   return {
     ...item,
+    docSuggestComplete: Boolean(deliverableRecord?.docSuggestComplete),
+    docStatus: deliverableRecord?.docStatus || null,
+    sourceDocPath: deliverableRecord?.sourceDocPath || item.sourceDocPath || '',
     status,
     progress,
     linkedTasks: linkedTasks.map((task) => ({

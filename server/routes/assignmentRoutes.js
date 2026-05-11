@@ -85,6 +85,18 @@ export function createAssignmentRoutes({
           createdAt: draft.assignments[index].createdAt
         }, draft);
         draft.assignments[index] = updated;
+        if (updated.status === '已完成' && updated.taskId) {
+          const task = (draft.tasks || []).find((item) => item.id === updated.taskId);
+          if (task) {
+            task.status = '已完成';
+            task.progress = 100;
+            task.completedBy = updated.owner;
+            task.completedAt = updated.updatedAt;
+            task.completionSource = 'assignment';
+            task.signal = updated.note || task.signal || '分工领取确认完成';
+            task.updatedAt = updated.updatedAt;
+          }
+        }
         return draft;
       });
       if (!updated) {
@@ -92,6 +104,7 @@ export function createAssignmentRoutes({
       } else {
         sendJson(res, 200, {
           assignment: updated,
+          task: (nextStore.tasks || []).find((item) => item.id === updated.taskId) || null,
           assignments: (nextStore.assignments || []).filter((item) => item.date === updated.date)
         });
       }

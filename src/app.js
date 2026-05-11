@@ -243,7 +243,9 @@ function getTaskEvidence(task) {
   const linkedRefs = new Set((task?.linkedRefs || []).map((item) => String(item).toLowerCase()));
   const matches = (item) => {
     const raw = `${item.id || ''} ${item.title || ''} ${item.message || ''} ${item.repo || ''} ${item.activityId || ''}`.toLowerCase();
-    return raw.includes(String(task?.id || '').toLowerCase())
+    return item.taskId === task?.id
+      || (task?.deliverableId && item.deliverableId === task.deliverableId)
+      || raw.includes(String(task?.id || '').toLowerCase())
       || raw.includes(String(task?.title || '').toLowerCase())
       || [...linkedRefs].some((ref) => raw.includes(ref))
       || text.split(/\s+|\/|:|，|、/).filter((word) => word.length >= 4).some((word) => raw.includes(word));
@@ -253,6 +255,13 @@ function getTaskEvidence(task) {
     reviews: (state.reviews || []).filter(matches).slice(0, 8),
     assignments: getAllTaskAssignments(task?.id).slice(0, 8)
   };
+}
+
+function getDeliverableForTask(task) {
+  if (!task) return null;
+  return (state.deliverables || []).find((item) => item.id === task.deliverableId)
+    || (state.stageChecklist?.checklist || []).find((item) => item.id === task.deliverableId)
+    || null;
 }
 
 function isCueAiTask(task) {
@@ -1182,6 +1191,7 @@ function renderTaskDetail() {
   }
 
   const evidence = getTaskEvidence(task);
+  const deliverable = getDeliverableForTask(task);
   const latestAssignment = evidence.assignments[0] || null;
   const brief = latestAssignment?.brief || null;
   const hasAssignment = Boolean(latestAssignment);
@@ -1203,9 +1213,21 @@ function renderTaskDetail() {
       <p>${escapeHtml(task.description || task.signal || '暂无任务描述。')}</p>
       <dl>
         <div><dt>负责人</dt><dd>${escapeHtml(task.owner || '未指定')}</dd></div>
+        <div><dt>所属交付项</dt><dd>${escapeHtml(deliverable?.title || task.deliverableId || '未绑定')}</dd></div>
         <div><dt>来源</dt><dd>${escapeHtml(task.sourceDoc || task.repo || '任务看板')}</dd></div>
         <div><dt>验收</dt><dd>${escapeHtml(task.acceptance || '待补充')}</dd></div>
       </dl>
+      ${deliverable?.docSuggestComplete ? `<div class="task-doc-suggest">
+        <strong>文档侧建议完成</strong>
+        <span>目标仓库进度文档已将所属交付项标记为完成。请先在这里确认任务完成，再由负责人确认交付项。</span>
+      </div>` : ''}
+      <div class="task-detail-actions">
+        ${latestAssignment && latestAssignment.status !== '已完成'
+          ? `<button class="task-confirm-done-btn" data-assignment-id="${escapeHtml(latestAssignment.id)}">确认任务完成</button>`
+          : task.status !== '已完成'
+            ? '<button class="task-confirm-done-btn" data-task-only="true">确认任务完成</button>'
+            : '<span class="task-done-mark">任务已完成</span>'}
+      </div>
     </article>
 
     <article class="task-detail-card task-detail-main">
@@ -1238,6 +1260,15 @@ function renderTaskDetail() {
     </article>
   `;
 
+  content.querySelectorAll('.task-confirm-done-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.assignmentId) {
+        markAssignmentDone(btn.dataset.assignmentId).catch((e) => toast(e.message));
+      } else {
+        markTaskDone(task.id).catch((e) => toast(e.message));
+      }
+    });
+  });
 }
 
 async function regenerateBrief(assignmentId) {
@@ -2020,6 +2051,9 @@ async function markAssignmentDone(id) {
     body: JSON.stringify({ status: '已完成' })
   });
   state.assignments = payload.assignments || state.assignments;
+  if (payload.task) {
+    state.tasks = state.tasks.map((task) => task.id === payload.task.id ? payload.task : task);
+  }
   renderAll();
   toast('已标记完成');
 
@@ -2040,6 +2074,22 @@ async function markAssignmentDone(id) {
       }
     }
   }
+}
+
+async function markTaskDone(taskId) {
+  const payload = await api(`/api/tasks/${encodeURIComponent(taskId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status: '已完成',
+      progress: 100,
+      completionSource: 'task-detail',
+      completedAt: new Date().toISOString()
+    })
+  });
+  state.tasks = payload.tasks || state.tasks;
+  renderAll();
+  openTaskDetail(taskId);
+  toast('任务已确认完成');
 }
 
 async function cancelAssignment(id) {
