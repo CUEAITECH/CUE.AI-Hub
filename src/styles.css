@@ -551,6 +551,17 @@ h1 {
   font-size: 20px;
 }
 
+.btn-danger-soft {
+  background: transparent;
+  color: var(--color-risk, #c0392b);
+  border: 1px solid currentColor;
+  opacity: 0.75;
+}
+.btn-danger-soft:hover:not(:disabled) {
+  opacity: 1;
+  background: rgba(192, 57, 43, 0.08);
+}
+
 .workspace-shell {
   display: grid;
   gap: 16px;

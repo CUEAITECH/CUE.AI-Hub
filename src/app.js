@@ -2764,6 +2764,29 @@ function bindEvents() {
     refreshAiAnalysis().catch((e) => toast(e.message));
   }));
 
+  document.querySelectorAll('[data-action="reset-roadmap"]').forEach((button) => button.addEventListener('click', async () => {
+    const confirmed = window.confirm(
+      '⚠️ 确认重置路径图？\n\n将清空所有交付项、阶段划分和路径图缓存。\n已完成任务会完整保留。\n\n重置后请点击「同步文档」重新生成路径图。'
+    );
+    if (!confirmed) return;
+    const projectId = getCurrentProjectId();
+    button.disabled = true;
+    button.textContent = '重置中…';
+    try {
+      const result = await api('/api/stage/reset-roadmap', {
+        method: 'POST',
+        body: JSON.stringify({ projectId })
+      });
+      toast(`✅ ${result.message || '路径图已重置'}（保留 ${result.completedTasks ?? '?'} 个已完成任务）`);
+      await loadState();
+    } catch (e) {
+      toast(`❌ 重置失败：${e.message}`);
+    } finally {
+      button.disabled = false;
+      button.textContent = '重置路径图';
+    }
+  }));
+
   // ESC 关闭 modal
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeTaskModal();

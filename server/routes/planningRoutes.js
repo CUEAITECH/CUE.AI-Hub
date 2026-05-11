@@ -97,6 +97,39 @@ export function createPlanningRoutes({
       return true;
     }
 
+    // 重置路径图：清空 deliverables/phases/checklist，保留 tasks（已完成的不丢）
+    if (req.method === 'POST' && url.pathname === '/api/stage/reset-roadmap') {
+      const { json } = await readBody(req);
+      const projectId = json?.projectId || '';
+      const next = await updateStore((draft) => {
+        // 清空交付项和阶段（按项目隔离，或全清）
+        draft.deliverables = projectId
+          ? (draft.deliverables || []).filter((d) => d.projectId && d.projectId !== projectId)
+          : [];
+        draft.phases = projectId
+          ? (draft.phases || []).filter((p) => p.projectId && p.projectId !== projectId)
+          : [];
+        // 重置 currentStage checklist 和 phases 到默认值
+        draft.currentStage = {
+          ...(draft.currentStage || {}),
+          checklist: [],
+          phases: []
+        };
+        // 清空 checklistOverrides（路径图手动覆盖）
+        draft.checklistOverrides = {};
+        // 清空语义链接缓存（与路径图强相关）
+        draft.semanticLinks = {};
+        return draft;
+      });
+      sendJson(res, 200, {
+        ok: true,
+        message: '路径图已重置，已完成任务已保留。请触发 sync-docs 重新生成路径图。',
+        remainingTasks: (next.tasks || []).length,
+        completedTasks: (next.tasks || []).filter((t) => t.status === '已完成' || t.status === 'completed').length
+      });
+      return true;
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/risks/scan') {
       const store = await loadStore();
       const alerts = scanRisks(store);
