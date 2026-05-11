@@ -177,7 +177,8 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
       "keywords": ["关键词1", "关键词2"]
     }
   ],
-  "nodeAssignments": { "nodeId": "phaseId" }
+  "nodeAssignments": { "nodeId": "phaseId" },
+  "deliverableAssignments": { "交付项标题（与用户提供的 deliverableTitles 完全一致）": "phaseId" }
 }
 
 规则：
@@ -190,7 +191,18 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
 - nodes 中的 phaseId 必须从 phases 数组中选取，不能创建新 phaseId
 - nodeAssignments 覆盖所有 nodes 的 nodeId→phaseId 映射
 - 优先复用用户提供的"当前路径图节点"的 id（通过标题语义匹配），未匹配则用新 id
-- 从文档的里程碑、阶段划分、进度标注中推断 phases 的 status`;
+- 从文档的里程碑、阶段划分、进度标注中推断 phases 的 status
+- **deliverableAssignments 必须覆盖用户提供的【交付项标题】列表中的每一个标题（一个不能少）**：
+  - key 是原始的 deliverableTitle 字符串（一字不差地复用，含空格、标点、英文大小写）
+  - value 是 phases 中的 phaseId
+  - 输出前自己核对：deliverableAssignments 的 key 数量必须等于列表长度，遗漏任何一个视为失败
+  - 归类硬规则（按交付项标题里出现的产品端关键词来分，不允许把客户端 MVP 当成后端的子目标）：
+    * 含 "iPad" / "iPhone" / "iOS" → 必须归到客户端/iOS 类 phase（如 phase_week1_client / phase_trtc_client）
+    * 含 "学生" / "Web" → 必须归到 Web 学生端类 phase
+    * 含 "后端" / "服务端" / "API" / "Session" → 必须归到后端类 phase
+    * 含 "联调" / "三端" / "全链路" / "Demo 验收" → 必须归到联调类 phase
+    * "MVP" 不影响归类，只看产品端关键词。"iPad 输入端 MVP" 归客户端 phase，"后端服务 MVP" 归后端 phase
+    * 若没有 phase 能匹配，挑功能最贴近的，绝不能默认丢到第一个 phase`;
 
 /**
  * 从文档内容用 LLM 提炼开发阶段划分和路径图节点；LLM 失败时按 sourceDoc 文档名兜底归组
@@ -207,7 +219,12 @@ export async function parsePhasesFromDocs(docs, parsedTasks = [], existingNodes 
     const existingNodesText = existingNodes.length
       ? `\n\n=== 当前路径图节点（尽量复用这些节点的 id，通过标题语义匹配）===\n${JSON.stringify(existingNodes.map((n) => ({ id: n.id, title: n.title, phaseId: n.phaseId })))}`
       : '';
-    const raw = await callClaude(PHASES_SYSTEM_PROMPT, teamContext + docsText + existingNodesText);
+    // 收集所有 unique deliverableTitle，让 LLM 给出权威 phase 映射
+    const uniqueDeliverables = Array.from(new Set(parsedTasks.map((t) => t.deliverableTitle).filter(Boolean)));
+    const deliverableContext = uniqueDeliverables.length
+      ? `\n\n=== 交付项标题列表（必须在 deliverableAssignments 中为每一个分配一个 phaseId，key 一字不差复用）===\n${JSON.stringify(uniqueDeliverables)}`
+      : '';
+    const raw = await callClaude(PHASES_SYSTEM_PROMPT, teamContext + docsText + existingNodesText + deliverableContext);
     if (raw) {
       try {
         const parsed = parseJsonOutput(raw);
@@ -251,7 +268,14 @@ export async function parsePhasesFromDocs(docs, parsedTasks = [], existingNodes 
                   .filter(([, v]) => phaseIdSet.has(v))
               )
             : {};
-          return { phases, nodes, nodeAssignments };
+          // deliverableAssignments：LLM 给出的 deliverableTitle → phaseId 权威映射
+          const deliverableAssignments = typeof parsed.deliverableAssignments === 'object' && parsed.deliverableAssignments
+            ? Object.fromEntries(
+                Object.entries(parsed.deliverableAssignments)
+                  .filter(([k, v]) => k && phaseIdSet.has(v))
+              )
+            : {};
+          return { phases, nodes, nodeAssignments, deliverableAssignments };
         }
         // 兼容旧格式（纯数组）
         if (Array.isArray(parsed) && parsed.length) {

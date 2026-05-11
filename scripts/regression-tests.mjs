@@ -690,6 +690,58 @@ await test('cross-deliverable contamination guard: task with deliverableId point
   assert.equal(iphone.linkedTasks[0].id, 'task_iphone_sos');
 });
 
+await test('product-keyword phase matching: iPad/iPhone/iOS deliverables land in client phase', () => {
+  // 复现 projectRoutes.js 中的 classifyDeliverableProduct + findPhaseByProductKeywords 逻辑
+  function classify(title) {
+    const t = String(title || '').toLowerCase();
+    const hasTrtc = /trtc/i.test(t);
+    if (/(联调|三端|全链路|demo\s*验收|端到端|e2e)/i.test(title)) return { tokens: ['联调', '三端', '全链路', 'e2e', '集成'], prefer: null };
+    if (/trtc.*(后端|asr|usersig|callback|session)/i.test(t)) return { tokens: ['后端', '服务', 'backend'], prefer: 'trtc' };
+    if (/ipad|iphone|ios/i.test(t)) return { tokens: ['客户端', 'ios', 'iphone', 'ipad', '端侧', '移动端'], prefer: hasTrtc ? 'trtc' : 'week1' };
+    if (/(学生|web)/i.test(t)) return { tokens: ['学生', 'web', '客户端', '端侧'], prefer: hasTrtc ? 'trtc' : 'week1' };
+    if (/(后端|服务端|api|session)/i.test(t)) return { tokens: ['后端', '服务', 'api', 'session', 'backend'], prefer: hasTrtc ? 'trtc' : 'week1' };
+    if (/(ci\/cd|railway|部署|deploy|流水线|env|环境)/i.test(t)) return { tokens: ['集成', '部署', '环境', 'ci', '联调'], prefer: null };
+    return { tokens: [], prefer: null };
+  }
+  function bestPhase(title, phases) {
+    const cls = classify(title);
+    if (!cls.tokens.length) return null;
+    let best = null; let bestScore = -1;
+    for (const phase of phases) {
+      const pt = String(phase.title || '').toLowerCase();
+      let s = 0;
+      for (const k of cls.tokens) if (pt.includes(k.toLowerCase())) s++;
+      if (cls.prefer === 'trtc' && /trtc/i.test(pt)) s += 10;
+      else if (cls.prefer === 'trtc' && !/trtc/i.test(pt)) s -= 5;
+      if (cls.prefer === 'week1' && /(第一周|week ?1|首周)/i.test(pt)) s += 10;
+      else if (cls.prefer === 'week1' && /trtc/i.test(pt)) s -= 5;
+      if (s > bestScore) { bestScore = s; best = phase.id; }
+    }
+    return bestScore >= 1 ? best : null;
+  }
+
+  const phases = [
+    { id: 'p_backend', title: '第一周后端骨架' },
+    { id: 'p_client', title: '第一周客户端骨架' },
+    { id: 'p_integration', title: '第一周三端联调' },
+    { id: 'p_trtc_backend', title: 'TRTC后端改造' },
+    { id: 'p_trtc_client', title: 'TRTC客户端接入' }
+  ];
+
+  // iPad/iPhone MVP 应该归到客户端 phase，不能错归到后端
+  assert.equal(bestPhase('iPad 输入端 MVP', phases), 'p_client', 'iPad MVP 应归客户端 phase');
+  assert.equal(bestPhase('iPhone 输出端 MVP', phases), 'p_client', 'iPhone MVP 应归客户端 phase');
+  // 后端 MVP 归后端
+  assert.equal(bestPhase('后端服务 MVP', phases), 'p_backend');
+  // 联调归集成 phase
+  assert.equal(bestPhase('TRTC 联调验收', phases), 'p_integration');
+  assert.equal(bestPhase('CI/CD 流水线配置', phases), 'p_integration');
+  // TRTC 学生端归客户端
+  assert.equal(bestPhase('TRTC 学生端改造', phases), 'p_trtc_client');
+  // 没匹配项返回 null
+  assert.equal(bestPhase('随机标题不含产品端', phases), null);
+});
+
 await test('reset-roadmap route strips task/activity/assignment deliverableId for project', async () => {
   const { createPlanningRoutes } = await import('../server/routes/planningRoutes.js');
   let store = migrateStore({
