@@ -74,6 +74,47 @@ export function createProjectRoutes({
     return String(value || '').replace(/\s+/g, '').replace(/[【】()[\]（）]/g, '').toLowerCase();
   }
 
+  // 判断两个 normTitle 是否"近似重复"：一个包含另一个，且长度差 ≤ 8
+  function isFuzzyDuplicateTitle(a, b) {
+    if (!a || !b) return false;
+    const diff = Math.abs(a.length - b.length);
+    if (diff > 8) return false;
+    return a.includes(b) || b.includes(a);
+  }
+
+  // 从 parsedPhasesResult 中为一个 deliverableTitle 找最匹配的 phaseId
+  // 策略：先按 node 标题精确匹配，再按 phase 标题关键词重叠评分
+  function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
+    if (!parsedPhasesResult) return null;
+    const { phases = [], nodes = [] } = parsedPhasesResult;
+    const normDlv = normalizeTitle(deliverableTitle || '');
+    if (!normDlv) return null;
+
+    // 1. 精确 / 包含匹配 node 标题
+    const nodeMatch = nodes.find((n) => {
+      const normNode = normalizeTitle(n.title || '');
+      return normNode === normDlv || normNode.includes(normDlv) || normDlv.includes(normNode);
+    });
+    if (nodeMatch?.phaseId) return nodeMatch.phaseId;
+
+    // 2. 关键词重叠评分：拆分中英文词段后计算交集
+    const dlvWords = normDlv.match(/[一-鿿]{1,4}|[a-z0-9]+/g) || [];
+    let bestPhaseId = null;
+    let bestScore = 0;
+    for (const phase of phases) {
+      const normPhase = normalizeTitle(phase.title || '');
+      const phaseWords = normPhase.match(/[一-鿿]{1,4}|[a-z0-9]+/g) || [];
+      const score = dlvWords.filter((w) =>
+        phaseWords.some((pw) => pw.includes(w) || w.includes(pw))
+      ).length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestPhaseId = phase.id;
+      }
+    }
+    return bestScore >= 1 ? bestPhaseId : null;
+  }
+
   function normalizeProjectInput(input = {}, fallbackId = '') {
     const owner = String(input.githubOwner || '').trim();
     const repository = String(input.repository || '').trim();
@@ -180,11 +221,19 @@ export function createProjectRoutes({
       draft.deliverables = draft.deliverables || [];
       for (const task of importCandidates) {
         let deliverable = findDeliverableByTitle(draft.deliverables, task.deliverableTitle || task.title);
+        if (deliverable && !deliverable.phaseId) {
+          // 已有 deliverable 但 phaseId 为空，尝试补填
+          const resolvedPhaseId = findPhaseForDeliverable(deliverable.title, parsedPhasesResult);
+          if (resolvedPhaseId) {
+            deliverable.phaseId = resolvedPhaseId;
+            deliverable.updatedAt = new Date().toISOString();
+          }
+        }
         if (!deliverable && (task.deliverableTitle || task.title)) {
           deliverable = {
             id: slugId('deliverable', task.deliverableTitle || task.title),
             projectId,
-            phaseId: parsedPhasesResult?.nodes?.find((node) => normalizeTitle(node.title) === normalizeTitle(task.deliverableTitle))?.phaseId || null,
+            phaseId: findPhaseForDeliverable(task.deliverableTitle || task.title, parsedPhasesResult),
             title: task.deliverableTitle || task.title,
             owner: task.owner || '',
             acceptance: task.description || '',
@@ -201,11 +250,14 @@ export function createProjectRoutes({
           draft.deliverables.push(deliverable);
           createdDeliverables++;
         }
-        // 用 normalizeTitle 去重，防止空格差异产生重复任务
+        // 用 normalizeTitle + 模糊包含去重，防止空格/端/功能等变体产生重复任务
         const normNew = normalizeTitle(task.title);
         const duplicate = existing.find(
-          (item) => normalizeTitle(item.title) === normNew
-            && (item.sourceDoc === task.sourceDoc || !item.sourceDoc || !task.sourceDoc)
+          (item) => {
+            const normExist = normalizeTitle(item.title);
+            const sameDoc = !item.sourceDoc || !task.sourceDoc || item.sourceDoc === task.sourceDoc;
+            return sameDoc && (normExist === normNew || isFuzzyDuplicateTitle(normExist, normNew));
+          }
         );
         if (!duplicate) {
           const taskId = createId('task');
