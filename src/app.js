@@ -321,15 +321,17 @@ function getDeliverableForTask(task) {
 }
 
 function getRoadmapDeliverables() {
+  // 优先用聚合后的 deliverable 数据；空时也用 state.deliverables。
+  // 不再回退到 stageChecklist.checklist（避免 reset 后空状态时显示默认 5 个幽灵节点）
   return state.deliverableProgress?.deliverables?.length
     ? state.deliverableProgress.deliverables
-    : (state.deliverables?.length ? state.deliverables : (state.stageChecklist?.checklist || []));
+    : (state.deliverables?.length ? state.deliverables : []);
 }
 
 function getRoadmapPhases() {
   return state.deliverableProgress?.phases?.length
     ? state.deliverableProgress.phases
-    : state.phases?.length ? state.phases : state.stageChecklist?.phases || [];
+    : (state.phases?.length ? state.phases : []);
 }
 
 function isCueAiTask(task) {
@@ -2797,10 +2799,10 @@ function bindEvents() {
         body: JSON.stringify({ projectId })
       });
       toast(`✅ ${result.message || '路径图已重置'}（剥离 ${result.strippedBindings ?? 0} 个旧绑定）`);
-      // 重置后立即触发 sync-docs，避免 UI 处于"空路径图"中间态
+      // 重置后立即触发 sync-docs（limit 拉到 20 一次性吃满），避免空路径图中间态
       button.textContent = '同步文档…';
       try {
-        const sync = await api(`/api/projects/${projectId}/sync-docs`, { method: 'POST', body: '{}' });
+        const sync = await api(`/api/projects/${projectId}/sync-docs?limit=20`, { method: 'POST', body: '{}' });
         toast(`✅ ${sync.message || '路径图已重新生成'}`);
       } catch (syncErr) {
         toast(`⚠️ 重置成功但 sync-docs 失败：${syncErr.message}，请手动点击「同步文档」`);

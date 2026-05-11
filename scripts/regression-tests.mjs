@@ -585,3 +585,159 @@ await test('phase4 wecom routes respect project context for tasks and claims', a
   assert.equal(store.assignments[0].projectId, 'project_two');
   assert.equal(store.assignments[0].taskId, 'task_two');
 });
+
+// ===== Phase 5：reset 后行为 + 防幽灵 deliverable + 模糊去重 =====
+
+await test('reset semantics: migrateStore preserves empty deliverables when explicitly cleared', () => {
+  // 用户点了重置路径图后的 store 状态
+  const resetStore = {
+    deliverables: [],   // 关键：字段存在但显式为空
+    phases: [],
+    currentStage: {
+      id: 'stage_test',
+      name: '测试阶段',
+      shortName: '测试',
+      checklist: [],
+      phases: []
+    },
+    tasks: [
+      { id: 'task_1', title: '已存在任务', projectId: 'cue_ai_classroom', deliverableId: null }
+    ]
+  };
+  const migrated = migrateStore(resetStore);
+  // 必须保持空，不能从 defaultStageChecklist 自动复活幽灵 deliverable
+  assert.equal(migrated.deliverables.length, 0, 'reset 后 deliverables 必须保持为空');
+  assert.equal(migrated.phases.length, 0, 'reset 后 phases 必须保持为空');
+});
+
+await test('legacy migration still backfills deliverables when key is absent', () => {
+  // 老版本数据：没有 deliverables 字段（首次迁移）
+  const legacyStoreNoDeliverables = {
+    currentStage: legacyStage,
+    tasks: []
+  };
+  const migrated = migrateStore(legacyStoreNoDeliverables);
+  assert.ok(migrated.deliverables.length > 0, 'legacy 首次迁移仍应从 checklist 生成 deliverable');
+  assert.ok(migrated.phases.length > 0, 'legacy 首次迁移仍应从 phases 生成');
+});
+
+await test('aggregateDeliverableProgress returns empty when no deliverables (no ghost fallback)', () => {
+  const store = {
+    deliverables: [],
+    phases: [],
+    tasks: [
+      { id: 'task_1', title: 'iPad 任务', projectId: 'cue_ai_classroom', deliverableId: null, progress: 50 }
+    ],
+    activities: [],
+    reviews: [],
+    assignments: [],
+    currentStage: { checklist: [], phases: [] }
+  };
+  const result = aggregateDeliverableProgress(store);
+  assert.equal(result.deliverables.length, 0, '空 deliverable 时不能回退到默认 5 个幽灵节点');
+  assert.equal(result.metrics.total, 0);
+  assert.equal(result.metrics.progress, 0);
+});
+
+await test('cross-deliverable contamination guard: task with deliverableId pointing elsewhere is excluded from keyword fallback', () => {
+  const store = {
+    deliverables: [
+      {
+        id: 'dlv_backend',
+        projectId: 'cue_ai_classroom',
+        phaseId: 'phase_p1',
+        title: '后端实时课堂链路',
+        keywords: ['后端', 'sos', 'session'],
+        acceptance: '后端验收',
+        taskIds: []
+      },
+      {
+        id: 'dlv_iphone',
+        projectId: 'cue_ai_classroom',
+        phaseId: 'phase_p2',
+        title: 'iPhone 输出端 MVP',
+        keywords: ['iphone', 'sos'],
+        acceptance: 'iPhone 验收',
+        taskIds: []
+      }
+    ],
+    phases: [
+      { id: 'phase_p1', title: 'P1', projectId: 'cue_ai_classroom' },
+      { id: 'phase_p2', title: 'P2', projectId: 'cue_ai_classroom' }
+    ],
+    tasks: [
+      // 这个任务显式绑定到 iPhone deliverable，标题含 'sos' 关键词
+      // 不能被 dlv_backend 通过 'sos' 关键词兜底拉过去
+      {
+        id: 'task_iphone_sos',
+        title: 'iPhone SOS 触发与结果展示',
+        projectId: 'cue_ai_classroom',
+        deliverableId: 'dlv_iphone',
+        progress: 30,
+        status: 'pending'
+      }
+    ],
+    activities: [],
+    reviews: [],
+    assignments: [],
+    currentStage: { checklist: [], phases: [] }
+  };
+  const result = aggregateDeliverableProgress(store);
+  const backend = result.deliverables.find((d) => d.id === 'dlv_backend');
+  const iphone = result.deliverables.find((d) => d.id === 'dlv_iphone');
+  assert.equal(backend.linkedTasks.length, 0, 'dlv_backend 不能通过关键词兜底拉过已绑到其他 deliverable 的任务');
+  assert.equal(iphone.linkedTasks.length, 1, 'dlv_iphone 应当通过显式 FK 拥有该任务');
+  assert.equal(iphone.linkedTasks[0].id, 'task_iphone_sos');
+});
+
+await test('reset-roadmap route strips task/activity/assignment deliverableId for project', async () => {
+  const { createPlanningRoutes } = await import('../server/routes/planningRoutes.js');
+  let store = migrateStore({
+    deliverables: [
+      { id: 'dlv_old', projectId: 'cue_ai_classroom', title: '老 Deliverable', phaseId: null, taskIds: ['task_a'] }
+    ],
+    phases: [{ id: 'phase_old', projectId: 'cue_ai_classroom', title: '老 Phase' }],
+    currentStage: { id: 'stage', name: 'S', shortName: 'S', checklist: [], phases: [] },
+    tasks: [
+      { id: 'task_a', title: 'A', projectId: 'cue_ai_classroom', deliverableId: 'dlv_old' },
+      { id: 'task_b', title: 'B', projectId: 'cue_ai_classroom', deliverableId: 'dlv_old' }
+    ],
+    activities: [
+      { id: 'act_1', type: 'commit', projectId: 'cue_ai_classroom', deliverableId: 'dlv_old', taskId: 'task_a' }
+    ],
+    assignments: [
+      { id: 'asg_1', projectId: 'cue_ai_classroom', deliverableId: 'dlv_old', taskId: 'task_a', owner: 'tester' }
+    ],
+    docTasks: { cue_ai_classroom: [{ title: '文档任务', deliverableTitle: '老 Deliverable' }] }
+  });
+
+  let responsePayload = null;
+  const route = createPlanningRoutes({
+    loadStore: async () => store,
+    saveStore: async (next) => { store = next; return next; },
+    updateStore: async (mutator) => { store = await mutator(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom' } }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    buildStageChecklist,
+    aggregateDeliverableProgress,
+    buildHybridAnalysis: async () => ({}),
+    scanRisks: () => [],
+    buildMetrics: () => ({}),
+    generatePlanAlternatives: async () => [],
+    normalizePlanStageUpdate: (u) => u,
+    applyPlanAdjustmentToStage: (d) => d
+  });
+
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/stage/reset-roadmap'));
+
+  assert.equal(responsePayload.ok, true);
+  assert.equal(responsePayload.strippedBindings, 2, '应当剥离 2 个 task 的 deliverableId');
+  assert.equal(store.deliverables.length, 0, 'deliverables 应当被清空');
+  assert.equal(store.phases.length, 0, 'phases 应当被清空');
+  assert.equal(store.tasks[0].deliverableId, null, 'task A 的 deliverableId 应当为 null');
+  assert.equal(store.tasks[1].deliverableId, null, 'task B 的 deliverableId 应当为 null');
+  assert.equal(store.activities[0].deliverableId, null, 'activity 的 deliverableId 应当为 null');
+  assert.equal(store.assignments[0].deliverableId, null, 'assignment 的 deliverableId 应当为 null');
+  assert.equal(store.docTasks?.cue_ai_classroom, undefined, 'docTasks 应当被清空');
+});

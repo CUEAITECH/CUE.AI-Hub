@@ -217,7 +217,7 @@ export function createProjectRoutes({
     let createdDeliverables = 0;
     let docSuggestions = 0;
     const nextStore = await updateStore((draft) => {
-      const existing = draft.tasks || [];
+      let existing = draft.tasks || [];
       draft.deliverables = draft.deliverables || [];
       for (const task of importCandidates) {
         let deliverable = findDeliverableByTitle(draft.deliverables, task.deliverableTitle || task.title);
@@ -287,34 +287,16 @@ export function createProjectRoutes({
           }
         }
       }
-      // 第二遍：扫描 ALL parsedTasks（不只导入的 8 个），为每个解析任务找/建 deliverable
-      // 然后把存量任务里标题匹配的全部重新绑定，确保 reset 后全部 FK 恢复
+      // 第二遍：只把存量任务重绑到第一遍已经创建的 deliverable，不创建新的
+      // 防止幽灵 deliverable（LLM 解析出 40 个任务但只导入 8 个时，剩下 32 个会创建空 deliverable 污染路径图）
       let rebound = 0;
       for (const parsed of parsedTasks) {
         const targetDlvTitle = parsed.deliverableTitle || parsed.title;
         if (!targetDlvTitle) continue;
-        let deliverable = findDeliverableByTitle(draft.deliverables, targetDlvTitle);
-        if (!deliverable) {
-          deliverable = {
-            id: slugId('deliverable', targetDlvTitle),
-            projectId,
-            phaseId: findPhaseForDeliverable(targetDlvTitle, parsedPhasesResult),
-            title: targetDlvTitle,
-            owner: parsed.owner || '',
-            acceptance: parsed.description || '',
-            keywords: [parsed.title, parsed.deliverableTitle, parsed.sourceDoc].filter(Boolean),
-            status: '待补证据',
-            progress: 0,
-            sourceDocPath: parsed.sourceDoc || '',
-            docSuggestComplete: false,
-            manualOverride: null,
-            taskIds: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-          draft.deliverables.push(deliverable);
-          createdDeliverables++;
-        } else if (!deliverable.phaseId) {
+        const deliverable = findDeliverableByTitle(draft.deliverables, targetDlvTitle);
+        if (!deliverable) continue; // 不创建幽灵
+        // 补填 phaseId（已有 deliverable 但缺 phase）
+        if (!deliverable.phaseId) {
           const resolved = findPhaseForDeliverable(deliverable.title, parsedPhasesResult);
           if (resolved) {
             deliverable.phaseId = resolved;
@@ -337,7 +319,61 @@ export function createProjectRoutes({
           }
         }
       }
-      draft._syncDocsLog = { rebound };
+      // 第三遍：deliverable 级模糊去重——若两个 deliverable normTitle 互相包含且长度差 ≤ 8，合并
+      // 保留 taskIds 多的，合并对方的 taskIds 和被绑的 task.deliverableId
+      const dedupedDeliverables = [];
+      const mergedMap = new Map(); // oldId → newId
+      for (const dlv of draft.deliverables) {
+        if (dlv.projectId && dlv.projectId !== projectId) {
+          dedupedDeliverables.push(dlv);
+          continue;
+        }
+        const dlvNorm = normalizeTitle(dlv.title);
+        const peer = dedupedDeliverables.find((existing) =>
+          existing.projectId === projectId
+          && (normalizeTitle(existing.title) === dlvNorm
+            || isFuzzyDuplicateTitle(normalizeTitle(existing.title), dlvNorm))
+        );
+        if (peer) {
+          // 合并到 peer：选 taskIds 多的为主，少的为附
+          const peerCount = (peer.taskIds || []).length;
+          const dlvCount = (dlv.taskIds || []).length;
+          const winner = peerCount >= dlvCount ? peer : dlv;
+          const loser = peerCount >= dlvCount ? dlv : peer;
+          winner.taskIds = Array.from(new Set([...(winner.taskIds || []), ...(loser.taskIds || [])]));
+          winner.keywords = Array.from(new Set([...(winner.keywords || []), ...(loser.keywords || [])]));
+          if (!winner.phaseId && loser.phaseId) winner.phaseId = loser.phaseId;
+          mergedMap.set(loser.id, winner.id);
+          if (winner === dlv) {
+            // 替换 dedupedDeliverables 中的 peer 为 dlv
+            const idx = dedupedDeliverables.indexOf(peer);
+            dedupedDeliverables[idx] = dlv;
+          }
+        } else {
+          dedupedDeliverables.push(dlv);
+        }
+      }
+      draft.deliverables = dedupedDeliverables;
+      // 重映射 tasks/activities/assignments 上被合并掉的 deliverableId
+      if (mergedMap.size > 0) {
+        draft.tasks = (draft.tasks || []).map((task) => (
+          task.deliverableId && mergedMap.has(task.deliverableId)
+            ? { ...task, deliverableId: mergedMap.get(task.deliverableId) }
+            : task
+        ));
+        existing = draft.tasks;
+        draft.activities = (draft.activities || []).map((activity) => (
+          activity.deliverableId && mergedMap.has(activity.deliverableId)
+            ? { ...activity, deliverableId: mergedMap.get(activity.deliverableId) }
+            : activity
+        ));
+        draft.assignments = (draft.assignments || []).map((assignment) => (
+          assignment.deliverableId && mergedMap.has(assignment.deliverableId)
+            ? { ...assignment, deliverableId: mergedMap.get(assignment.deliverableId) }
+            : assignment
+        ));
+      }
+      draft._syncDocsLog = { rebound, mergedDeliverables: mergedMap.size };
       draft.tasks = existing;
       if (!draft.docTasks) draft.docTasks = {};
       draft.docTasks[projectId] = parsedTasks;
