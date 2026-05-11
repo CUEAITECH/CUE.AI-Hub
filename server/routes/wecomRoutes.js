@@ -107,6 +107,31 @@ function buildWeComRiskSummary(store, alerts, buildMetrics) {
   ].join('\n');
 }
 
+function resolveProjectContext(store, url, json = {}) {
+  const requested = String(json?.projectId || url.searchParams.get('projectId') || '').trim();
+  const projects = store.projects || [];
+  if (!requested) return { projectId: projects[0]?.id || '', project: projects[0] || null };
+  const project = projects.find((item) => item.id === requested);
+  return { projectId: project?.id || projects[0]?.id || requested, project: project || projects[0] || null };
+}
+
+function scopeStoreToProject(store, projectId) {
+  if (!projectId) return store;
+  const byProject = (items = []) => items.filter((item) => !item.projectId || item.projectId === projectId);
+  return {
+    ...store,
+    projects: (store.projects || []).filter((item) => item.id === projectId),
+    tasks: byProject(store.tasks || []),
+    reviews: byProject(store.reviews || []),
+    activities: byProject(store.activities || []),
+    assignments: byProject(store.assignments || []),
+    standups: byProject(store.standups || []),
+    alerts: byProject(store.alerts || []),
+    deliverables: byProject(store.deliverables || []),
+    phases: byProject(store.phases || [])
+  };
+}
+
 export function createWeComRoutes({
   createId,
   loadStore,
@@ -142,10 +167,13 @@ export function createWeComRoutes({
 
     if (req.method === 'GET' && url.pathname === '/api/wecom/summary') {
       const store = await loadStore();
-      const alerts = scanRisks(store);
+      const { projectId } = resolveProjectContext(store, url);
+      const scopedStore = scopeStoreToProject(store, projectId);
+      const alerts = scanRisks(scopedStore);
       sendJson(res, 200, {
-        summary: buildWeComProjectSummary(store, alerts, buildMetrics),
-        metrics: buildMetrics(store, alerts),
+        projectId,
+        summary: buildWeComProjectSummary(scopedStore, alerts, buildMetrics),
+        metrics: buildMetrics(scopedStore, alerts),
         alertCount: alerts.length,
         generatedAt: new Date().toISOString()
       });
@@ -154,10 +182,13 @@ export function createWeComRoutes({
 
     if (req.method === 'GET' && url.pathname === '/api/wecom/risks') {
       const store = await loadStore();
-      const alerts = scanRisks(store);
+      const { projectId } = resolveProjectContext(store, url);
+      const scopedStore = scopeStoreToProject(store, projectId);
+      const alerts = scanRisks(scopedStore);
       sendJson(res, 200, {
-        summary: buildWeComRiskSummary(store, alerts, buildMetrics),
-        metrics: buildMetrics(store, alerts),
+        projectId,
+        summary: buildWeComRiskSummary(scopedStore, alerts, buildMetrics),
+        metrics: buildMetrics(scopedStore, alerts),
         alertCount: alerts.length,
         generatedAt: new Date().toISOString()
       });
@@ -166,9 +197,11 @@ export function createWeComRoutes({
 
     if (req.method === 'GET' && url.pathname === '/api/wecom/tasks') {
       const store = await loadStore();
+      const { projectId } = resolveProjectContext(store, url);
+      const scopedStore = scopeStoreToProject(store, projectId);
       const today = todayText();
-      const claimedToday = new Set((store.assignments || []).filter((assignment) => assignment.date === today).map((assignment) => assignment.taskId));
-      const active = (store.tasks || [])
+      const claimedToday = new Set((scopedStore.assignments || []).filter((assignment) => assignment.date === today).map((assignment) => assignment.taskId));
+      const active = (scopedStore.tasks || [])
         .filter((task) => task.status !== '已完成')
         .slice(0, 12)
         .map((task) => ({
@@ -184,7 +217,7 @@ export function createWeComRoutes({
         `${index + 1}. 【${task.risk}风险】${task.title}（${task.owner} · ${task.progress}% · 截止${task.due}）${task.claimedToday ? ' ✅已认领' : ''}`
       ).join('\n');
       const summary = active.length ? `当前 ${active.length} 个进行中任务：\n${lines}` : '暂无进行中任务。';
-      sendJson(res, 200, { summary, result: summary, tasks: active });
+      sendJson(res, 200, { projectId, summary, result: summary, tasks: active });
       return true;
     }
 
@@ -197,17 +230,19 @@ export function createWeComRoutes({
         return true;
       }
       const store = await loadStore();
-      const task = (store.tasks || []).find((item) =>
+      const { projectId } = resolveProjectContext(store, url, json);
+      const scopedStore = scopeStoreToProject(store, projectId);
+      const task = (scopedStore.tasks || []).find((item) =>
         item.status !== '已完成' && item.title.toLowerCase().includes(keyword.toLowerCase())
       );
       if (!task) {
-        const candidates = (store.tasks || []).filter((item) => item.status !== '已完成').slice(0, 5)
+        const candidates = (scopedStore.tasks || []).filter((item) => item.status !== '已完成').slice(0, 5)
           .map((item) => `「${item.title}」`).join('、');
         sendJson(res, 200, { result: `❌ 未找到包含「${keyword}」的进行中任务。当前可认领：${candidates || '暂无'}` });
         return true;
       }
       const today = todayText();
-      const already = (store.assignments || []).find(
+      const already = (scopedStore.assignments || []).find(
         (assignment) => assignment.owner === owner && assignment.taskId === task.id && assignment.date === today
       );
       if (already) {
@@ -220,6 +255,7 @@ export function createWeComRoutes({
         owner,
         taskId: task.id,
         taskTitle: task.title,
+        projectId,
         note: '',
         status: '进行中',
         createdAt: new Date().toISOString(),
@@ -253,15 +289,18 @@ export function createWeComRoutes({
         sendJson(res, 200, { result: '❌ 请提供成员姓名（owner 字段）' });
         return true;
       }
+      const store = await loadStore();
+      const { projectId } = resolveProjectContext(store, url, json);
       const standup = normalizeStandup({
         owner,
         yesterday: String(json?.yesterday || '').trim(),
         today: String(json?.today || '').trim(),
-        blockers: String(json?.blockers || '无').trim()
+        blockers: String(json?.blockers || '无').trim(),
+        projectId
       });
       await updateStore((draft) => {
         draft.standups = (draft.standups || []).filter(
-          (item) => !(item.owner === owner && item.date === standup.date)
+          (item) => !(item.owner === owner && item.date === standup.date && (item.projectId || projectId) === projectId)
         );
         draft.standups.unshift(standup);
         draft.standups = draft.standups.slice(0, 500);
@@ -282,7 +321,9 @@ export function createWeComRoutes({
         return true;
       }
       const store = await loadStore();
-      const task = (store.tasks || []).find((item) => item.title.toLowerCase().includes(keyword.toLowerCase()));
+      const { projectId } = resolveProjectContext(store, url, json);
+      const scopedStore = scopeStoreToProject(store, projectId);
+      const task = (scopedStore.tasks || []).find((item) => item.title.toLowerCase().includes(keyword.toLowerCase()));
       if (!task) {
         sendJson(res, 200, { result: `❌ 未找到包含「${keyword}」的任务` });
         return true;

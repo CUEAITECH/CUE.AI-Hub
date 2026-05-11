@@ -31,6 +31,11 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'getProjectState',
           summary: '获取项目整体状态',
           description: '返回健康度评分、所有任务、成员负载、风险告警、最近 AI 审阅和项目指标。用于回答"今天项目整体状态怎么样"、"有多少风险任务"等问题。',
+          parameters: [{
+            name: 'projectId', in: 'query', required: false,
+            description: '项目 ID；不传时使用默认项目。',
+            schema: { type: 'string' }
+          }],
           responses: {
             '200': {
               description: '项目状态',
@@ -62,6 +67,11 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'getStageChecklist',
           summary: '获取开发阶段对照清单',
           description: '返回当前阶段目标清单，以及每一项与任务、Git 提交、AI Review、分工领取的对照结果。用于"当前分工是否对应阶段目标"、"阶段还有哪些缺口"。',
+          parameters: [{
+            name: 'projectId', in: 'query', required: false,
+            description: '项目 ID；用于切换查看不同项目的阶段清单。',
+            schema: { type: 'string' }
+          }],
           responses: {
             '200': { description: '阶段对照清单', content: { 'application/json': { schema: {
               type: 'object',
@@ -240,6 +250,11 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'getTaskList',
           summary: '获取当前可认领任务列表',
           description: '返回当前进行中、待确认的任务列表，适合在企业微信中展示让成员选择认领。用于"现在有哪些任务"、"今天可以认领什么任务"。',
+          parameters: [{
+            name: 'projectId', in: 'query', required: false,
+            description: '项目 ID；不传时使用默认项目。',
+            schema: { type: 'string' }
+          }],
           responses: {
             '200': { description: '任务列表', content: { 'application/json': { schema: {
               type: 'object',
@@ -254,6 +269,7 @@ export function buildOpenApiSpec(serverUrl) {
                     progress: { type: 'number' }
                   }
                 }},
+                projectId: { type: 'string', description: '本次查询使用的项目 ID' },
                 summary: { type: 'string', description: '可直接回复给用户的任务列表摘要' },
                 result: { type: 'string', description: '同 summary，兼容企业微信字段配置' }
               }
@@ -274,6 +290,7 @@ export function buildOpenApiSpec(serverUrl) {
               required: ['owner', 'keyword'],
               properties: {
                 owner: { type: 'string', description: '认领人姓名，需是团队成员之一：田家铭、胡佳涛、罗子宽、林世棋' },
+                projectId: { type: 'string', description: '项目 ID；不传时使用默认项目' },
                 keyword: { type: 'string', description: '任务标题关键词，系统自动模糊匹配' },
                 taskKeyword: { type: 'string', description: '同 keyword，兼容企业微信字段配置' },
                 note: { type: 'string', description: '今日工作计划说明（可选）' }
@@ -305,6 +322,7 @@ export function buildOpenApiSpec(serverUrl) {
               required: ['owner'],
               properties: {
                 owner: { type: 'string', description: '提交人姓名，需是团队成员之一：田家铭、胡佳涛、罗子宽、林世棋' },
+                projectId: { type: 'string', description: '项目 ID；不传时使用默认项目' },
                 yesterday: { type: 'string', description: '昨天完成了什么' },
                 today: { type: 'string', description: '今天计划做什么' },
                 blockers: { type: 'string', description: '阻塞项，没有填"无"' },
@@ -335,6 +353,7 @@ export function buildOpenApiSpec(serverUrl) {
               required: ['keyword', 'progress'],
               properties: {
                 keyword: { type: 'string', description: '任务标题关键词，系统自动模糊匹配' },
+                projectId: { type: 'string', description: '项目 ID；不传时使用默认项目' },
                 progress: { type: 'number', minimum: 0, maximum: 100, description: '进度百分比，0-100' },
                 signal: { type: 'string', description: '进展说明（可选）' }
               }
@@ -357,11 +376,17 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'getWeComProjectSummary',
           summary: '获取企业微信项目摘要',
           description: '返回一段适合企业微信机器人直接回复的项目状态摘要。用于"现在项目进展怎么样"、"晚会前先给我项目概况"。输出参数只需配置 summary 为 String。',
+          parameters: [{
+            name: 'projectId', in: 'query', required: false,
+            description: '项目 ID；不传时使用默认项目。',
+            schema: { type: 'string' }
+          }],
           responses: {
             '200': { description: '项目摘要', content: { 'application/json': { schema: {
               type: 'object',
               properties: {
                 summary: { type: 'string', description: '可直接回复给用户的中文项目状态摘要' },
+                projectId: { type: 'string', description: '本次摘要对应的项目 ID' },
                 alertCount: { type: 'number', description: '当前告警数量' },
                 generatedAt: { type: 'string', format: 'date-time', description: '生成时间' },
                 metrics: { type: 'object', description: '项目健康指标' }
@@ -376,6 +401,11 @@ export function buildOpenApiSpec(serverUrl) {
           operationId: 'getWeComRiskSummary',
           summary: '获取企业微信风险摘要',
           description: '返回一段适合企业微信机器人直接回复的风险摘要。用于"今天有哪些风险"、"晚会要先处理什么"。输出参数只需配置 summary 为 String。',
+          parameters: [{
+            name: 'projectId', in: 'query', required: false,
+            description: '项目 ID；不传时使用默认项目。',
+            schema: { type: 'string' }
+          }],
           responses: {
             '200': { description: '风险摘要', content: { 'application/json': { schema: {
               type: 'object',

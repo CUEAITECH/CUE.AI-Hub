@@ -74,6 +74,41 @@ export function createProjectRoutes({
     return String(value || '').replace(/\s+/g, '').replace(/[【】()[\]（）]/g, '').toLowerCase();
   }
 
+  function normalizeProjectInput(input = {}, fallbackId = '') {
+    const owner = String(input.githubOwner || '').trim();
+    const repository = String(input.repository || '').trim();
+    const explicitFullRepo = String(input.githubFullRepo || '').trim();
+    const githubFullRepo = explicitFullRepo || (owner && repository ? `${owner}/${repository}` : '');
+    const [repoOwner = owner, repoName = repository] = githubFullRepo.includes('/')
+      ? githubFullRepo.split('/')
+      : [owner, repository];
+    const name = String(input.name || repoName || fallbackId || '').trim();
+    const id = String(input.id || fallbackId || '').trim();
+    return {
+      id,
+      name,
+      githubOwner: repoOwner || owner,
+      repository: repoName || repository,
+      githubFullRepo,
+      localPath: String(input.localPath || '').trim(),
+      branch: String(input.branch || '').trim(),
+      status: String(input.status || '待同步').trim(),
+      lastSyncAt: input.lastSyncAt || '',
+      summary: String(input.summary || '').trim()
+    };
+  }
+
+  function countProjectLinks(store, projectId) {
+    return {
+      tasks: (store.tasks || []).filter((item) => item.projectId === projectId).length,
+      activities: (store.activities || []).filter((item) => item.projectId === projectId).length,
+      assignments: (store.assignments || []).filter((item) => item.projectId === projectId).length,
+      reviews: (store.reviews || []).filter((item) => item.projectId === projectId).length,
+      deliverables: (store.deliverables || []).filter((item) => item.projectId === projectId).length,
+      phases: (store.phases || []).filter((item) => item.projectId === projectId).length
+    };
+  }
+
   function findDeliverableByTitle(deliverables = [], title = '') {
     const key = normalizeTitle(title);
     if (!key) return null;
@@ -229,6 +264,32 @@ export function createProjectRoutes({
       return true;
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/projects') {
+      const { json } = await readBody(req);
+      if (!json) { sendError(res, 400, 'invalid json'); return true; }
+      const id = String(json.id || slugId('project', json.githubFullRepo || json.repository || json.name)).trim();
+      const project = normalizeProjectInput(json, id);
+      if (!project.name) { sendError(res, 400, 'project name required'); return true; }
+      const store = await loadStore();
+      if ((store.projects || []).some((item) => item.id === project.id)) {
+        sendError(res, 409, 'project id already exists');
+        return true;
+      }
+      const nextStore = await updateStore((draft) => {
+        draft.projects = draft.projects || [];
+        draft.projects.push({
+          ...project,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+        return draft;
+      });
+      const saved = (nextStore.projects || []).find((item) => item.id === project.id);
+      if (!saved) { sendError(res, 409, 'project id already exists'); return true; }
+      sendJson(res, 201, { project: saved });
+      return true;
+    }
+
     if (req.method === 'PATCH' && url.pathname.startsWith('/api/projects/') &&
         !url.pathname.includes('/sync')) {
       const projectId = decodeURIComponent(url.pathname.split('/')[3] || '');
@@ -237,15 +298,17 @@ export function createProjectRoutes({
       const nextStore = await updateStore((draft) => {
         const index = (draft.projects || []).findIndex((project) => project.id === projectId);
         if (index === -1) return draft;
-        const allowed = ['name', 'repository', 'githubOwner', 'githubFullRepo', 'localPath', 'summary'];
+        const allowed = ['name', 'repository', 'githubOwner', 'githubFullRepo', 'localPath', 'summary', 'branch', 'status'];
         const patch = Object.fromEntries(Object.entries(json).filter(([key]) => allowed.includes(key)));
+        const normalizedPatch = normalizeProjectInput({ ...draft.projects[index], ...patch }, projectId);
         const current = draft.projects[index];
         const repoChanged = ['repository', 'githubOwner', 'githubFullRepo', 'localPath']
-          .some((key) => Object.hasOwn(patch, key) && patch[key] !== current[key]);
+          .some((key) => Object.hasOwn(patch, key) && normalizedPatch[key] !== current[key]);
         const shouldResetSync = repoChanged || json.resetSync === true;
         draft.projects[index] = {
           ...current,
-          ...patch,
+          ...normalizedPatch,
+          id: current.id,
           ...(shouldResetSync
             ? {
                 branch: '',
@@ -254,13 +317,40 @@ export function createProjectRoutes({
                 commitCount: 0,
                 dirtyFileCount: 0
               }
-            : {})
+            : {}),
+          updatedAt: new Date().toISOString()
         };
         return draft;
       });
       const project = (nextStore.projects || []).find((item) => item.id === projectId);
       if (!project) { sendError(res, 404, 'project not found'); return true; }
       sendJson(res, 200, { project });
+      return true;
+    }
+
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/projects/')) {
+      const projectId = decodeURIComponent(url.pathname.split('/')[3] || '');
+      const store = await loadStore();
+      const project = (store.projects || []).find((item) => item.id === projectId);
+      if (!project) { sendError(res, 404, 'project not found'); return true; }
+      if (projectId === 'cue_ai_classroom' || (store.projects || []).length <= 1) {
+        sendError(res, 409, 'default project cannot be deleted');
+        return true;
+      }
+      const links = countProjectLinks(store, projectId);
+      const linkedCount = Object.values(links).reduce((sum, count) => sum + count, 0);
+      if (linkedCount > 0) {
+        sendError(res, 409, 'project has linked records', {
+          message: '为避免误删真实研发数据，请先清理或迁移该项目下的任务、提交、分工和审阅记录。',
+          links
+        });
+        return true;
+      }
+      const nextStore = await updateStore((draft) => {
+        draft.projects = (draft.projects || []).filter((item) => item.id !== projectId);
+        return draft;
+      });
+      sendJson(res, 200, { deleted: true, projectId, projects: nextStore.projects || [] });
       return true;
     }
 

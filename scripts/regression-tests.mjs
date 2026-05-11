@@ -4,8 +4,10 @@ import { aggregateDeliverableProgress, buildStageChecklist } from '../server/ser
 import { dispatchRoutes } from '../server/routes/index.js';
 import { createAssignmentRoutes } from '../server/routes/assignmentRoutes.js';
 import { createSystemRoutes } from '../server/routes/systemRoutes.js';
+import { createProjectRoutes } from '../server/routes/projectRoutes.js';
+import { createWeComRoutes } from '../server/routes/wecomRoutes.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
-import { normalizeAssignment } from '../server/services/dailyBrief.js';
+import { normalizeAssignment, normalizeStandup } from '../server/services/dailyBrief.js';
 import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc } from '../server/services/docsManager.js';
 
 async function test(name, fn) {
@@ -434,4 +436,112 @@ await test('phase4 state route filters project scoped records while keeping proj
   assert.deepEqual(responsePayload.assignments.map((assignment) => assignment.id), ['assign_two']);
   assert.deepEqual(responsePayload.reviews.map((review) => review.id), ['review_two']);
   assert.equal(responsePayload.metrics.taskCount, 1);
+});
+
+await test('phase4 project routes create, update, and guard deletion of linked projects', async () => {
+  let requestJson = {};
+  let store = migrateStore({
+    projects: [{ id: 'project_existing', name: 'Existing' }],
+    tasks: [{ id: 'task_existing', title: 'Existing task', projectId: 'project_existing' }]
+  });
+  let responsePayload = null;
+  let errorPayload = null;
+  const route = createProjectRoutes({
+    createId: (prefix) => `${prefix}_fixed`,
+    loadStore: async () => store,
+    updateStore: async (mutator) => {
+      store = await mutator(structuredClone(store));
+      return store;
+    },
+    readBody: async () => ({ json: requestJson }),
+    sendJson: (_res, status, payload) => { responsePayload = { status, ...payload }; },
+    sendError: (_res, status, message, details) => { errorPayload = { status, message, details }; },
+    hasGitHubConfig: () => false,
+    scanGitHubProject: async () => ({}),
+    scanLocalGitProject: async () => ({}),
+    syncGitHubProjectIntoStore: async () => ({}),
+    githubSyncErrorHint: () => '',
+    reviewChange: async () => ({}),
+    scanRisks: () => [],
+    buildMetrics: () => ({}),
+    fetchProjectDocs: async () => [],
+    parseDocsForTasks: async () => [],
+    parseProgressDoc: () => [],
+    parsePhasesFromDocs: async () => null,
+    selectDailyDocTasks: () => [],
+    buildProgressMarkdown: () => '',
+    writeProgressToGitHub: async () => ({}),
+    defaultStageChecklist: [],
+    reassignChecklistPhaseIds: (nodes) => nodes,
+    todayText: () => '2026-05-11'
+  });
+
+  requestJson = {
+    name: 'Project Two',
+    githubFullRepo: 'CUEAITECH/Project-Two',
+    summary: 'second project'
+  };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/projects'));
+  assert.equal(responsePayload.status, 201);
+  assert.equal(responsePayload.project.id, 'project_cueaitech_project_two');
+  assert.equal(responsePayload.project.githubOwner, 'CUEAITECH');
+  assert.equal(responsePayload.project.repository, 'Project-Two');
+
+  requestJson = { githubFullRepo: 'CUEAITECH/Project-Two-Renamed', resetSync: true };
+  await route({ method: 'PATCH' }, {}, new URL('http://localhost/api/projects/project_cueaitech_project_two'));
+  assert.equal(responsePayload.project.repository, 'Project-Two-Renamed');
+  assert.equal(responsePayload.project.status, '待同步');
+
+  await route({ method: 'DELETE' }, {}, new URL('http://localhost/api/projects/project_existing'));
+  assert.equal(errorPayload.status, 409);
+  assert.equal(errorPayload.details.links.tasks, 1);
+
+  await route({ method: 'DELETE' }, {}, new URL('http://localhost/api/projects/project_cueaitech_project_two'));
+  assert.equal(responsePayload.deleted, true);
+  assert.equal(store.projects.some((project) => project.id === 'project_cueaitech_project_two'), false);
+});
+
+await test('phase4 wecom routes respect project context for tasks and claims', async () => {
+  let requestJson = {};
+  let store = migrateStore({
+    projects: [
+      { id: 'project_one', name: 'Project One' },
+      { id: 'project_two', name: 'Project Two' }
+    ],
+    tasks: [
+      { id: 'task_one', title: 'One task', owner: 'A', status: '进行中', projectId: 'project_one' },
+      { id: 'task_two', title: 'Two task', owner: 'B', status: '进行中', projectId: 'project_two' }
+    ],
+    assignments: []
+  });
+  let responsePayload = null;
+  const route = createWeComRoutes({
+    createId: (prefix) => `${prefix}_fixed`,
+    loadStore: async () => store,
+    updateStore: async (mutator) => {
+      store = await mutator(structuredClone(store));
+      return store;
+    },
+    readBody: async () => ({ json: requestJson }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    isWeComAvailable: () => true,
+    sendWeComMarkdown: async () => true,
+    scanRisks: () => [],
+    buildMetrics: (scopedStore) => ({ taskCount: scopedStore.tasks.length }),
+    todayText: () => '2026-05-11',
+    normalizeStandup,
+    normalizeTask: (task) => task,
+    generateAssignmentBrief: async () => ({ generatedBy: 'test' })
+  });
+
+  await route({ method: 'GET' }, {}, new URL('http://localhost/api/wecom/tasks?projectId=project_two'));
+  assert.equal(responsePayload.projectId, 'project_two');
+  assert.deepEqual(responsePayload.tasks.map((task) => task.id), ['task_two']);
+
+  requestJson = { owner: 'Tester', taskKeyword: 'Two', projectId: 'project_two' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/claim'));
+  assert.match(responsePayload.result, /已认领/);
+  assert.equal(store.assignments[0].projectId, 'project_two');
+  assert.equal(store.assignments[0].taskId, 'task_two');
 });

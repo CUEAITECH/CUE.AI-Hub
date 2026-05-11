@@ -266,6 +266,7 @@ export function normalizeStandup(input) {
     blockers: normalizeText(input.blockers, '无'),
     isLeave: Boolean(input.isLeave),
     proxy: normalizeText(input.proxy, ''),
+    projectId: input.projectId || '',
     createdAt: input.createdAt || now,
     updatedAt: now
   };

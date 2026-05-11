@@ -116,6 +116,31 @@
                 </div>
               </div>
               <div class="cue-ai-project compact" id="cueAiProject"></div>
+              <div class="project-config-panel" id="projectConfigPanel">
+                <div class="project-config-grid">
+                  <label>
+                    <span>名称</span>
+                    <input id="projectNameInput" type="text" aria-label="项目名称" placeholder="Cue.AI" />
+                  </label>
+                  <label>
+                    <span>GitHub 仓库</span>
+                    <input id="projectRepoInput" type="text" aria-label="GitHub 仓库" placeholder="CUEAITECH/Cue.AI" />
+                  </label>
+                  <label>
+                    <span>本地路径</span>
+                    <input id="projectLocalPathInput" type="text" aria-label="本地路径" placeholder="/opt/project 或留空" />
+                  </label>
+                  <label>
+                    <span>说明</span>
+                    <input id="projectSummaryInput" type="text" aria-label="项目说明" placeholder="这个项目的研发目标" />
+                  </label>
+                </div>
+                <div class="project-config-actions">
+                  <button type="button" data-action="create-project">新增项目</button>
+                  <button type="button" data-action="save-project">保存当前项目</button>
+                  <button type="button" data-action="delete-project">删除空项目</button>
+                </div>
+              </div>
             </section>
 
             <section class="panel activity-panel dashboard-activity">

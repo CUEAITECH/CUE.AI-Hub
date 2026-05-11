@@ -632,7 +632,7 @@ function renderCueAiProject() {
   const project = state.projects.find((item) => item.id === getCurrentProjectId());
 
   if (!project) {
-    panel.innerHTML = '<div class="empty-state">尚未配置 Cue.AI 仓库。</div>';
+    panel.innerHTML = '<div class="empty-state">尚未配置项目仓库。</div>';
     return;
   }
 
@@ -659,6 +659,18 @@ function renderCueAiProject() {
       </div>
     </a>
   `;
+}
+
+function renderProjectConfig() {
+  const project = state.currentProject || state.projects.find((item) => item.id === getCurrentProjectId());
+  const setValue = (selector, value) => {
+    const input = document.querySelector(selector);
+    if (input) input.value = value || '';
+  };
+  setValue('#projectNameInput', project?.name || '');
+  setValue('#projectRepoInput', project?.githubFullRepo || (project?.githubOwner && project?.repository ? `${project.githubOwner}/${project.repository}` : project?.repository || ''));
+  setValue('#projectLocalPathInput', project?.localPath || '');
+  setValue('#projectSummaryInput', project?.summary || '');
 }
 
 function renderActivities() {
@@ -1832,6 +1844,7 @@ function renderAll() {
   renderStage();
   renderRoadmap();
   renderCueAiProject();
+  renderProjectConfig();
   renderActivities();
   renderTasks();
   renderRisks();
@@ -2369,6 +2382,60 @@ async function syncCueAiGit(options = {}) {
   if (!options.silent) toast(`同步完成（${srcLabel}）：${payload.addedActivities || 0} 条 commit，${payload.addedReviews || 0} 条 AI Review`);
 }
 
+function readProjectForm() {
+  const fullRepo = document.querySelector('#projectRepoInput')?.value.trim() || '';
+  const [githubOwner = '', repository = ''] = fullRepo.includes('/') ? fullRepo.split('/') : ['', fullRepo];
+  return {
+    name: document.querySelector('#projectNameInput')?.value.trim() || '',
+    githubFullRepo: fullRepo,
+    githubOwner,
+    repository,
+    localPath: document.querySelector('#projectLocalPathInput')?.value.trim() || '',
+    summary: document.querySelector('#projectSummaryInput')?.value.trim() || ''
+  };
+}
+
+async function createProjectFromForm() {
+  const body = readProjectForm();
+  if (!body.name && !body.githubFullRepo && !body.localPath) {
+    toast('先填写项目名称或仓库地址');
+    return;
+  }
+  const payload = await api('/api/projects', { method: 'POST', body: JSON.stringify(body) });
+  state.projects = [...state.projects.filter((project) => project.id !== payload.project.id), payload.project];
+  syncCurrentProject(payload.project.id);
+  await loadState();
+  renderAll();
+  toast(`已新增项目：${payload.project.name}`);
+}
+
+async function saveCurrentProject() {
+  const projectId = getCurrentProjectId();
+  const body = readProjectForm();
+  const payload = await api(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ...body, resetSync: true })
+  });
+  state.projects = state.projects.map((project) => project.id === projectId ? payload.project : project);
+  syncCurrentProject(projectId);
+  await loadState();
+  renderAll();
+  toast(`已保存项目配置：${payload.project.name}`);
+}
+
+async function deleteCurrentProject() {
+  const projectId = getCurrentProjectId();
+  if (!projectId) return;
+  const projectName = state.currentProject?.name || projectId;
+  if (!confirm(`删除项目「${projectName}」？仅空项目可删除，已有任务/提交/分工的项目会被后端拒绝。`)) return;
+  const payload = await api(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+  state.projects = payload.projects || state.projects.filter((project) => project.id !== projectId);
+  syncCurrentProject(state.projects[0]?.id || '');
+  await loadState();
+  renderAll();
+  toast(`已删除项目：${projectName}`);
+}
+
 async function createMeetingAssignment() {
   const taskId = document.querySelector('#meetingAssignmentTask').value;
   const task = state.tasks.find((item) => item.id === taskId);
@@ -2549,6 +2616,15 @@ function bindEvents() {
   });
   document.querySelector('[data-action="sync"]').addEventListener('click', () => {
     syncCueAiGit().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="create-project"]')?.addEventListener('click', () => {
+    createProjectFromForm().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="save-project"]')?.addEventListener('click', () => {
+    saveCurrentProject().catch((e) => toast(e.message));
+  });
+  document.querySelector('[data-action="delete-project"]')?.addEventListener('click', () => {
+    deleteCurrentProject().catch((e) => toast(e.message));
   });
   document.querySelectorAll('[data-action="sync-cue-ai"]').forEach((button) => button.addEventListener('click', () => {
     syncCueAiGit().catch((e) => toast(e.message));
