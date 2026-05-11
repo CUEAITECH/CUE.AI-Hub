@@ -97,6 +97,69 @@ export function createPlanningRoutes({
       return true;
     }
 
+    // 清洗任务数据：去重 + 修正 成员A/B/C 占位符
+    if (req.method === 'POST' && url.pathname === '/api/tasks/cleanup') {
+      const MEMBER_PLACEHOLDER = /^成员\s*[A-Ea-e一二三四五]$|^Member\s*[A-Ea-e]$/i;
+      const VALID_OWNERS = new Set(['田家铭', '胡佳涛', '罗子宽', '林世棋']);
+
+      function normTitle(v) {
+        return String(v || '').replace(/\s+/g, '').replace(/[【】()[\]（）]/g, '').toLowerCase();
+      }
+
+      // 选出同组中"最好"的任务：已完成 > 进度最高 > 最早创建
+      function pickBest(group) {
+        const done = group.find((t) => t.status === '已完成' || t.status === 'completed');
+        if (done) return done;
+        return group.slice().sort((a, b) => {
+          const pd = (Number(b.progress) || 0) - (Number(a.progress) || 0);
+          if (pd !== 0) return pd;
+          return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+        })[0];
+      }
+
+      const next = await updateStore((draft) => {
+        const tasks = draft.tasks || [];
+        // 按 normalizeTitle 分组
+        const groups = new Map();
+        for (const task of tasks) {
+          const key = normTitle(task.title);
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(task);
+        }
+        const survivors = [];
+        let removed = 0;
+        for (const group of groups.values()) {
+          const best = pickBest(group);
+          survivors.push(best);
+          removed += group.length - 1;
+        }
+        // 修正占位符 owner
+        let fixedOwners = 0;
+        draft.tasks = survivors.map((task) => {
+          if (MEMBER_PLACEHOLDER.test(String(task.owner || '').trim())) {
+            fixedOwners++;
+            return { ...task, owner: '待认领' };
+          }
+          return task;
+        });
+        // 同步修正 deliverables 的 owner
+        draft.deliverables = (draft.deliverables || []).map((d) => {
+          if (MEMBER_PLACEHOLDER.test(String(d.owner || '').trim())) {
+            return { ...d, owner: '待认领', updatedAt: new Date().toISOString() };
+          }
+          return d;
+        });
+        draft._cleanupLog = { removed, fixedOwners, survivors: survivors.length, at: new Date().toISOString() };
+        return draft;
+      });
+      sendJson(res, 200, {
+        ok: true,
+        ...(next._cleanupLog || {}),
+        message: `去重完成：保留 ${next._cleanupLog?.survivors} 个任务，清除 ${next._cleanupLog?.removed} 个重复，修正 ${next._cleanupLog?.fixedOwners} 个占位符 owner`
+      });
+      return true;
+    }
+
     // 重置路径图：清空 deliverables/phases/checklist，保留 tasks（已完成的不丢）
     if (req.method === 'POST' && url.pathname === '/api/stage/reset-roadmap') {
       const { json } = await readBody(req);

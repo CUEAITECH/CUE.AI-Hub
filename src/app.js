@@ -2764,6 +2764,25 @@ function bindEvents() {
     refreshAiAnalysis().catch((e) => toast(e.message));
   }));
 
+  document.querySelectorAll('[data-action="cleanup-tasks"]').forEach((button) => button.addEventListener('click', async () => {
+    const confirmed = window.confirm(
+      '🧹 清洗任务数据？\n\n将自动合并标题相同的重复任务（保留进度最高/已完成的版本），并将"成员A/B/C"等占位符替换为"待认领"。\n\n此操作不可撤销，请确认。'
+    );
+    if (!confirmed) return;
+    button.disabled = true;
+    button.textContent = '清洗中…';
+    try {
+      const result = await api('/api/tasks/cleanup', { method: 'POST', body: '{}' });
+      toast(`✅ ${result.message || '清洗完成'}`);
+      await loadState();
+    } catch (e) {
+      toast(`❌ 清洗失败：${e.message}`);
+    } finally {
+      button.disabled = false;
+      button.textContent = '清洗任务';
+    }
+  }));
+
   document.querySelectorAll('[data-action="reset-roadmap"]').forEach((button) => button.addEventListener('click', async () => {
     const confirmed = window.confirm(
       '⚠️ 确认重置路径图？\n\n将清空所有交付项、阶段划分和路径图缓存。\n已完成任务会完整保留。\n\n重置后请点击「同步文档」重新生成路径图。'

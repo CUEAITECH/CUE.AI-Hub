@@ -201,8 +201,11 @@ export function createProjectRoutes({
           draft.deliverables.push(deliverable);
           createdDeliverables++;
         }
+        // 用 normalizeTitle 去重，防止空格差异产生重复任务
+        const normNew = normalizeTitle(task.title);
         const duplicate = existing.find(
-          (item) => item.title === task.title && item.sourceDoc === task.sourceDoc
+          (item) => normalizeTitle(item.title) === normNew
+            && (item.sourceDoc === task.sourceDoc || !item.sourceDoc || !task.sourceDoc)
         );
         if (!duplicate) {
           const taskId = createId('task');
