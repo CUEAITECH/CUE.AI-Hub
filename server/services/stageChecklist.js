@@ -207,8 +207,9 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
     ? Math.round(linkedTasks.reduce((sum, task) => sum + (Number(task.progress) || 0), 0) / linkedTasks.length)
     : 0;
   const hasBlockReview = linkedReviews.some((review) => review.level === 'Block' || review.level === 'Escalate');
-  const hasEvidence = linkedActivities.length > 0 || linkedAssignments.length > 0 || linkedReviews.length > 0;
-  const progress = Math.max(taskProgress, hasEvidence ? 35 : 0);
+  // FK 绑定的证据才触发进度地板（避免关键词兜底虚增到 35%）
+  const hasFkEvidence = fkActivities.length > 0 || fkAssignments.length > 0;
+  const progress = Math.max(taskProgress, hasFkEvidence ? 15 : 0);
   const status = hasBlockReview
     ? '阻塞'
     : linkedTasks.some((task) => task.status === '高风险' || task.risk === '高')

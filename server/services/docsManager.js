@@ -95,7 +95,7 @@ const PARSE_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理助手，
 [
   {
     "title": "任务标题（简洁，20字以内）",
-    "owner": "负责人（中文名或方向标签，未明确写 '待认领'）",
+    "owner": "负责人，必须从团队成员中选：田家铭/胡佳涛/罗子宽/林世棋，文档未明确则写 '待认领'，禁止使用'成员A/B/C'等占位符",
     "priority": "P0|P1|P2",
     "sourceDoc": "来源文档路径",
     "deliverableTitle": "所属交付项标题（从文档章节/模块/里程碑推断，20字以内）",
@@ -124,7 +124,8 @@ export async function parseDocsForTasks(docs) {
   const planDocs = (docs || []).filter((doc) => !isProgressDoc(doc));
   if (!planDocs.length) return [];
 
-  const userPrompt = planDocs.map((d) =>
+  const teamContext = '【团队成员】田家铭（架构/后端/全栈）、胡佳涛（后端/API）、罗子宽（iOS/iPad/iPhone）、林世棋（Web/学生端）。owner 必须从中选，文档无明确负责人写"待认领"。\n\n';
+  const userPrompt = teamContext + planDocs.map((d) =>
     `=== 文档：${d.path} ===\n${d.content.slice(0, 3000)}`
   ).join('\n\n');
 
@@ -170,7 +171,7 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
     {
       "id": "保留已有节点id或新生成的stage_node_xxx",
       "title": "节点短标题（20字以内）",
-      "owner": "负责人（未明确写'待确认'）",
+      "owner": "负责人，必须从团队成员中选：田家铭/胡佳涛/罗子宽/林世棋，文档未明确则写 '待认领'，禁止使用'成员A/B/C'等占位符",
       "acceptance": "验收口径（80字以内）",
       "phaseId": "所属阶段id（必须是上面phases中的id之一）",
       "keywords": ["关键词1", "关键词2"]
@@ -201,11 +202,12 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
 export async function parsePhasesFromDocs(docs, parsedTasks = [], existingNodes = []) {
   // 1. 尝试 LLM 提炼
   if (docs.length) {
+    const teamContext = '【团队成员】田家铭（架构/后端/全栈）、胡佳涛（后端/API）、罗子宽（iOS/iPad/iPhone）、林世棋（Web/学生端）。owner 必须从中选，文档无明确负责人写"待认领"。\n\n';
     const docsText = docs.map((d) => `=== ${d.path} ===\n${d.content.slice(0, 2000)}`).join('\n\n');
     const existingNodesText = existingNodes.length
       ? `\n\n=== 当前路径图节点（尽量复用这些节点的 id，通过标题语义匹配）===\n${JSON.stringify(existingNodes.map((n) => ({ id: n.id, title: n.title, phaseId: n.phaseId })))}`
       : '';
-    const raw = await callClaude(PHASES_SYSTEM_PROMPT, docsText + existingNodesText);
+    const raw = await callClaude(PHASES_SYSTEM_PROMPT, teamContext + docsText + existingNodesText);
     if (raw) {
       try {
         const parsed = parseJsonOutput(raw);

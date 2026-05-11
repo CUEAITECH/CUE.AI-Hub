@@ -190,7 +190,7 @@ export function createProjectRoutes({
             acceptance: task.description || '',
             keywords: [task.title, task.deliverableTitle, task.sourceDoc].filter(Boolean),
             status: task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '推进中' : '待补证据',
-            progress: task.status === 'completed' ? 100 : task.status === 'in_progress' ? 35 : 0,
+            progress: task.status === 'completed' ? 100 : 0,  // 进度由子任务聚合，不在此硬编码
             sourceDocPath: task.sourceDoc || '',
             docSuggestComplete: false,
             manualOverride: null,
@@ -224,7 +224,8 @@ export function createProjectRoutes({
             deliverable.taskIds = [...(deliverable.taskIds || []), taskId];
           }
           imported++;
-        } else if (deliverable && !duplicate.deliverableId) {
+        } else if (deliverable) {
+          // 无论原来有没有 deliverableId，都更新为当前匹配的 deliverable（修正历史错误绑定）
           duplicate.deliverableId = deliverable.id;
           if (!deliverable.taskIds?.includes(duplicate.id)) {
             deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
