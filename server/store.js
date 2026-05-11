@@ -87,6 +87,10 @@ function normalizeDeliverableRecord(deliverable, overrides, now) {
 
 export function migrateStore(store) {
   const now = new Date().toISOString();
+  // 关键：判断输入 store 中是否原本就有 deliverables/phases 字段
+  // 用于区分"首次迁移（legacy）"与"已迁移但被显式清空（reset 后）"
+  const hadDeliverables = Array.isArray(store?.deliverables);
+  const hadPhases = Array.isArray(store?.phases);
   const next = {
     tasks: [],
     members: [],
@@ -225,12 +229,22 @@ export function migrateStore(store) {
   const sourcePhases = Array.isArray(next.currentStage.phases) && next.currentStage.phases.length
     ? next.currentStage.phases
     : defaultPhases;
-  next.phases = Array.isArray(next.phases) && next.phases.length
-    ? next.phases.map(normalizePhaseRecord)
-    : sourcePhases.map(normalizePhaseRecord);
-  next.deliverables = Array.isArray(next.deliverables) && next.deliverables.length
-    ? next.deliverables.map((deliverable) => normalizeDeliverableRecord(deliverable, next.checklistOverrides || {}, now))
-    : next.currentStage.checklist.map((node) => deliverableFromChecklistNode(node, next.checklistOverrides || {}, now));
+  // phases：已迁移过的 store 即使为空也保持空（reset 后语义），未迁移过的 legacy store 才补默认
+  if (Array.isArray(next.phases) && next.phases.length) {
+    next.phases = next.phases.map(normalizePhaseRecord);
+  } else if (hadPhases) {
+    next.phases = [];
+  } else {
+    next.phases = sourcePhases.map(normalizePhaseRecord);
+  }
+  // deliverables 同理：legacy 首次迁移才从 checklist 生成；已迁移过的保持空，等 sync-docs 重新填
+  if (Array.isArray(next.deliverables) && next.deliverables.length) {
+    next.deliverables = next.deliverables.map((deliverable) => normalizeDeliverableRecord(deliverable, next.checklistOverrides || {}, now));
+  } else if (hadDeliverables) {
+    next.deliverables = [];
+  } else {
+    next.deliverables = next.currentStage.checklist.map((node) => deliverableFromChecklistNode(node, next.checklistOverrides || {}, now));
+  }
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
     acceptance: task.acceptance === 'PR diff 可输出 Pass、Warning、Block、Escalate 四级结论。'

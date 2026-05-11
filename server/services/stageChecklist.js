@@ -412,18 +412,9 @@ export function aggregateDeliverableProgress(store) {
   const rawDeliverables = Array.isArray(store.deliverables) && store.deliverables.length
     ? store.deliverables
     : [];
-  const deliverableSource = rawDeliverables.length
-    ? rawDeliverables
-    : buildStageChecklist(store).checklist.map((item) => ({
-        id: item.id,
-        projectId: (store.projects || [])[0]?.id || 'cue_ai_classroom',
-        phaseId: item.phaseId,
-        title: item.title,
-        owner: item.owner,
-        acceptance: item.acceptance,
-        keywords: item.keywords || [],
-        taskIds: item.taskIds || []
-      }));
+  // 若 deliverables 为空（如 reset 后未 sync-docs），直接返回空——不再回退到默认 checklist，
+  // 避免幽灵节点污染路径图（前端会展示"暂无交付项"空态）
+  const deliverableSource = rawDeliverables;
   const tasks = store.tasks || [];
   const activities = store.activities || [];
   const reviews = store.reviews || [];

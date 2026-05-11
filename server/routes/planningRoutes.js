@@ -204,6 +204,7 @@ export function createPlanningRoutes({
     if (req.method === 'POST' && url.pathname === '/api/stage/reset-roadmap') {
       const { json } = await readBody(req);
       const projectId = json?.projectId || '';
+      const inProject = (item) => !projectId || !item?.projectId || item.projectId === projectId;
       const next = await updateStore((draft) => {
         // 清空交付项和阶段（按项目隔离，或全清）
         draft.deliverables = projectId
@@ -212,7 +213,7 @@ export function createPlanningRoutes({
         draft.phases = projectId
           ? (draft.phases || []).filter((p) => p.projectId && p.projectId !== projectId)
           : [];
-        // 重置 currentStage checklist 和 phases 到默认值
+        // 重置 currentStage checklist 和 phases 到空
         draft.currentStage = {
           ...(draft.currentStage || {}),
           checklist: [],
@@ -222,13 +223,41 @@ export function createPlanningRoutes({
         draft.checklistOverrides = {};
         // 清空语义链接缓存（与路径图强相关）
         draft.semanticLinks = {};
+        // 清空 sync-docs 缓存，让下次 sync-docs 完全重新解析
+        if (draft.docTasks && projectId) {
+          delete draft.docTasks[projectId];
+        } else if (!projectId) {
+          draft.docTasks = {};
+        }
+        // 关键：剥离 tasks/activities/assignments 上的孤儿 deliverableId，
+        // 否则旧 FK 会绑到下次 sync-docs 新建的同名 deliverable 上，造成跨节点污染
+        let strippedTasks = 0;
+        draft.tasks = (draft.tasks || []).map((task) => {
+          if (inProject(task) && task.deliverableId) {
+            strippedTasks++;
+            return { ...task, deliverableId: null };
+          }
+          return task;
+        });
+        draft.activities = (draft.activities || []).map((activity) => (
+          inProject(activity) && activity.deliverableId
+            ? { ...activity, deliverableId: null }
+            : activity
+        ));
+        draft.assignments = (draft.assignments || []).map((assignment) => (
+          inProject(assignment) && assignment.deliverableId
+            ? { ...assignment, deliverableId: null }
+            : assignment
+        ));
+        draft._resetLog = { strippedTasks, at: new Date().toISOString() };
         return draft;
       });
       sendJson(res, 200, {
         ok: true,
-        message: '路径图已重置，已完成任务已保留。请触发 sync-docs 重新生成路径图。',
+        message: `路径图已重置。已剥离 ${next._resetLog?.strippedTasks || 0} 个任务的旧绑定。请触发 sync-docs 重新生成路径图。`,
         remainingTasks: (next.tasks || []).length,
-        completedTasks: (next.tasks || []).filter((t) => t.status === '已完成' || t.status === 'completed').length
+        completedTasks: (next.tasks || []).filter((t) => t.status === '已完成' || t.status === 'completed').length,
+        strippedBindings: next._resetLog?.strippedTasks || 0
       });
       return true;
     }

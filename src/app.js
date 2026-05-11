@@ -2785,7 +2785,7 @@ function bindEvents() {
 
   document.querySelectorAll('[data-action="reset-roadmap"]').forEach((button) => button.addEventListener('click', async () => {
     const confirmed = window.confirm(
-      '⚠️ 确认重置路径图？\n\n将清空所有交付项、阶段划分和路径图缓存。\n已完成任务会完整保留。\n\n重置后请点击「同步文档」重新生成路径图。'
+      '⚠️ 确认重置路径图？\n\n将清空所有交付项 / 阶段划分 / 路径图缓存，并剥离任务的旧绑定。\n已完成任务会完整保留。\n\n重置后会自动触发「同步文档」重新生成路径图。'
     );
     if (!confirmed) return;
     const projectId = getCurrentProjectId();
@@ -2796,7 +2796,15 @@ function bindEvents() {
         method: 'POST',
         body: JSON.stringify({ projectId })
       });
-      toast(`✅ ${result.message || '路径图已重置'}（保留 ${result.completedTasks ?? '?'} 个已完成任务）`);
+      toast(`✅ ${result.message || '路径图已重置'}（剥离 ${result.strippedBindings ?? 0} 个旧绑定）`);
+      // 重置后立即触发 sync-docs，避免 UI 处于"空路径图"中间态
+      button.textContent = '同步文档…';
+      try {
+        const sync = await api(`/api/projects/${projectId}/sync-docs`, { method: 'POST', body: '{}' });
+        toast(`✅ ${sync.message || '路径图已重新生成'}`);
+      } catch (syncErr) {
+        toast(`⚠️ 重置成功但 sync-docs 失败：${syncErr.message}，请手动点击「同步文档」`);
+      }
       await loadState();
     } catch (e) {
       toast(`❌ 重置失败：${e.message}`);

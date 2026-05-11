@@ -287,6 +287,57 @@ export function createProjectRoutes({
           }
         }
       }
+      // 第二遍：扫描 ALL parsedTasks（不只导入的 8 个），为每个解析任务找/建 deliverable
+      // 然后把存量任务里标题匹配的全部重新绑定，确保 reset 后全部 FK 恢复
+      let rebound = 0;
+      for (const parsed of parsedTasks) {
+        const targetDlvTitle = parsed.deliverableTitle || parsed.title;
+        if (!targetDlvTitle) continue;
+        let deliverable = findDeliverableByTitle(draft.deliverables, targetDlvTitle);
+        if (!deliverable) {
+          deliverable = {
+            id: slugId('deliverable', targetDlvTitle),
+            projectId,
+            phaseId: findPhaseForDeliverable(targetDlvTitle, parsedPhasesResult),
+            title: targetDlvTitle,
+            owner: parsed.owner || '',
+            acceptance: parsed.description || '',
+            keywords: [parsed.title, parsed.deliverableTitle, parsed.sourceDoc].filter(Boolean),
+            status: '待补证据',
+            progress: 0,
+            sourceDocPath: parsed.sourceDoc || '',
+            docSuggestComplete: false,
+            manualOverride: null,
+            taskIds: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          draft.deliverables.push(deliverable);
+          createdDeliverables++;
+        } else if (!deliverable.phaseId) {
+          const resolved = findPhaseForDeliverable(deliverable.title, parsedPhasesResult);
+          if (resolved) {
+            deliverable.phaseId = resolved;
+            deliverable.updatedAt = new Date().toISOString();
+          }
+        }
+        // 用 normTitle + 模糊包含找出所有现有匹配任务，统一绑定
+        const normParsed = normalizeTitle(parsed.title);
+        for (const task of existing) {
+          if (task.projectId && task.projectId !== projectId) continue;
+          const normExist = normalizeTitle(task.title);
+          if (normExist === normParsed || isFuzzyDuplicateTitle(normExist, normParsed)) {
+            if (task.deliverableId !== deliverable.id) {
+              task.deliverableId = deliverable.id;
+              rebound++;
+            }
+            if (!deliverable.taskIds?.includes(task.id)) {
+              deliverable.taskIds = [...(deliverable.taskIds || []), task.id];
+            }
+          }
+        }
+      }
+      draft._syncDocsLog = { rebound };
       draft.tasks = existing;
       if (!draft.docTasks) draft.docTasks = {};
       draft.docTasks[projectId] = parsedTasks;
