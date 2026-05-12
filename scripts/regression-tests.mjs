@@ -378,11 +378,11 @@ await test('phase3.2 assignment completion confirms linked task completion', asy
   assert.equal(store.tasks[0].progressSource, 'manual');
 });
 
-await test('task AI progress keeps confirmed progress while preserving AI estimate', async () => {
+await test('task AI progress rewrites automatic progress to latest estimate', async () => {
   let store = migrateStore({
     currentStage: legacyStage,
     tasks: [
-      { id: 'task_progress', title: '进度测试任务', owner: 'tester', progress: 70, status: '进行中' }
+      { id: 'task_progress', title: '进度测试任务', owner: 'tester', progress: 70, progressSource: 'auto', status: '进行中' }
     ]
   });
   let responsePayload = null;
@@ -404,8 +404,39 @@ await test('task AI progress keeps confirmed progress while preserving AI estima
 
   const handled = await route({ method: 'POST' }, {}, new URL('http://localhost/api/tasks/ai-progress'));
   assert.equal(handled, true);
-  assert.equal(responsePayload.tasks[0].progress, 70);
+  assert.equal(responsePayload.tasks[0].progress, 40);
   assert.equal(responsePayload.tasks[0].progressSource, 'auto');
+  assert.equal(responsePayload.tasks[0].aiProgressSuggestion.progress, 40);
+  assert.equal(responsePayload.tasks[0].aiProgressSuggestion.appliedProgress, 40);
+});
+
+await test('task AI progress preserves manual confirmation while storing AI review estimate', async () => {
+  let store = migrateStore({
+    currentStage: legacyStage,
+    tasks: [
+      { id: 'task_manual_progress', title: '人工确认任务', owner: 'tester', progress: 70, progressSource: 'manual', status: '进行中' }
+    ]
+  });
+  let responsePayload = null;
+  const route = createTaskRoutes({
+    loadStore: async () => store,
+    updateStore: async (mutator) => {
+      store = await mutator(structuredClone(store));
+      return store;
+    },
+    readBody: async () => ({ json: {} }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    normalizeTask: (task) => task,
+    estimateTasksProgress: async () => [
+      { taskId: 'task_manual_progress', progress: 40, reason: '证据不足', hint: '补充验收截图', suggestComplete: false }
+    ],
+    generatePlan: async () => []
+  });
+
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/tasks/ai-progress'));
+  assert.equal(responsePayload.tasks[0].progress, 70);
+  assert.equal(responsePayload.tasks[0].progressSource, 'manual');
   assert.equal(responsePayload.tasks[0].aiProgressSuggestion.progress, 40);
   assert.equal(responsePayload.tasks[0].aiProgressSuggestion.appliedProgress, 70);
 });

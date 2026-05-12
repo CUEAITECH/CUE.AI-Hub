@@ -791,9 +791,10 @@ async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
           const task = draft.tasks.find((t) => t.id === r.taskId);
           if (!task) continue;
           const newProgress = Math.max(0, Math.min(100, Number(r.progress) || 0));
-          const appliedProgress = Math.max(task.progress || 0, newProgress);
+          const isManualProgress = task.progressSource === 'manual' || Boolean(task.completionSource);
+          const appliedProgress = isManualProgress ? Math.max(task.progress || 0, newProgress) : newProgress;
           task.progress = appliedProgress;
-          task.progressSource = 'auto';
+          task.progressSource = isManualProgress ? 'manual' : 'auto';
           task.aiProgressSuggestion = {
             progress: newProgress,
             appliedProgress,

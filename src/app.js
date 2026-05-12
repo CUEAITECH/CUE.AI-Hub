@@ -1353,13 +1353,13 @@ function renderTaskDetail() {
       const updatedAt = sug.updatedAt ? new Date(sug.updatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
       const aiProgress = Math.max(0, Math.min(100, Number(sug.progress) || 0));
       const systemProgress = Math.max(0, Math.min(100, Number(sug.appliedProgress ?? task.progress) || 0));
-      const systemLabel = progressSource === 'manual' ? '人工确认' : '自动进度';
-      const progressLabel = aiProgress === systemProgress
-        ? `${systemProgress}%`
-        : `AI估算 ${aiProgress}% / ${systemLabel} ${systemProgress}%`;
+      const isManualProgress = progressSource === 'manual';
+      const progressLabel = isManualProgress && aiProgress !== systemProgress
+        ? `AI复核 ${aiProgress}% / 人工确认 ${systemProgress}%`
+        : `${systemProgress}%`;
       return `<article class="task-detail-card task-ai-progress-card">
-      <span>AI 进度判断 · ${progressLabel} <small>${updatedAt}</small></span>
-      ${aiProgress !== systemProgress ? `<p class="ai-progress-note">${systemLabel}不会被本次 AI 估算自动调低；AI 估算仅作为复核参考。</p>` : ''}
+      <span>${isManualProgress ? 'AI 进度复核' : '自动进度判断'} · ${progressLabel} <small>${updatedAt}</small></span>
+      ${isManualProgress && aiProgress !== systemProgress ? '<p class="ai-progress-note">人工确认进度不会被 AI 自动调低；AI 估算仅作为复核参考。</p>' : ''}
       ${sug.reason ? `<p class="ai-progress-reason"><strong>判断依据：</strong>${escapeHtml(sug.reason)}</p>` : ''}
       ${sug.hint ? `<p class="ai-progress-hint"><strong>提高进度需补充：</strong>${escapeHtml(sug.hint)}</p>` : ''}
       ${sug.suggestComplete ? '<p class="ai-progress-suggest">AI 建议标记为已完成，请在分工领取中确认。</p>' : ''}
