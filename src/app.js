@@ -355,29 +355,47 @@ async function renderAccountAdmin() {
   try {
     const users = await loadProjectUsers();
     const callerUsername = currentSessionUsername();
-    list.innerHTML = users.length
-      ? users.map((user) => {
-        // 创始人受保护：角色不可被他人调整，账号不可被他人停用
+    // 创始人排在最前面，剩下按角色排：项目管理员 > 开发者
+    const sortedUsers = [...users].sort((a, b) => {
+      if (a.isFounder !== b.isFounder) return a.isFounder ? -1 : 1;
+      const aIsAdmin = (a.projectRole || a.role) === 'project_admin';
+      const bIsAdmin = (b.projectRole || b.role) === 'project_admin';
+      if (aIsAdmin !== bIsAdmin) return aIsAdmin ? -1 : 1;
+      return 0;
+    });
+    list.innerHTML = sortedUsers.length
+      ? sortedUsers.map((user) => {
         const isFounder = Boolean(user.isFounder);
         const isSelfFounder = isFounder && user.username === callerUsername;
-        const lockReason = user.role === 'admin' || isFounder;
-        const founderBadge = isFounder ? '<span class="founder-badge" title="项目创始人，角色不可被他人调整">创始人</span>' : '';
+        const role = user.projectRole || user.role;
+        // 创始人是独立的最高权限等级：UI 上不再展示"项目管理员"角色，直接显示"创始人"
+        const displayRole = isFounder ? '创始人' : roleLabel(role);
+        const roleTone = isFounder ? 'founder' : role === 'project_admin' ? 'admin' : 'developer';
         return `
-        <div class="admin-user-row ${user.active === false ? 'is-disabled' : ''}" data-user-id="${escapeHtml(user.id)}">
-          <div class="admin-user-main">
-            <strong>${escapeHtml(user.name || user.username)} ${founderBadge}</strong>
-            <span>${escapeHtml(user.username)} · ${roleLabel(user.projectRole || user.role)} · ${user.active === false ? '已停用' : '已启用'}</span>
+        <div class="admin-user-card ${user.active === false ? 'is-disabled' : ''} ${isFounder ? 'is-founder' : ''}" data-user-id="${escapeHtml(user.id)}">
+          <div class="admin-user-card-head">
+            <div class="admin-user-identity">
+              <strong>${escapeHtml(user.name || user.username)}</strong>
+              <span class="admin-user-handle">@${escapeHtml(user.username)}</span>
+            </div>
+            <span class="admin-user-role-pill admin-user-role-${roleTone}">${displayRole}</span>
           </div>
-          <div class="admin-user-controls">
-            <select data-action="update-user-role" ${lockReason ? 'disabled' : ''}>
-              <option value="developer" ${(user.projectRole || user.role) === 'developer' ? 'selected' : ''}>项目开发者</option>
-              <option value="project_admin" ${(user.projectRole || user.role) === 'project_admin' ? 'selected' : ''}>项目管理员</option>
-            </select>
-            <button type="button" data-action="toggle-user-active" ${lockReason ? 'disabled' : ''}>
-              ${user.active === false ? '启用' : '停用'}
-            </button>
-            <button type="button" data-action="reset-user-password" ${user.role === 'admin' ? 'disabled' : ''}>重置密码</button>
-            ${isSelfFounder ? '<button type="button" data-action="transfer-founder" class="btn-danger-soft">转移创始人</button>' : ''}
+          <div class="admin-user-card-status">
+            <span class="admin-user-status-dot admin-user-status-${user.active === false ? 'off' : 'on'}"></span>
+            <span>${user.active === false ? '已停用' : '已启用'}</span>
+          </div>
+          <div class="admin-user-card-actions">
+            ${isFounder
+              ? `<span class="admin-user-locked-hint">创始人角色受保护，调整请使用「转移创始人」</span>`
+              : `<select data-action="update-user-role">
+                  <option value="developer" ${role === 'developer' ? 'selected' : ''}>项目开发者</option>
+                  <option value="project_admin" ${role === 'project_admin' ? 'selected' : ''}>项目管理员</option>
+                </select>
+                <button type="button" data-action="toggle-user-active">
+                  ${user.active === false ? '启用' : '停用'}
+                </button>`}
+            <button type="button" data-action="reset-user-password" class="admin-user-btn-ghost" ${user.role === 'admin' ? 'disabled' : ''}>重置密码</button>
+            ${isSelfFounder ? '<button type="button" data-action="transfer-founder" class="admin-user-btn-danger">转移创始人</button>' : ''}
           </div>
         </div>
       `;
