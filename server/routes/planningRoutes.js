@@ -117,14 +117,54 @@ export function createPlanningRoutes({
         })[0];
       }
 
-      // 模糊相似度：两个标题是否"近似重复"
-      // 判定条件：一个是另一个的子串（包含关系），且长度差 ≤ 8 个字符
-      // 例：'ipad开始/结束课堂' 与 'ipad开始/结束课堂控制' 长度差 2，前者是后者子串 → 近似重复
+      // 项目无关的常见缩写，不作为产品域识别符
+      const COMMON_ABBREVS = new Set([
+        'api', 'sdk', 'sop', 'sos', 'mvp', 'sku', 'oauth', 'jwt', 'http', 'https',
+        'json', 'yaml', 'crud', 'cors', 'rest', 'cli', 'gui', 'ux', 'ui',
+        'ci', 'cd', 'dev', 'prod', 'qa', 'env', 'v1', 'v2', 'mr', 'pr', 'pm'
+      ]);
+      function distinctTokens(text) {
+        return (String(text || '').toLowerCase().match(/[a-z][a-z0-9]+/g) || [])
+          .filter((t) => t.length >= 4 && !COMMON_ABBREVS.has(t));
+      }
+      function isTitleConsistent(taskTitle, deliverableTitle) {
+        const a = distinctTokens(taskTitle);
+        const b = distinctTokens(deliverableTitle);
+        if (!a.length || !b.length) return true;
+        const al = String(taskTitle).toLowerCase();
+        const bl = String(deliverableTitle).toLowerCase();
+        if (a.some((t) => bl.includes(t))) return true;
+        if (b.some((t) => al.includes(t))) return true;
+        return false;
+      }
+      function bigramTokens(text) {
+        const tokens = new Set();
+        const ascii = String(text || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+        ascii.forEach((t) => tokens.add(t));
+        const cjk = String(text || '').match(/[一-鿿]+/g) || [];
+        for (const run of cjk) {
+          for (let i = 0; i < run.length - 1; i++) tokens.add(run.slice(i, i + 2));
+          if (run.length === 1) tokens.add(run);
+        }
+        return tokens;
+      }
+      function jaccard(a, b) {
+        const ta = bigramTokens(a); const tb = bigramTokens(b);
+        if (!ta.size || !tb.size) return 0;
+        let inter = 0; for (const t of ta) if (tb.has(t)) inter++;
+        return inter / (ta.size + tb.size - inter || 1);
+      }
+      function sharedPrefix(a, b) {
+        const n = Math.min(a.length, b.length);
+        let i = 0; while (i < n && a[i] === b[i]) i++; return i;
+      }
+      // 综合判定：精确 + 模糊包含 + 前缀+Jaccard，覆盖词序调换/变体堆积
       function isFuzzyDuplicate(a, b) {
-        const lenDiff = Math.abs(a.length - b.length);
-        if (lenDiff > 8) return false;
-        if (a.length === 0 || b.length === 0) return false;
-        return a.includes(b) || b.includes(a);
+        if (!a || !b) return false;
+        if (a === b) return true;
+        if (Math.abs(a.length - b.length) <= 8 && (a.includes(b) || b.includes(a))) return true;
+        if (sharedPrefix(a, b) >= 4 && jaccard(a, b) >= 0.3) return true;
+        return false;
       }
 
       const next = await updateStore((draft) => {
@@ -189,13 +229,34 @@ export function createPlanningRoutes({
           }
           return d;
         });
-        draft._cleanupLog = { removed, fixedOwners, survivors: survivors.length, fuzzyRemoved, at: new Date().toISOString() };
+        // 跨产品域绑定校正：剥离明显冲突的 task→deliverable FK（如 iPhone 任务绑到 iPad deliverable）
+        let unboundCrossDomain = 0;
+        const deliverableById = new Map((draft.deliverables || []).map((d) => [d.id, d]));
+        draft.tasks = draft.tasks.map((task) => {
+          if (!task.deliverableId) return task;
+          const dlv = deliverableById.get(task.deliverableId);
+          if (!dlv) return task;
+          if (!isTitleConsistent(task.title, dlv.title)) {
+            unboundCrossDomain++;
+            return { ...task, deliverableId: null };
+          }
+          return task;
+        });
+        // 同步把 deliverable.taskIds 里被剥离的 task 清掉
+        const survivingFkPairs = new Set(
+          draft.tasks.filter((t) => t.deliverableId).map((t) => `${t.deliverableId}|${t.id}`)
+        );
+        draft.deliverables = draft.deliverables.map((d) => ({
+          ...d,
+          taskIds: (d.taskIds || []).filter((tid) => survivingFkPairs.has(`${d.id}|${tid}`))
+        }));
+        draft._cleanupLog = { removed, fixedOwners, survivors: survivors.length, fuzzyRemoved, unboundCrossDomain, at: new Date().toISOString() };
         return draft;
       });
       sendJson(res, 200, {
         ok: true,
         ...(next._cleanupLog || {}),
-        message: `去重完成：保留 ${next._cleanupLog?.survivors} 个任务，清除 ${next._cleanupLog?.removed} 个重复（其中模糊去重 ${next._cleanupLog?.fuzzyRemoved} 个），修正 ${next._cleanupLog?.fixedOwners} 个占位符 owner`
+        message: `去重完成：保留 ${next._cleanupLog?.survivors} 个任务，清除 ${next._cleanupLog?.removed} 个重复（其中模糊 ${next._cleanupLog?.fuzzyRemoved} 个），修正 ${next._cleanupLog?.fixedOwners} 个占位符 owner，剥离 ${next._cleanupLog?.unboundCrossDomain || 0} 个跨产品域错误绑定`
       });
       return true;
     }

@@ -82,6 +82,95 @@ export function createProjectRoutes({
     return a.includes(b) || b.includes(a);
   }
 
+  // 项目无关的常见缩写，不能作为"产品域识别符"（每个项目都可能出现，没有区分度）
+  const COMMON_ABBREVS = new Set([
+    'api', 'sdk', 'sop', 'sos', 'mvp', 'sku', 'oauth', 'jwt', 'http', 'https',
+    'json', 'yaml', 'crud', 'cors', 'rest', 'cli', 'gui', 'ux', 'ui',
+    'ci', 'cd', 'dev', 'prod', 'qa', 'env', 'v1', 'v2', 'mr', 'pr', 'pm'
+  ]);
+
+  // 提取"产品域识别符"：长度 ≥ 4 且不在常见缩写表里的纯 ASCII token
+  // 用途：判断两个标题是否属于不同产品端（iPhone vs iPad 之类）
+  // 项目无关：完全靠字符特征识别，不写死任何项目术语
+  function extractDistinctiveTokens(text) {
+    const ascii = String(text || '').toLowerCase().match(/[a-z][a-z0-9]+/g) || [];
+    return ascii.filter((t) => t.length >= 4 && !COMMON_ABBREVS.has(t));
+  }
+
+  // task 标题 与 deliverable 标题 是否在产品域上"不冲突"（基于 ASCII 标识符）
+  function isTitleConsistent(taskTitle, deliverableTitle) {
+    const taskTokens = extractDistinctiveTokens(taskTitle);
+    const dlvTokens = extractDistinctiveTokens(deliverableTitle);
+    if (!taskTokens.length || !dlvTokens.length) return true;
+    const taskLower = String(taskTitle).toLowerCase();
+    const dlvLower = String(deliverableTitle).toLowerCase();
+    if (taskTokens.some((t) => dlvLower.includes(t))) return true;
+    if (dlvTokens.some((t) => taskLower.includes(t))) return true;
+    return false;
+  }
+
+  // 更强的可信度校验：ASCII 标识符 + phase productKeywords 双重检查
+  // 用例：iPhone 任务被 LLM 错绑到纯中文标题的"第一周后端交付物"deliverable，
+  //       isTitleConsistent 无法判定，但 phase productKeywords 能识别出 task 实际归属客户端 phase。
+  function isBindingPlausible(taskTitle, deliverable, parsedPhasesResult) {
+    // 1. ASCII 标识符冲突直接拒绝
+    if (!isTitleConsistent(taskTitle, deliverable.title)) return false;
+    // 2. 基于 LLM productKeywords 的 phase 级一致性
+    if (!deliverable.phaseId || !parsedPhasesResult?.phases?.length) return true;
+    const phases = parsedPhasesResult.phases;
+    const taskBest = findPhaseByLLMKeywords(taskTitle, phases);
+    if (!taskBest.phaseId || taskBest.score < 2) return true; // task 没强 phase 信号，不否决
+    if (taskBest.phaseId === deliverable.phaseId) return true; // 一致
+    // task 的最佳 phase 与 deliverable 实际 phase 不同——计算 deliverable phase 对该 task 的得分
+    const deliverablePhase = phases.find((p) => p.id === deliverable.phaseId);
+    let dlvPhaseScore = 0;
+    if (deliverablePhase && Array.isArray(deliverablePhase.productKeywords)) {
+      const tl = String(taskTitle).toLowerCase();
+      const tt = extractTokens(taskTitle);
+      for (const k of deliverablePhase.productKeywords) {
+        const kl = String(k || '').toLowerCase().trim();
+        if (!kl) continue;
+        if (tl.includes(kl)) { dlvPhaseScore += 2; continue; }
+        const kt = extractTokens(k);
+        for (const t of kt) if (tt.has(t)) { dlvPhaseScore += 1; break; }
+      }
+    }
+    // task 的最佳 phase 比 deliverable 的 phase 评分高 ≥ 2 → 视为错绑
+    return taskBest.score - dlvPhaseScore < 2;
+  }
+
+  // Jaccard 相似度（基于 extractTokens 的 bigram + ASCII tokens）
+  function jaccardSimilarity(a, b) {
+    const ta = extractTokens(a);
+    const tb = extractTokens(b);
+    if (!ta.size || !tb.size) return 0;
+    let inter = 0;
+    for (const t of ta) if (tb.has(t)) inter++;
+    const union = ta.size + tb.size - inter;
+    return union > 0 ? inter / union : 0;
+  }
+
+  function sharedPrefixLen(a, b) {
+    const n = Math.min(a.length, b.length);
+    let i = 0;
+    while (i < n && a[i] === b[i]) i++;
+    return i;
+  }
+
+  // 综合判定两个标题是否为重复任务（覆盖比 isFuzzyDuplicateTitle 更广）
+  function isLikelyDuplicate(a, b) {
+    if (!a || !b) return false;
+    const normA = normalizeTitle(a);
+    const normB = normalizeTitle(b);
+    if (!normA || !normB) return false;
+    if (normA === normB) return true;
+    // 模糊包含（长度差 ≤ 8）
+    if (Math.abs(normA.length - normB.length) <= 8 && (normA.includes(normB) || normB.includes(normA))) return true;
+    // 前缀共享 ≥ 4 char + Jaccard ≥ 0.3：覆盖词序调换 / 同义变体
+    if (sharedPrefixLen(normA, normB) >= 4 && jaccardSimilarity(a, b) >= 0.3) return true;
+    return false;
+  }
+
   // 提取中文 bigrams（2字窗口）+ ASCII tokens，用于更稳的关键词重叠匹配
   function extractTokens(text) {
     const tokens = new Set();
@@ -313,8 +402,23 @@ export function createProjectRoutes({
     const nextStore = await updateStore((draft) => {
       let existing = draft.tasks || [];
       draft.deliverables = draft.deliverables || [];
+      // 找一个与 task 标题产品域一致的 deliverable（用于校验 LLM 给的 deliverableTitle）
+      function findConsistentDeliverableForTask(taskTitle) {
+        if (!taskTitle) return null;
+        return (draft.deliverables || []).find((d) => (
+          (!d.projectId || d.projectId === projectId)
+          && isTitleConsistent(taskTitle, d.title)
+          && extractDistinctiveTokens(taskTitle).some((t) => String(d.title).toLowerCase().includes(t))
+        )) || null;
+      }
+
       for (const task of importCandidates) {
         let deliverable = findDeliverableByTitle(draft.deliverables, task.deliverableTitle || task.title);
+        // 可信度校验：LLM 给的 deliverable 是否合理（ASCII 标识符 + phase productKeywords）
+        if (deliverable && !isBindingPlausible(task.title, deliverable, parsedPhasesResult)) {
+          const better = findConsistentDeliverableForTask(task.title);
+          deliverable = better; // 没找到就 null（任务暂留为孤儿，下次重绑）
+        }
         if (deliverable && !deliverable.phaseId) {
           // 已有 deliverable 但 phaseId 为空，尝试补填
           const resolvedPhaseId = findPhaseForDeliverable(deliverable.title, parsedPhasesResult);
@@ -344,13 +448,11 @@ export function createProjectRoutes({
           draft.deliverables.push(deliverable);
           createdDeliverables++;
         }
-        // 用 normalizeTitle + 模糊包含去重，防止空格/端/功能等变体产生重复任务
-        const normNew = normalizeTitle(task.title);
+        // 用 isLikelyDuplicate（精确 + 模糊包含 + Jaccard）去重，防止变体堆积
         const duplicate = existing.find(
           (item) => {
-            const normExist = normalizeTitle(item.title);
             const sameDoc = !item.sourceDoc || !task.sourceDoc || item.sourceDoc === task.sourceDoc;
-            return sameDoc && (normExist === normNew || isFuzzyDuplicateTitle(normExist, normNew));
+            return sameDoc && isLikelyDuplicate(item.title, task.title);
           }
         );
         if (!duplicate) {
@@ -374,10 +476,12 @@ export function createProjectRoutes({
           }
           imported++;
         } else if (deliverable) {
-          // 无论原来有没有 deliverableId，都更新为当前匹配的 deliverable（修正历史错误绑定）
-          duplicate.deliverableId = deliverable.id;
-          if (!deliverable.taskIds?.includes(duplicate.id)) {
-            deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
+          // 可信度校验通过才更新 FK
+          if (isBindingPlausible(duplicate.title, deliverable, parsedPhasesResult)) {
+            duplicate.deliverableId = deliverable.id;
+            if (!deliverable.taskIds?.includes(duplicate.id)) {
+              deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
+            }
           }
         }
       }
@@ -397,19 +501,17 @@ export function createProjectRoutes({
             deliverable.updatedAt = new Date().toISOString();
           }
         }
-        // 用 normTitle + 模糊包含找出所有现有匹配任务，统一绑定
-        const normParsed = normalizeTitle(parsed.title);
+        // 用 isLikelyDuplicate 找现有匹配任务，加上可信度校验后再统一绑定
         for (const task of existing) {
           if (task.projectId && task.projectId !== projectId) continue;
-          const normExist = normalizeTitle(task.title);
-          if (normExist === normParsed || isFuzzyDuplicateTitle(normExist, normParsed)) {
-            if (task.deliverableId !== deliverable.id) {
-              task.deliverableId = deliverable.id;
-              rebound++;
-            }
-            if (!deliverable.taskIds?.includes(task.id)) {
-              deliverable.taskIds = [...(deliverable.taskIds || []), task.id];
-            }
+          if (!isLikelyDuplicate(task.title, parsed.title)) continue;
+          if (!isBindingPlausible(task.title, deliverable, parsedPhasesResult)) continue;
+          if (task.deliverableId !== deliverable.id) {
+            task.deliverableId = deliverable.id;
+            rebound++;
+          }
+          if (!deliverable.taskIds?.includes(task.id)) {
+            deliverable.taskIds = [...(deliverable.taskIds || []), task.id];
           }
         }
       }

@@ -690,6 +690,132 @@ await test('cross-deliverable contamination guard: task with deliverableId point
   assert.equal(iphone.linkedTasks[0].id, 'task_iphone_sos');
 });
 
+await test('binding plausibility: blocks cross-domain mistakes via ASCII tokens + LLM phase keywords', () => {
+  // 完整复现 projectRoutes 的 isBindingPlausible 逻辑（两层防护）
+  const COMMON_ABBREVS = new Set(['api', 'sdk', 'sop', 'sos', 'mvp', 'sku', 'ci', 'cd', 'ui', 'ux']);
+  function distinctTokens(text) {
+    return (String(text || '').toLowerCase().match(/[a-z][a-z0-9]+/g) || [])
+      .filter((t) => t.length >= 4 && !COMMON_ABBREVS.has(t));
+  }
+  function isTitleConsistent(taskTitle, deliverableTitle) {
+    const a = distinctTokens(taskTitle);
+    const b = distinctTokens(deliverableTitle);
+    if (!a.length || !b.length) return true;
+    const al = String(taskTitle).toLowerCase();
+    const bl = String(deliverableTitle).toLowerCase();
+    if (a.some((t) => bl.includes(t))) return true;
+    if (b.some((t) => al.includes(t))) return true;
+    return false;
+  }
+  function extractTokens(text) {
+    const tokens = new Set();
+    (String(text || '').toLowerCase().match(/[a-z0-9]+/g) || []).forEach((t) => tokens.add(t));
+    const cjk = String(text || '').match(/[一-鿿]+/g) || [];
+    for (const run of cjk) {
+      for (let i = 0; i < run.length - 1; i++) tokens.add(run.slice(i, i + 2));
+      if (run.length === 1) tokens.add(run);
+    }
+    return tokens;
+  }
+  function scoreByKw(title, phase) {
+    if (!phase || !Array.isArray(phase.productKeywords)) return 0;
+    const tl = title.toLowerCase();
+    const tt = extractTokens(title);
+    let s = 0;
+    for (const k of phase.productKeywords) {
+      const kl = String(k || '').toLowerCase().trim();
+      if (!kl) continue;
+      if (tl.includes(kl)) { s += 2; continue; }
+      const kt = extractTokens(k);
+      for (const t of kt) if (tt.has(t)) { s += 1; break; }
+    }
+    return s;
+  }
+  function isBindingPlausible(taskTitle, deliverable, phases) {
+    if (!isTitleConsistent(taskTitle, deliverable.title)) return false;
+    if (!deliverable.phaseId || !phases?.length) return true;
+    let bestScore = 0, bestId = null;
+    for (const p of phases) {
+      const s = scoreByKw(taskTitle, p);
+      if (s > bestScore) { bestScore = s; bestId = p.id; }
+    }
+    if (!bestId || bestScore < 2) return true;
+    if (bestId === deliverable.phaseId) return true;
+    const dlvScore = scoreByKw(taskTitle, phases.find((p) => p.id === deliverable.phaseId));
+    return bestScore - dlvScore < 2;
+  }
+
+  const phases = [
+    { id: 'p_backend', title: '第一周后端骨架', productKeywords: ['后端', '服务', 'API', 'Session'] },
+    { id: 'p_client', title: '第一周客户端骨架', productKeywords: ['客户端', 'iPad', 'iPhone', 'iOS', '前端', 'App'] }
+  ];
+  const ipadDlv = { id: 'd_ipad', title: 'iPad 输入端 MVP', phaseId: 'p_client' };
+  const backendDlv = { id: 'd_backend', title: '第一周后端交付物', phaseId: 'p_backend' };
+
+  // 用户实测错误 1：ASCII 标识符冲突
+  assert.equal(isBindingPlausible('iPhone 端登录与课堂配对', ipadDlv, phases), false,
+    'iPhone 任务不该绑到 iPad deliverable（ASCII 冲突）');
+
+  // 用户实测错误 2：纯中文 deliverable 标题 + ASCII 标识符 task → 用 phase keywords 兜底
+  assert.equal(isBindingPlausible('iPhone SOS与summary页面', backendDlv, phases), false,
+    'iPhone 任务不该绑到纯中文后端 deliverable（phase keywords 兜底）');
+
+  // 同 phase 的 iPad 任务在 iPad deliverable 上正常通过
+  assert.equal(isBindingPlausible('iPad 课堂状态同步', ipadDlv, phases), true);
+  assert.equal(isBindingPlausible('iPad 教师登录与设备绑定', ipadDlv, phases), true);
+
+  // 后端任务在后端 deliverable 上正常通过（无 ASCII 标识符冲突，phase 也匹配）
+  assert.equal(isBindingPlausible('后端 SOP 模板读取', backendDlv, phases), true);
+
+  // 跨项目：Redis 任务 vs Kafka deliverable，ASCII 标识符冲突
+  const kafkaDlv = { id: 'd_kafka', title: 'Kafka 消息队列集成' };
+  assert.equal(isBindingPlausible('Redis 缓存配置', kafkaDlv, []), false);
+});
+
+await test('fuzzy task dedup catches reorder variants via Jaccard + shared prefix', () => {
+  function normalize(v) { return String(v || '').replace(/\s+/g, '').replace(/[【】()[\]（）]/g, '').toLowerCase(); }
+  function bigrams(text) {
+    const tokens = new Set();
+    (String(text || '').toLowerCase().match(/[a-z0-9]+/g) || []).forEach((t) => tokens.add(t));
+    const cjk = String(text || '').match(/[一-鿿]+/g) || [];
+    for (const run of cjk) {
+      for (let i = 0; i < run.length - 1; i++) tokens.add(run.slice(i, i + 2));
+      if (run.length === 1) tokens.add(run);
+    }
+    return tokens;
+  }
+  function jaccard(a, b) {
+    const ta = bigrams(a); const tb = bigrams(b);
+    if (!ta.size || !tb.size) return 0;
+    let inter = 0; for (const t of ta) if (tb.has(t)) inter++;
+    return inter / (ta.size + tb.size - inter || 1);
+  }
+  function sharedPrefix(a, b) {
+    const n = Math.min(a.length, b.length);
+    let i = 0; while (i < n && a[i] === b[i]) i++; return i;
+  }
+  function isLikelyDuplicate(a, b) {
+    if (!a || !b) return false;
+    const na = normalize(a); const nb = normalize(b);
+    if (na === nb) return true;
+    if (Math.abs(na.length - nb.length) <= 8 && (na.includes(nb) || nb.includes(na))) return true;
+    if (sharedPrefix(na, nb) >= 4 && jaccard(a, b) >= 0.3) return true;
+    return false;
+  }
+
+  // 用户实测看到的变体：以前漏过的，现在能识别
+  assert.equal(isLikelyDuplicate('iPad音频采集接入', 'iPad 音频输入采集'), true);
+  assert.equal(isLikelyDuplicate('iPad 音频输入采集', 'iPad 端音频输入采集'), true);
+  assert.equal(isLikelyDuplicate('iPad 课堂状态同步', 'iPad 端课堂状态同步'), true);
+  assert.equal(isLikelyDuplicate('iPad 教师登录与设备绑定', 'iPad登录与设备绑定功能'), true);
+  // 正常去重也保留
+  assert.equal(isLikelyDuplicate('iPad 开始/结束课堂', 'iPad 开始/结束课堂控制'), true);
+  // 不同任务不能误判
+  assert.equal(isLikelyDuplicate('iPad 音频输入采集', 'iPad 课堂状态同步'), false);
+  assert.equal(isLikelyDuplicate('iPhone 登录与课堂配对', 'iPad 开始/结束课堂'), false);
+  assert.equal(isLikelyDuplicate('后端 SOP 模板读取', '后端 SOS 请求处理'), false);
+});
+
 await test('phase matching is project-agnostic: uses LLM-provided productKeywords, no hardcoded project terms', () => {
   // 复现 projectRoutes.js 中的 findPhaseByLLMKeywords 逻辑（项目无关）
   function extractTokens(text) {
