@@ -250,13 +250,26 @@ export function createPlanningRoutes({
           ...d,
           taskIds: (d.taskIds || []).filter((tid) => survivingFkPairs.has(`${d.id}|${tid}`))
         }));
-        draft._cleanupLog = { removed, fixedOwners, survivors: survivors.length, fuzzyRemoved, unboundCrossDomain, at: new Date().toISOString() };
+        // 重置"未被认领"任务的 owner 为 待认领（LLM 建议的预填 owner 移到 suggestedOwner）
+        // 判定：task.id 在 assignments 表里没出现过，且未完成
+        const claimedTaskIds = new Set(
+          (draft.assignments || []).filter((a) => a.taskId).map((a) => a.taskId)
+        );
+        let resetOwners = 0;
+        draft.tasks = draft.tasks.map((task) => {
+          if (task.status === '已完成' || task.status === 'completed') return task;
+          if (claimedTaskIds.has(task.id)) return task; // 已被认领，owner 保持不变
+          if (task.owner === '待认领' || !task.owner) return task; // 已经是待认领或空
+          resetOwners++;
+          return { ...task, owner: '待认领', suggestedOwner: task.suggestedOwner || task.owner };
+        });
+        draft._cleanupLog = { removed, fixedOwners, survivors: survivors.length, fuzzyRemoved, unboundCrossDomain, resetOwners, at: new Date().toISOString() };
         return draft;
       });
       sendJson(res, 200, {
         ok: true,
         ...(next._cleanupLog || {}),
-        message: `去重完成：保留 ${next._cleanupLog?.survivors} 个任务，清除 ${next._cleanupLog?.removed} 个重复（其中模糊 ${next._cleanupLog?.fuzzyRemoved} 个），修正 ${next._cleanupLog?.fixedOwners} 个占位符 owner，剥离 ${next._cleanupLog?.unboundCrossDomain || 0} 个跨产品域错误绑定`
+        message: `去重完成：保留 ${next._cleanupLog?.survivors} 个任务，清除 ${next._cleanupLog?.removed} 个重复（其中模糊 ${next._cleanupLog?.fuzzyRemoved} 个），修正 ${next._cleanupLog?.fixedOwners} 个占位符 owner，剥离 ${next._cleanupLog?.unboundCrossDomain || 0} 个跨产品域错误绑定，重置 ${next._cleanupLog?.resetOwners || 0} 个未认领任务 owner 为 待认领`
       });
       return true;
     }

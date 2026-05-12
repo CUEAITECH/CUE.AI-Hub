@@ -6,6 +6,10 @@ function getProjectRepo(project) {
   return { owner: project.githubOwner || '', repo: project.repository || '' };
 }
 
+function isPlaceholderAcceptance(value) {
+  return !String(value || '').trim() || /待补充|未定|todo/i.test(String(value || ''));
+}
+
 function mergeStageChecklist(draft, parsedPhasesResult, defaultStageChecklist, reassignChecklistPhaseIds) {
   if (!parsedPhasesResult?.phases?.length) return;
 
@@ -460,7 +464,10 @@ export function createProjectRoutes({
           existing.unshift({
             id: taskId,
             title: task.title,
-            owner: task.owner || '',
+            // task.owner 永远是 '待认领'：LLM 建议的负责人只是建议，
+            // task.owner 应该只反映"实际领取"状态。LLM 的建议保留在 suggestedOwner，前端可选展示
+            owner: '待认领',
+            suggestedOwner: task.owner || '',
             priority: task.priority || 'P1',
             status: task.status || 'pending',
             description: task.description || '',
@@ -468,7 +475,7 @@ export function createProjectRoutes({
             sourceDoc: task.sourceDoc || '',
             projectId,
             deliverableId: deliverable?.id || null,
-            acceptance: '',
+            acceptance: task.acceptance || deliverable?.acceptance || task.description || '',
             createdAt: new Date().toISOString()
           });
           if (deliverable && !deliverable.taskIds?.includes(taskId)) {
@@ -479,6 +486,9 @@ export function createProjectRoutes({
           // 可信度校验通过才更新 FK
           if (isBindingPlausible(duplicate.title, deliverable, parsedPhasesResult)) {
             duplicate.deliverableId = deliverable.id;
+            if (isPlaceholderAcceptance(duplicate.acceptance)) {
+              duplicate.acceptance = task.acceptance || deliverable.acceptance || task.description || duplicate.acceptance || '';
+            }
             if (!deliverable.taskIds?.includes(duplicate.id)) {
               deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
             }
