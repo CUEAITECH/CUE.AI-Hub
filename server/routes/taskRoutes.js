@@ -38,9 +38,11 @@ export function createTaskRoutes({
           const task = draft.tasks.find((item) => item.id === result.taskId);
           if (!task) continue;
           const newProgress = Math.max(0, Math.min(100, Number(result.progress) || 0));
-          task.progress = Math.max(task.progress || 0, newProgress);
+          const appliedProgress = Math.max(task.progress || 0, newProgress);
+          task.progress = appliedProgress;
           task.aiProgressSuggestion = {
             progress: newProgress,
+            appliedProgress,
             reason: String(result.reason || '').slice(0, 80),
             hint: String(result.hint || '').slice(0, 100),
             suggestComplete: !!result.suggestComplete,

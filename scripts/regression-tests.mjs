@@ -6,6 +6,7 @@ import { createAssignmentRoutes } from '../server/routes/assignmentRoutes.js';
 import { createSystemRoutes } from '../server/routes/systemRoutes.js';
 import { createProjectRoutes } from '../server/routes/projectRoutes.js';
 import { createWeComRoutes } from '../server/routes/wecomRoutes.js';
+import { createTaskRoutes } from '../server/routes/taskRoutes.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
 import { normalizeAssignment, normalizeStandup } from '../server/services/dailyBrief.js';
 import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc, extractJsonArray, repairLLMJson } from '../server/services/docsManager.js';
@@ -374,6 +375,37 @@ await test('phase3.2 assignment completion confirms linked task completion', asy
   assert.equal(responsePayload.task.status, '已完成');
   assert.equal(responsePayload.task.progress, 100);
   assert.equal(store.tasks[0].completionSource, 'assignment');
+});
+
+await test('task AI progress keeps confirmed progress while preserving AI estimate', async () => {
+  let store = migrateStore({
+    currentStage: legacyStage,
+    tasks: [
+      { id: 'task_progress', title: '进度测试任务', owner: 'tester', progress: 70, status: '进行中' }
+    ]
+  });
+  let responsePayload = null;
+  const route = createTaskRoutes({
+    loadStore: async () => store,
+    updateStore: async (mutator) => {
+      store = await mutator(structuredClone(store));
+      return store;
+    },
+    readBody: async () => ({ json: {} }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    normalizeTask: (task) => task,
+    estimateTasksProgress: async () => [
+      { taskId: 'task_progress', progress: 40, reason: '证据不足', hint: '补充验收截图', suggestComplete: false }
+    ],
+    generatePlan: async () => []
+  });
+
+  const handled = await route({ method: 'POST' }, {}, new URL('http://localhost/api/tasks/ai-progress'));
+  assert.equal(handled, true);
+  assert.equal(responsePayload.tasks[0].progress, 70);
+  assert.equal(responsePayload.tasks[0].aiProgressSuggestion.progress, 40);
+  assert.equal(responsePayload.tasks[0].aiProgressSuggestion.appliedProgress, 70);
 });
 
 await test('phase4 state route filters project scoped records while keeping project switch list', async () => {

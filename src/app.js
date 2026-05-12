@@ -1349,8 +1349,14 @@ function renderTaskDetail() {
       const sug = task.aiProgressSuggestion;
       if (!sug) return '';
       const updatedAt = sug.updatedAt ? new Date(sug.updatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+      const aiProgress = Math.max(0, Math.min(100, Number(sug.progress) || 0));
+      const confirmedProgress = Math.max(0, Math.min(100, Number(sug.appliedProgress ?? task.progress) || 0));
+      const progressLabel = aiProgress === confirmedProgress
+        ? `${confirmedProgress}%`
+        : `AI估算 ${aiProgress}% / 当前确认 ${confirmedProgress}%`;
       return `<article class="task-detail-card task-ai-progress-card">
-      <span>AI 进度判断 · ${sug.progress}% <small>${updatedAt}</small></span>
+      <span>AI 进度判断 · ${progressLabel} <small>${updatedAt}</small></span>
+      ${aiProgress !== confirmedProgress ? '<p class="ai-progress-note">当前确认进度不会被 AI 自动调低；AI 估算仅作为复核参考。</p>' : ''}
       ${sug.reason ? `<p class="ai-progress-reason"><strong>判断依据：</strong>${escapeHtml(sug.reason)}</p>` : ''}
       ${sug.hint ? `<p class="ai-progress-hint"><strong>提高进度需补充：</strong>${escapeHtml(sug.hint)}</p>` : ''}
       ${sug.suggestComplete ? '<p class="ai-progress-suggest">AI 建议标记为已完成，请在分工领取中确认。</p>' : ''}
