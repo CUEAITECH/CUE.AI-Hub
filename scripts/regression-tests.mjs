@@ -9,6 +9,7 @@ import { createWeComRoutes } from '../server/routes/wecomRoutes.js';
 import { createTaskRoutes } from '../server/routes/taskRoutes.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
 import { normalizeAssignment, normalizeStandup } from '../server/services/dailyBrief.js';
+import { generateAssignmentBrief } from '../server/services/assignmentBrief.js';
 import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc, extractJsonArray, repairLLMJson } from '../server/services/docsManager.js';
 
 async function test(name, fn) {
@@ -376,6 +377,42 @@ await test('phase3.2 assignment completion confirms linked task completion', asy
   assert.equal(responsePayload.task.progress, 100);
   assert.equal(store.tasks[0].completionSource, 'assignment');
   assert.equal(store.tasks[0].progressSource, 'manual');
+});
+
+await test('assignment brief falls back to deliverable acceptance when task acceptance is placeholder', async () => {
+  const originalKey = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  const store = migrateStore({
+    currentStage: legacyStage,
+    deliverables: [
+      {
+        id: 'deliverable_acceptance',
+        title: '验收交付项',
+        acceptance: '必须跑通端到端联调并提供截图。',
+        projectId: 'cue_ai_classroom'
+      }
+    ],
+    tasks: [
+      {
+        id: 'task_acceptance',
+        title: '验收任务',
+        acceptance: '待补充验收标准',
+        deliverableId: 'deliverable_acceptance',
+        projectId: 'cue_ai_classroom'
+      }
+    ]
+  });
+
+  const brief = await generateAssignmentBrief({
+    task: store.tasks[0],
+    owner: 'tester',
+    note: '',
+    store
+  });
+  assert.equal(brief.acceptanceCriteria.includes('必须跑通端到端联调并提供截图。'), true);
+
+  if (originalKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+  else process.env.ANTHROPIC_API_KEY = originalKey;
 });
 
 await test('task AI progress rewrites automatic progress to latest estimate', async () => {

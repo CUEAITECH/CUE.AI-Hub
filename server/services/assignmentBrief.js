@@ -22,12 +22,14 @@ function asArray(value, fallback = []) {
 
 function normalizeBrief(raw, fallback) {
   const source = raw?.taskBrief || raw || {};
+  const acceptanceCriteria = asArray(source.acceptanceCriteria, fallback.acceptanceCriteria)
+    .filter((item) => !isPlaceholderAcceptance(item));
   return {
     objective: String(source.objective || fallback.objective),
     context: String(source.context || fallback.context),
     scope: asArray(source.scope, fallback.scope),
     steps: asArray(source.steps, fallback.steps),
-    acceptanceCriteria: asArray(source.acceptanceCriteria, fallback.acceptanceCriteria),
+    acceptanceCriteria: acceptanceCriteria.length ? acceptanceCriteria : fallback.acceptanceCriteria,
     deliverables: asArray(source.deliverables, fallback.deliverables),
     gitEvidence: String(source.gitEvidence || fallback.gitEvidence),
     riskCheck: asArray(source.riskCheck, fallback.riskCheck),
@@ -38,9 +40,21 @@ function normalizeBrief(raw, fallback) {
   };
 }
 
-function buildFallbackBrief({ task, owner, note, stage, project }) {
+function isPlaceholderAcceptance(value) {
+  return !String(value || '').trim() || /待补充|未定|todo/i.test(String(value || ''));
+}
+
+function resolveTaskAcceptance(task, store) {
+  if (!isPlaceholderAcceptance(task?.acceptance)) return String(task.acceptance).trim();
+  const deliverable = (store?.deliverables || []).find((item) => item.id && item.id === task?.deliverableId);
+  if (!isPlaceholderAcceptance(deliverable?.acceptance)) return String(deliverable.acceptance).trim();
+  if (!isPlaceholderAcceptance(task?.description)) return String(task.description).trim();
+  return '完成后需要能被负责人验收。';
+}
+
+function buildFallbackBrief({ task, owner, note, stage, project, store }) {
   const title = task?.title || '未命名任务';
-  const acceptance = task?.acceptance || task?.description || '完成后需要能被负责人验收。';
+  const acceptance = resolveTaskAcceptance(task, store);
   const due = task?.due || task?.dueDate || '今日晚会前';
   const projectName = project?.name || project?.githubFullRepo || 'Cue.AI';
   const context = `${projectName} 当前阶段：${stage?.name || 'Cue.AI 双设备课堂 MVP / TRTC 联调阶段'}。${task?.sourceDoc ? `任务来自 ${task.sourceDoc}。` : ''}`;
@@ -78,7 +92,8 @@ export async function generateAssignmentBrief({ task, owner, note, store }) {
     || (store.projects || [])[0]
     || null;
   const stage = store.currentStage || {};
-  const fallback = buildFallbackBrief({ task, owner, note, stage, project });
+  const acceptance = resolveTaskAcceptance(task, store);
+  const fallback = buildFallbackBrief({ task, owner, note, stage, project, store });
 
   const systemPrompt = [
     '你是 CUE 项目中枢的 AI 项目经理。',
@@ -109,7 +124,7 @@ export async function generateAssignmentBrief({ task, owner, note, store }) {
       progress: task?.progress ?? 0,
       due: task?.due || task?.dueDate || '',
       description: task?.description || '',
-      acceptance: task?.acceptance || '',
+      acceptance,
       sourceDoc: task?.sourceDoc || '',
       linkedRefs: task?.linkedRefs || []
     }

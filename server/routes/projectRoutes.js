@@ -6,6 +6,10 @@ function getProjectRepo(project) {
   return { owner: project.githubOwner || '', repo: project.repository || '' };
 }
 
+function isPlaceholderAcceptance(value) {
+  return !String(value || '').trim() || /待补充|未定|todo/i.test(String(value || ''));
+}
+
 function mergeStageChecklist(draft, parsedPhasesResult, defaultStageChecklist, reassignChecklistPhaseIds) {
   if (!parsedPhasesResult?.phases?.length) return;
 
@@ -468,7 +472,7 @@ export function createProjectRoutes({
             sourceDoc: task.sourceDoc || '',
             projectId,
             deliverableId: deliverable?.id || null,
-            acceptance: '',
+            acceptance: task.acceptance || deliverable?.acceptance || task.description || '',
             createdAt: new Date().toISOString()
           });
           if (deliverable && !deliverable.taskIds?.includes(taskId)) {
@@ -479,6 +483,9 @@ export function createProjectRoutes({
           // 可信度校验通过才更新 FK
           if (isBindingPlausible(duplicate.title, deliverable, parsedPhasesResult)) {
             duplicate.deliverableId = deliverable.id;
+            if (isPlaceholderAcceptance(duplicate.acceptance)) {
+              duplicate.acceptance = task.acceptance || deliverable.acceptance || task.description || duplicate.acceptance || '';
+            }
             if (!deliverable.taskIds?.includes(duplicate.id)) {
               deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
             }

@@ -350,6 +350,18 @@ function getDeliverableForTask(task) {
     || null;
 }
 
+function isPlaceholderAcceptance(value) {
+  return !String(value || '').trim() || /待补充|未定|todo/i.test(String(value || ''));
+}
+
+function getTaskAcceptance(task) {
+  if (!isPlaceholderAcceptance(task?.acceptance)) return task.acceptance;
+  const deliverable = getDeliverableForTask(task);
+  if (!isPlaceholderAcceptance(deliverable?.acceptance)) return deliverable.acceptance;
+  if (!isPlaceholderAcceptance(task?.description)) return task.description;
+  return '待补充';
+}
+
 function getRoadmapDeliverables() {
   // 优先用聚合后的 deliverable 数据；空时也用 state.deliverables。
   // 不再回退到 stageChecklist.checklist（避免 reset 后空状态时显示默认 5 个幽灵节点）
@@ -1208,8 +1220,9 @@ function renderCompareReport() {
 
 function renderAssignmentBrief(brief) {
   if (!brief) return '';
+  const normalizedCriteria = (brief.acceptanceCriteria || []).filter((item) => !isPlaceholderAcceptance(item));
   const steps = (brief.steps || []).slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
-  const criteria = (brief.acceptanceCriteria || []).slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  const criteria = normalizedCriteria.slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const deliverables = (brief.deliverables || []).slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   return `
     <details class="assignment-brief">
@@ -1222,7 +1235,7 @@ function renderAssignmentBrief(brief) {
         </div>
         <div>
           <strong>验收标准</strong>
-          <ul>${criteria}</ul>
+          <ul>${criteria || '<li>进入任务详情查看所属交付项验收口径。</li>'}</ul>
         </div>
         <div>
           <strong>交付物</strong>
@@ -1232,6 +1245,20 @@ function renderAssignmentBrief(brief) {
       <small>${escapeHtml(brief.gitEvidence || '')}</small>
     </details>
   `;
+}
+
+function withTaskAcceptanceBrief(brief, task) {
+  if (!brief) return brief;
+  const criteria = (brief.acceptanceCriteria || []).filter((item) => !isPlaceholderAcceptance(item));
+  if (criteria.length) return brief;
+  return {
+    ...brief,
+    acceptanceCriteria: [
+      getTaskAcceptance(task),
+      '有 commit、PR、截图、接口返回或文档链接中的至少一种证据。',
+      '能说明已完成、未完成和阻塞项，便于晚会重新分配。'
+    ].filter((item) => !isPlaceholderAcceptance(item))
+  };
 }
 
 function renderBriefBlock(brief, hasAssignment, assignmentDone = false, assignmentId = null, briefAge = 0) {
@@ -1327,7 +1354,7 @@ function renderTaskDetail() {
         <div><dt>负责人</dt><dd>${escapeHtml(task.owner || '未指定')}</dd></div>
         <div><dt>所属交付项</dt><dd>${escapeHtml(deliverable?.title || task.deliverableId || '未绑定')}</dd></div>
         <div><dt>来源</dt><dd>${escapeHtml(task.sourceDoc || task.repo || '任务看板')}</dd></div>
-        <div><dt>验收</dt><dd>${escapeHtml(task.acceptance || '待补充')}</dd></div>
+        <div><dt>验收</dt><dd>${escapeHtml(getTaskAcceptance(task))}</dd></div>
       </dl>
       ${deliverable?.docSuggestComplete ? `<div class="task-doc-suggest">
         <strong>文档侧建议完成</strong>
@@ -1495,7 +1522,7 @@ function renderAssignments() {
             ${a.date !== today ? `<span class="assign-carryover-badge">续 ${a.date}</span>` : ''}
             ${a.note ? `<small class="assign-note">${escapeHtml(a.note)}</small>` : ''}
             ${showAiSuggest ? `<div class="assign-ai-hint">🤖 AI 判断完成度 ${aiSug.progress}%：${escapeHtml(aiSug.reason)}</div>` : ''}
-            ${renderAssignmentBrief(a.brief)}
+            ${renderAssignmentBrief(withTaskAcceptanceBrief(a.brief, linkedTask))}
             <div class="assign-actions">
               ${showDoneBtn && a.status !== '已完成' && !showAiSuggest ? `<button class="assign-done-btn" data-assign-id="${escapeHtml(a.id)}" title="标记完成">✓</button>` : ''}
               ${showAiSuggest ? `<button class="assign-ai-done-btn" data-assign-id="${escapeHtml(a.id)}" title="确认 AI 建议：标记完成">✓ 确认完成</button>` : ''}
