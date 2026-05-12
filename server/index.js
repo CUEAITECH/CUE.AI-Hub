@@ -850,9 +850,18 @@ async function serveStatic(res, pathname) {
 
   try {
     const data = await readFile(filePath);
-    res.writeHead(200, {
-      'content-type': contentTypes[extname(filePath)] || 'application/octet-stream'
-    });
+    const ext = extname(filePath);
+    // 防止浏览器/CDN 缓存住旧版前端文件：
+    // - HTML/JS/CSS 用 no-cache（允许缓存但每次必须向服务器校验，无 ETag 时强制重新拉）
+    // - 其他静态资源（图片/字体）保持默认（可长期缓存）
+    const noCacheExts = new Set(['.html', '.js', '.css', '.mjs']);
+    const headers = {
+      'content-type': contentTypes[ext] || 'application/octet-stream'
+    };
+    if (noCacheExts.has(ext)) {
+      headers['cache-control'] = 'no-cache, must-revalidate';
+    }
+    res.writeHead(200, headers);
     res.end(data);
   } catch {
     sendError(res, 404, 'not found');
