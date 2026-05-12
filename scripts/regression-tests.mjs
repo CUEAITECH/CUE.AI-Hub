@@ -882,6 +882,58 @@ await test('phase matching is project-agnostic: uses LLM-provided productKeyword
   assert.equal(findByKw('商城充值入口', gamePhases).phaseId, 'p_economy');
 });
 
+await test('reset-roadmap purges stale doc-imported tasks but preserves completed/evidenced/claimed/manual', async () => {
+  const { createPlanningRoutes } = await import('../server/routes/planningRoutes.js');
+  let store = migrateStore({
+    deliverables: [{ id: 'd1', projectId: 'cue_ai_classroom', title: 'D1', phaseId: null, taskIds: [] }],
+    phases: [{ id: 'ph1', projectId: 'cue_ai_classroom', title: 'P1' }],
+    currentStage: { id: 'stage', name: 'S', shortName: 'S', checklist: [], phases: [] },
+    tasks: [
+      // 应当删除：未完成、来自旧文档、无证据
+      { id: 't_stale', title: '旧文档任务', projectId: 'cue_ai_classroom', sourceDoc: 'docs/old.md', status: 'pending', deliverableId: 'd1' },
+      // 应当保留：已完成
+      { id: 't_done', title: '已完成任务', projectId: 'cue_ai_classroom', sourceDoc: 'docs/old.md', status: '已完成', deliverableId: 'd1' },
+      // 应当保留：有 commit 证据
+      { id: 't_evidenced', title: '有 commit 任务', projectId: 'cue_ai_classroom', sourceDoc: 'docs/old.md', status: 'pending', deliverableId: 'd1' },
+      // 应当保留：已被认领
+      { id: 't_claimed', title: '已认领任务', projectId: 'cue_ai_classroom', sourceDoc: 'docs/old.md', status: 'pending', deliverableId: 'd1' },
+      // 应当保留：人工创建（无 sourceDoc）
+      { id: 't_manual', title: '手工任务', projectId: 'cue_ai_classroom', sourceDoc: '', status: 'pending', deliverableId: 'd1' }
+    ],
+    activities: [
+      { id: 'a1', type: 'commit', projectId: 'cue_ai_classroom', taskId: 't_evidenced', deliverableId: 'd1' }
+    ],
+    assignments: [
+      { id: 'as1', projectId: 'cue_ai_classroom', taskId: 't_claimed', owner: 'tester' }
+    ]
+  });
+
+  let responsePayload = null;
+  const route = createPlanningRoutes({
+    loadStore: async () => store,
+    saveStore: async (next) => { store = next; return next; },
+    updateStore: async (mutator) => { store = await mutator(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom', purgeStaleTasks: true } }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    buildStageChecklist,
+    aggregateDeliverableProgress,
+    buildHybridAnalysis: async () => ({}),
+    scanRisks: () => [],
+    buildMetrics: () => ({}),
+    generatePlanAlternatives: async () => [],
+    normalizePlanStageUpdate: (u) => u,
+    applyPlanAdjustmentToStage: (d) => d
+  });
+
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/stage/reset-roadmap'));
+
+  assert.equal(responsePayload.ok, true);
+  assert.equal(responsePayload.purgedStaleTasks, 1, '应删除 1 个过时任务（t_stale）');
+  const remainingIds = store.tasks.map((t) => t.id).sort();
+  assert.deepEqual(remainingIds, ['t_claimed', 't_done', 't_evidenced', 't_manual'], '保留：已完成 / 有 commit / 已认领 / 手工');
+});
+
 await test('reset-roadmap route strips task/activity/assignment deliverableId for project', async () => {
   const { createPlanningRoutes } = await import('../server/routes/planningRoutes.js');
   let store = migrateStore({

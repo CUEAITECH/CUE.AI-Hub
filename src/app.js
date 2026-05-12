@@ -2787,7 +2787,13 @@ function bindEvents() {
 
   document.querySelectorAll('[data-action="reset-roadmap"]').forEach((button) => button.addEventListener('click', async () => {
     const confirmed = window.confirm(
-      '⚠️ 确认重置路径图？\n\n将清空所有交付项 / 阶段划分 / 路径图缓存，并剥离任务的旧绑定。\n已完成任务会完整保留。\n\n重置后会自动触发「同步文档」重新生成路径图。'
+      '⚠️ 按最新文档重建路径图？\n\n将执行以下操作（不可撤销）：\n'
+      + '• 清空所有交付项 / 阶段划分 / 路径图缓存\n'
+      + '• 剥离任务的旧 FK 绑定\n'
+      + '• 删除过时的文档任务（来自旧文档、未完成、无 commit/认领证据的任务）\n'
+      + '• 自动触发同步文档，按最新仓库文档重新生成\n\n'
+      + '保留：已完成任务 / 有 commit 证据的任务 / 已被认领的任务 / 人工创建的任务（无 sourceDoc）\n\n'
+      + '改了目标仓库文档后用这个按钮可以让 hub 完全反映最新规划。'
     );
     if (!confirmed) return;
     const projectId = getCurrentProjectId();
@@ -2796,9 +2802,9 @@ function bindEvents() {
     try {
       const result = await api('/api/stage/reset-roadmap', {
         method: 'POST',
-        body: JSON.stringify({ projectId })
+        body: JSON.stringify({ projectId, purgeStaleTasks: true })
       });
-      toast(`✅ ${result.message || '路径图已重置'}（剥离 ${result.strippedBindings ?? 0} 个旧绑定）`);
+      toast(`✅ ${result.message || '路径图已重置'}`);
       // 重置后立即触发 sync-docs（limit 拉到 20 一次性吃满），避免空路径图中间态
       button.textContent = '同步文档…';
       try {

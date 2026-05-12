@@ -261,10 +261,13 @@ export function createPlanningRoutes({
       return true;
     }
 
-    // 重置路径图：清空 deliverables/phases/checklist，保留 tasks（已完成的不丢）
+    // 重置路径图：清空 deliverables/phases/checklist + 可选清掉过时文档任务
+    // 默认 purgeStaleTasks=true：清除"文档导入、未完成、无 commit/认领证据"的旧任务
+    // 保留：已完成 / 有 commit 证据 / 已被认领 / 人工创建（无 sourceDoc）的任务
     if (req.method === 'POST' && url.pathname === '/api/stage/reset-roadmap') {
       const { json } = await readBody(req);
       const projectId = json?.projectId || '';
+      const purgeStaleTasks = json?.purgeStaleTasks !== false; // 默认 true
       const inProject = (item) => !projectId || !item?.projectId || item.projectId === projectId;
       const next = await updateStore((draft) => {
         // 清空交付项和阶段（按项目隔离，或全清）
@@ -310,15 +313,40 @@ export function createPlanningRoutes({
             ? { ...assignment, deliverableId: null }
             : assignment
         ));
-        draft._resetLog = { strippedTasks, at: new Date().toISOString() };
+        // 清理过时文档任务：用户改了目标仓库文档后，旧任务在 hub 累积，需要主动淘汰
+        // 保留规则：已完成 / 有 commit 证据 / 已被认领 / 人工创建（无 sourceDoc）→ 都不删
+        let purgedStale = 0;
+        if (purgeStaleTasks) {
+          const isCompleted = (t) => t.status === '已完成' || t.status === 'completed';
+          const taskIdsWithCommitEvidence = new Set(
+            (draft.activities || [])
+              .filter((a) => inProject(a) && a.type === 'commit' && a.taskId)
+              .map((a) => a.taskId)
+          );
+          const taskIdsWithAssignment = new Set(
+            (draft.assignments || []).filter((a) => inProject(a) && a.taskId).map((a) => a.taskId)
+          );
+          draft.tasks = (draft.tasks || []).filter((task) => {
+            if (!inProject(task)) return true;
+            if (isCompleted(task)) return true;
+            if (taskIdsWithCommitEvidence.has(task.id)) return true;
+            if (taskIdsWithAssignment.has(task.id)) return true;
+            if (!task.sourceDoc) return true; // 人工创建（不来自文档），保留
+            // 剩下的：未完成 + 无证据 + 无认领 + 文档导入 → 视为旧文档遗留，删除
+            purgedStale++;
+            return false;
+          });
+        }
+        draft._resetLog = { strippedTasks, purgedStale, at: new Date().toISOString() };
         return draft;
       });
       sendJson(res, 200, {
         ok: true,
-        message: `路径图已重置。已剥离 ${next._resetLog?.strippedTasks || 0} 个任务的旧绑定。请触发 sync-docs 重新生成路径图。`,
+        message: `路径图已重置。剥离 ${next._resetLog?.strippedTasks || 0} 个旧绑定，清理 ${next._resetLog?.purgedStale || 0} 个过时文档任务（已完成/有证据/已认领的全部保留）。`,
         remainingTasks: (next.tasks || []).length,
         completedTasks: (next.tasks || []).filter((t) => t.status === '已完成' || t.status === 'completed').length,
-        strippedBindings: next._resetLog?.strippedTasks || 0
+        strippedBindings: next._resetLog?.strippedTasks || 0,
+        purgedStaleTasks: next._resetLog?.purgedStale || 0
       });
       return true;
     }
