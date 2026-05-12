@@ -443,7 +443,7 @@ await test('phase4 auth route validates hub login credentials', async () => {
   const originalPassword = process.env.HUB_LOGIN_PASSWORD;
   process.env.HUB_LOGIN_USER = 'tester';
   process.env.HUB_LOGIN_PASSWORD = 'secret';
-  let requestJson = { username: 'tester', password: 'secret' };
+  let requestJson = { username: 'tester', password: 'secret', projectId: 'cue_ai_classroom' };
   let responsePayload = null;
   let responseStatus = null;
   const route = createSystemRoutes({
@@ -466,8 +466,11 @@ await test('phase4 auth route validates hub login credentials', async () => {
   await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
   assert.equal(responseStatus, 200);
   assert.equal(responsePayload.ok, true);
+  assert.equal(responsePayload.user.username, 'tester');
+  assert.equal(responsePayload.user.role, 'project_admin');
+  assert.equal(typeof responsePayload.token, 'string');
 
-  requestJson = { username: 'tester', password: 'wrong' };
+  requestJson = { username: 'tester', password: 'wrong', projectId: 'cue_ai_classroom' };
   await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
   assert.equal(responseStatus, 401);
   assert.equal(responsePayload.ok, false);
@@ -476,6 +479,61 @@ await test('phase4 auth route validates hub login credentials', async () => {
   else process.env.HUB_LOGIN_USER = originalUser;
   if (originalPassword === undefined) delete process.env.HUB_LOGIN_PASSWORD;
   else process.env.HUB_LOGIN_PASSWORD = originalPassword;
+});
+
+await test('phase4 auth route lets project admin register project developer accounts', async () => {
+  const originalUser = process.env.HUB_ADMIN_USER;
+  const originalPassword = process.env.HUB_ADMIN_PASSWORD;
+  process.env.HUB_ADMIN_USER = 'admin_test';
+  process.env.HUB_ADMIN_PASSWORD = 'admin_secret';
+  let store = migrateStore({});
+  let requestJson = {
+    projectId: 'cue_ai_classroom',
+    adminUsername: 'admin_test',
+    adminPassword: 'admin_secret',
+    username: 'dev_one',
+    password: 'dev_secret',
+    name: '开发一号',
+    role: 'developer'
+  };
+  let responsePayload = null;
+  let responseStatus = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (mutator) => {
+      store = await mutator(structuredClone(store));
+      return store;
+    },
+    readBody: async () => ({ json: requestJson }),
+    scanRisks: () => [],
+    normalizeStageName: (stage) => stage,
+    buildMetrics: () => ({}),
+    buildStageChecklist,
+    aggregateDeliverableProgress,
+    buildOpenApiSpec: () => ({}),
+    sendJson: (_res, status, payload) => { responseStatus = status; responsePayload = payload; },
+    port: 0,
+    cueApiKey: '',
+    isWeComAvailable: () => false,
+    meetingHour: 18,
+    hubUrl: ''
+  });
+
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/users'));
+  assert.equal(responseStatus, 201);
+  assert.equal(responsePayload.user.username, 'dev_one');
+  assert.equal(responsePayload.user.role, 'developer');
+  assert.equal(responsePayload.user.passwordHash, undefined);
+
+  requestJson = { username: 'dev_one', password: 'dev_secret', projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
+  assert.equal(responseStatus, 200);
+  assert.equal(responsePayload.user.name, '开发一号');
+
+  if (originalUser === undefined) delete process.env.HUB_ADMIN_USER;
+  else process.env.HUB_ADMIN_USER = originalUser;
+  if (originalPassword === undefined) delete process.env.HUB_ADMIN_PASSWORD;
+  else process.env.HUB_ADMIN_PASSWORD = originalPassword;
 });
 
 await test('phase4 project routes create, update, and guard deletion of linked projects', async () => {

@@ -1,0 +1,110 @@
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+
+const DEFAULT_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+function sessionSecret() {
+  return process.env.CUE_SESSION_SECRET
+    || process.env.CUE_API_KEY
+    || process.env.HUB_ADMIN_PASSWORD
+    || process.env.HUB_LOGIN_PASSWORD
+    || 'cue-project-hub-dev-session';
+}
+
+function base64UrlEncode(value) {
+  return Buffer.from(value).toString('base64url');
+}
+
+function base64UrlDecode(value) {
+  return Buffer.from(value, 'base64url').toString('utf8');
+}
+
+export function hashPassword(password) {
+  const salt = randomBytes(16).toString('hex');
+  const key = scryptSync(String(password || ''), salt, 32).toString('hex');
+  return `scrypt:${salt}:${key}`;
+}
+
+export function verifyPassword(password, stored) {
+  const value = String(stored || '');
+  if (!value) return false;
+  if (!value.startsWith('scrypt:')) {
+    return timingSafeTextEqual(String(password || ''), value);
+  }
+  const [, salt, expectedHex] = value.split(':');
+  if (!salt || !expectedHex) return false;
+  const expected = Buffer.from(expectedHex, 'hex');
+  const actual = scryptSync(String(password || ''), salt, expected.length);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function timingSafeTextEqual(a, b) {
+  const left = Buffer.from(String(a));
+  const right = Buffer.from(String(b));
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
+
+export function sanitizeUser(user = {}) {
+  const { passwordHash, ...safeUser } = user;
+  return safeUser;
+}
+
+export function userCanAccessProject(user = {}, projectId = '') {
+  const projectIds = Array.isArray(user.projectIds) ? user.projectIds : [];
+  return projectIds.includes('*') || projectIds.includes(projectId);
+}
+
+export function userCanManageProject(user = {}, projectId = '') {
+  if (!['admin', 'project_admin'].includes(user.role)) return false;
+  return userCanAccessProject(user, projectId);
+}
+
+export function findUserForProject(users = [], username = '', projectId = '') {
+  const normalized = String(username || '').trim();
+  return users.find((user) => (
+    user.active !== false
+    && user.username === normalized
+    && userCanAccessProject(user, projectId)
+  )) || null;
+}
+
+export function createSessionToken(user, projectId, now = Date.now()) {
+  const payload = {
+    sub: user.id,
+    username: user.username,
+    role: user.role,
+    projectId,
+    exp: now + DEFAULT_SESSION_TTL_MS
+  };
+  const encoded = base64UrlEncode(JSON.stringify(payload));
+  const signature = createHmac('sha256', sessionSecret()).update(encoded).digest('base64url');
+  return `${encoded}.${signature}`;
+}
+
+export function verifySessionToken(token) {
+  const [encoded, signature] = String(token || '').split('.');
+  if (!encoded || !signature) return null;
+  const expected = createHmac('sha256', sessionSecret()).update(encoded).digest('base64url');
+  if (!timingSafeTextEqual(signature, expected)) return null;
+  try {
+    const payload = JSON.parse(base64UrlDecode(encoded));
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeUserRecord(user, now = new Date().toISOString()) {
+  return {
+    id: user.id || `user_${String(user.username || 'unknown').replace(/[^a-z0-9_-]/gi, '_')}`,
+    username: String(user.username || '').trim(),
+    name: String(user.name || user.username || '').trim(),
+    role: user.role || 'developer',
+    projectIds: Array.isArray(user.projectIds) && user.projectIds.length ? user.projectIds : ['cue_ai_classroom'],
+    active: user.active !== false,
+    passwordHash: user.passwordHash || hashPassword(user.password || ''),
+    createdAt: user.createdAt || now,
+    updatedAt: user.updatedAt || now
+  };
+}

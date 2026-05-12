@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultCurrentStage, defaultPhases, defaultStageChecklist, normalizeStageName, reassignChecklistPhaseIds } from './services/stageChecklist.js';
 import { rebindStoreExplicitRefs } from './services/bindingEngine.js';
+import { normalizeUserRecord, verifyPassword } from './services/auth.js';
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
@@ -85,6 +86,52 @@ function normalizeDeliverableRecord(deliverable, overrides, now) {
   };
 }
 
+function defaultAdminCredentials() {
+  const username = process.env.HUB_ADMIN_USER || process.env.HUB_LOGIN_USER || 'admin';
+  const password = process.env.HUB_ADMIN_PASSWORD || process.env.HUB_LOGIN_PASSWORD || 'cueai';
+  return { username, password };
+}
+
+function defaultAdminUser(now) {
+  const { username, password } = defaultAdminCredentials();
+  return normalizeUserRecord({
+    id: 'user_project_admin',
+    username,
+    name: '项目管理员',
+    role: 'project_admin',
+    projectIds: ['*'],
+    password
+  }, now);
+}
+
+function syncBootstrapAdmin(users, now) {
+  const admin = defaultAdminUser(now);
+  const hasExplicitAdminConfig = Boolean(
+    process.env.HUB_ADMIN_USER
+    || process.env.HUB_ADMIN_PASSWORD
+    || process.env.HUB_LOGIN_USER
+    || process.env.HUB_LOGIN_PASSWORD
+  );
+  const byIdIndex = users.findIndex((user) => user.id === admin.id);
+  if (byIdIndex === -1) {
+    return users.some((user) => user.username === admin.username) ? users : [admin, ...users];
+  }
+  if (!hasExplicitAdminConfig) return users;
+
+  const current = users[byIdIndex];
+  const { password } = defaultAdminCredentials();
+  users[byIdIndex] = {
+    ...current,
+    username: admin.username,
+    role: 'project_admin',
+    projectIds: ['*'],
+    active: true,
+    passwordHash: verifyPassword(password, current.passwordHash) ? current.passwordHash : admin.passwordHash,
+    updatedAt: now
+  };
+  return users;
+}
+
 export function migrateStore(store) {
   const now = new Date().toISOString();
   // 关键：判断输入 store 中是否原本就有 deliverables/phases 字段
@@ -111,6 +158,7 @@ export function migrateStore(store) {
     semanticLinks: {},
     riskAnalyses: [],
     healthAnalysis: null,
+    users: [],
     currentStage: defaultCurrentStage,
     ...store
   };
@@ -195,6 +243,11 @@ export function migrateStore(store) {
   next.semanticLinks = next.semanticLinks || {};
   next.riskAnalyses = next.riskAnalyses || [];
   next.healthAnalysis = next.healthAnalysis || null;
+  if (!Array.isArray(next.users) || !next.users.length) {
+    next.users = [defaultAdminUser(now)];
+  } else {
+    next.users = syncBootstrapAdmin(next.users.map((user) => normalizeUserRecord(user, now)), now);
+  }
   const currentStage = next.currentStage || {};
   const isLegacyHubStage = currentStage.id === 'stage_mvp'
     || currentStage.name === 'CUE 项目中枢 MVP'

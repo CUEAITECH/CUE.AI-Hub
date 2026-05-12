@@ -14,8 +14,12 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。�
 - 访问 Hub 时先进入独立登录页，选择要管理的项目，再输入内部账号密码
 - 登录成功后进入单一项目上下文，页面内不再显示仓库切换、仓库新增或仓库删除入口
 - 当前项目 ID 会保存在浏览器本地，下次进入时默认使用上一次选择的项目
+- 默认只初始化一个项目管理员账号；项目管理员可以在登录页为当前项目注册开发账号
+- 开发账号绑定具体项目，后续任务认领、站会、审阅确认可以继续接入成员身份审计
 - 登录接口：`POST /api/auth/login`
-- 默认开发账号：`admin / cueai`，生产环境必须通过 `HUB_LOGIN_USER`、`HUB_LOGIN_PASSWORD` 覆盖
+- 注册账号接口：`POST /api/auth/users`，需要项目管理员凭据或管理员会话
+- 默认项目管理员：`admin / cueai`，生产环境必须通过 `HUB_ADMIN_USER`、`HUB_ADMIN_PASSWORD` 覆盖
+- 页面右上角连接状态按访问来源展示：`localhost/127.0.0.1` 显示本地 API，`hub.cueai.top` 等公网域名显示远端 API
 
 ### 任务看板
 - 创建、编辑、删除任务，追踪进度、负责人、风险等级和截止日期
@@ -85,8 +89,9 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。�
 | `GITHUB_TOKEN` | GitHub PAT，缺失时匿名限速 60次/小时 |
 | `WECOM_WEBHOOK_URL` | 企业微信群机器人 Webhook |
 | `CUE_API_KEY` | 写接口鉴权（可选，不配置则写接口开放） |
-| `HUB_LOGIN_USER` | Hub 外层登录账号（默认 `admin`，生产必须覆盖） |
-| `HUB_LOGIN_PASSWORD` | Hub 外层登录密码（默认 `cueai`，生产必须覆盖） |
+| `HUB_ADMIN_USER` | 初始项目管理员账号（默认 `admin`，兼容旧变量 `HUB_LOGIN_USER`） |
+| `HUB_ADMIN_PASSWORD` | 初始项目管理员密码（默认 `cueai`，兼容旧变量 `HUB_LOGIN_PASSWORD`） |
+| `CUE_SESSION_SECRET` | Hub 登录会话签名密钥（可选，默认复用 `CUE_API_KEY` / 管理员密码） |
 | `MEETING_HOUR` | 晚会时间（默认 18），作战包在 `MEETING_HOUR-1:45` 推送 |
 | `PORT` | 服务端口（默认 4317） |
 | `HUB_URL` | 对外访问地址，用于企微消息链接 |

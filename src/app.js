@@ -29,7 +29,7 @@ const state = {
   reviewQueue: [],
   currentProjectId: localStorage.getItem('cue_currentProjectId') || '',
   currentProject: null,
-  isAuthenticated: sessionStorage.getItem('cueHubAuthenticated') === 'true',
+  isAuthenticated: Boolean(sessionStorage.getItem('cueHubSessionToken')),
   config: { githubEnabled: false, apiKeyRequiredForWrites: false, wecomEnabled: false, llmEnabled: false }
 };
 
@@ -119,6 +119,10 @@ async function api(path, options = {}) {
   const needsApiKey = state.config?.apiKeyRequiredForWrites
     && ['POST', 'PATCH', 'DELETE'].includes(method);
   const headers = { 'content-type': 'application/json', ...(options.headers || {}) };
+  const sessionToken = sessionStorage.getItem('cueHubSessionToken') || '';
+  if (sessionToken && !headers.Authorization && !headers['X-CUE-Session-Token']) {
+    headers['X-CUE-Session-Token'] = sessionToken;
+  }
 
   if (needsApiKey && !headers['X-CUE-API-Key']) {
     const storedKey = localStorage.getItem('cueApiKey') || '';
@@ -239,6 +243,12 @@ function renderProjectSwitcher() {
   select.value = getCurrentProjectId();
 }
 
+function getApiScopeLabel() {
+  const host = window.location.hostname;
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '::1') return '本地 API';
+  return '远端 API';
+}
+
 function setAuthVisible(isAuthenticated) {
   state.isAuthenticated = Boolean(isAuthenticated);
   document.body.classList.toggle('authenticated', state.isAuthenticated);
@@ -261,11 +271,31 @@ async function login(event) {
     method: 'POST',
     body: JSON.stringify({ username, password, projectId })
   });
+  sessionStorage.setItem('cueHubSessionToken', payload.token || '');
   sessionStorage.setItem('cueHubAuthenticated', 'true');
-  sessionStorage.setItem('cueHubUser', payload.user || username);
+  sessionStorage.setItem('cueHubUser', payload.user?.name || payload.user?.username || username);
+  sessionStorage.setItem('cueHubUserRole', payload.user?.role || 'developer');
   syncCurrentProject(projectId);
   setAuthVisible(true);
   await loadState();
+}
+
+async function registerProjectUser(event) {
+  event.preventDefault();
+  const projectId = document.querySelector('#loginProjectSelect')?.value || '';
+  const adminUsername = document.querySelector('#registerAdminUsername')?.value.trim() || '';
+  const adminPassword = document.querySelector('#registerAdminPassword')?.value || '';
+  const name = document.querySelector('#registerName')?.value.trim() || '';
+  const username = document.querySelector('#registerUsername')?.value.trim() || '';
+  const password = document.querySelector('#registerPassword')?.value || '';
+  const role = document.querySelector('#registerRole')?.value || 'developer';
+  if (!projectId) { toast('请选择项目'); return; }
+  const payload = await api('/api/auth/users', {
+    method: 'POST',
+    body: JSON.stringify({ projectId, adminUsername, adminPassword, name, username, password, role })
+  });
+  setText('#registerHint', `已创建 ${payload.user?.name || username}，可直接登录当前项目。`);
+  document.querySelector('#registerUserForm')?.reset();
 }
 
 function getTodayAssignments() {
@@ -1920,7 +1950,7 @@ async function loadState() {
   state.stageChecklist = payload.stageChecklist || null;
   state.deliverableProgress = payload.deliverableProgress || null;
   renderProjectSwitcher();
-  setText('#syncStatus', '本地 API 已连接');
+  setText('#syncStatus', `${getApiScopeLabel()} 已连接`);
 
   // 并行加载站会、配置、计划调整建议（assignments 已在 /api/state 全量返回，不重复拉）
   const projectQuery = getCurrentProjectId() ? `?projectId=${encodeURIComponent(getCurrentProjectId())}` : '';
@@ -2559,6 +2589,12 @@ function bindEvents() {
       toast(error.message);
     });
   });
+  document.querySelector('#registerUserForm')?.addEventListener('submit', (event) => {
+    registerProjectUser(event).catch((error) => {
+      setText('#registerHint', error.message === 'project admin credentials required' ? '管理员账号或密码不正确。' : error.message);
+      toast(error.message);
+    });
+  });
 
   document.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => setRoute(button.dataset.route));
@@ -2848,7 +2884,7 @@ async function initApp() {
 initApp().catch((error) => {
   setAuthVisible(false);
   setText('#loginHint', `无法连接服务器：${error.message}`);
-  setText('#syncStatus', '本地 API 未启动');
+  setText('#syncStatus', `${getApiScopeLabel()} 未连接`);
   renderRisks();
   renderMeeting();
   toast(`请先运行 npm run dev：${error.message}`);

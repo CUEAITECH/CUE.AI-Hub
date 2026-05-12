@@ -21,7 +21,7 @@
           </label>
           <label>
             <span>账号</span>
-            <input id="loginUsername" type="text" autocomplete="username" placeholder="admin" required />
+            <input id="loginUsername" type="text" autocomplete="username" placeholder="项目管理员或开发账号" required />
           </label>
           <label>
             <span>密码</span>
@@ -30,6 +30,40 @@
           <button type="submit">进入 Hub</button>
           <small id="loginHint">项目列表会从服务器自动读取。</small>
         </form>
+        <details class="auth-admin-tools">
+          <summary>项目管理员注册开发账号</summary>
+          <form class="auth-form auth-register-form" id="registerUserForm">
+            <label>
+              <span>管理员账号</span>
+              <input id="registerAdminUsername" type="text" autocomplete="username" placeholder="admin" required />
+            </label>
+            <label>
+              <span>管理员密码</span>
+              <input id="registerAdminPassword" type="password" autocomplete="current-password" required />
+            </label>
+            <label>
+              <span>开发者姓名</span>
+              <input id="registerName" type="text" placeholder="例如：胡佳涛" required />
+            </label>
+            <label>
+              <span>开发者账号</span>
+              <input id="registerUsername" type="text" autocomplete="username" placeholder="例如：hujt" required />
+            </label>
+            <label>
+              <span>初始密码</span>
+              <input id="registerPassword" type="password" autocomplete="new-password" required />
+            </label>
+            <label>
+              <span>角色</span>
+              <select id="registerRole">
+                <option value="developer">项目开发者</option>
+                <option value="project_admin">项目管理员</option>
+              </select>
+            </label>
+            <button type="submit">创建开发账号</button>
+            <small id="registerHint">账号会绑定到当前选择的项目。</small>
+          </form>
+        </details>
       </div>
     </section>
     <div class="app-shell">
@@ -68,7 +102,7 @@
             </div>
           </nav>
           <div class="topbar-actions">
-            <span class="status-pill" id="syncStatus">本地 API 未连接</span>
+            <span class="status-pill" id="syncStatus">API 未连接</span>
             <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
             <button class="primary-action" type="button" data-action="sync">同步信号</button>
           </div>

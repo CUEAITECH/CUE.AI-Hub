@@ -66,6 +66,11 @@ body.authenticated .auth-shell {
   align-items: center;
 }
 
+.auth-panel > form,
+.auth-panel > details {
+  grid-column: 2;
+}
+
 .auth-panel h1 {
   margin: 14px 0 16px;
   font-size: clamp(46px, 8vw, 88px);
@@ -121,6 +126,26 @@ body.authenticated .auth-shell {
 .auth-form small {
   color: var(--muted);
   line-height: 1.5;
+}
+
+.auth-admin-tools {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.62);
+  padding: 14px;
+}
+
+.auth-admin-tools summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.auth-register-form {
+  margin-top: 14px;
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .topbar {

@@ -1,5 +1,29 @@
+import {
+  createSessionToken,
+  findUserForProject,
+  hashPassword,
+  sanitizeUser,
+  userCanManageProject,
+  verifyPassword,
+  verifySessionToken
+} from '../services/auth.js';
+
+function getBearerToken(req) {
+  const header = req.headers.authorization || '';
+  if (header.startsWith('Bearer ')) return header.slice(7).trim();
+  return req.headers['x-cue-session-token'] || '';
+}
+
+function getSessionUser(req, users, projectId) {
+  const session = verifySessionToken(getBearerToken(req));
+  if (!session || session.projectId !== projectId) return null;
+  const user = users.find((item) => item.id === session.sub && item.active !== false) || null;
+  return user && userCanManageProject(user, projectId) ? user : null;
+}
+
 export function createSystemRoutes({
   loadStore,
+  updateStore,
   readBody = async () => ({ json: {} }),
   scanRisks,
   normalizeStageName,
@@ -24,17 +48,95 @@ export function createSystemRoutes({
       const { json } = await readBody(req);
       const username = String(json?.username || '').trim();
       const password = String(json?.password || '');
-      const expectedUser = process.env.HUB_LOGIN_USER || 'admin';
-      const expectedPassword = process.env.HUB_LOGIN_PASSWORD || 'cueai';
-      if (username !== expectedUser || password !== expectedPassword) {
+      const projectId = String(json?.projectId || '').trim();
+      const store = await loadStore();
+      const fallbackProjectId = (store.projects || [])[0]?.id || 'cue_ai_classroom';
+      const targetProjectId = projectId || fallbackProjectId;
+      const user = findUserForProject(store.users || [], username, targetProjectId);
+      if (!user || !verifyPassword(password, user.passwordHash)) {
         sendJson(res, 401, { ok: false, error: 'invalid credentials' });
         return true;
       }
       sendJson(res, 200, {
         ok: true,
-        user: username,
-        token: Buffer.from(`${username}:${Date.now()}`).toString('base64')
+        user: sanitizeUser(user),
+        projectId: targetProjectId,
+        token: createSessionToken(user, targetProjectId)
       });
+      return true;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/auth/users') {
+      const projectId = url.searchParams.get('projectId') || '';
+      const store = await loadStore();
+      const targetProjectId = projectId || (store.projects || [])[0]?.id || 'cue_ai_classroom';
+      const adminUser = getSessionUser(req, store.users || [], targetProjectId);
+      if (!adminUser) {
+        sendJson(res, 403, { ok: false, error: 'forbidden' });
+        return true;
+      }
+      const users = (store.users || [])
+        .filter((user) => user.active !== false && (user.projectIds || []).some((id) => id === '*' || id === targetProjectId))
+        .map(sanitizeUser);
+      sendJson(res, 200, { users });
+      return true;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/users') {
+      if (typeof updateStore !== 'function') {
+        sendJson(res, 500, { ok: false, error: 'auth store is not writable' });
+        return true;
+      }
+      const { json } = await readBody(req);
+      const projectId = String(json?.projectId || '').trim();
+      const username = String(json?.username || '').trim();
+      const password = String(json?.password || '');
+      const name = String(json?.name || username).trim();
+      const role = ['developer', 'project_admin'].includes(json?.role) ? json.role : 'developer';
+      if (!projectId || !username || !password) {
+        sendJson(res, 400, { ok: false, error: 'projectId, username and password are required' });
+        return true;
+      }
+
+      const before = await loadStore();
+      const tokenAdmin = getSessionUser(req, before.users || [], projectId);
+      const credentialAdmin = (() => {
+        const adminUsername = String(json?.adminUsername || '').trim();
+        const adminPassword = String(json?.adminPassword || '');
+        const candidate = findUserForProject(before.users || [], adminUsername, projectId);
+        return candidate && verifyPassword(adminPassword, candidate.passwordHash) && userCanManageProject(candidate, projectId)
+          ? candidate
+          : null;
+      })();
+      const adminUser = tokenAdmin || credentialAdmin;
+      if (!adminUser) {
+        sendJson(res, 403, { ok: false, error: 'project admin credentials required' });
+        return true;
+      }
+      if ((before.users || []).some((user) => user.username === username)) {
+        sendJson(res, 409, { ok: false, error: 'username already exists' });
+        return true;
+      }
+
+      const now = new Date().toISOString();
+      let createdUser = null;
+      await updateStore((draft) => {
+        draft.users = draft.users || [];
+        createdUser = {
+          id: `user_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+          username,
+          name,
+          role,
+          projectIds: [projectId],
+          active: true,
+          passwordHash: hashPassword(password),
+          createdAt: now,
+          updatedAt: now
+        };
+        draft.users.push(createdUser);
+        return draft;
+      });
+      sendJson(res, 201, { ok: true, user: sanitizeUser(createdUser) });
       return true;
     }
 
