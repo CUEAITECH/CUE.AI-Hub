@@ -690,56 +690,70 @@ await test('cross-deliverable contamination guard: task with deliverableId point
   assert.equal(iphone.linkedTasks[0].id, 'task_iphone_sos');
 });
 
-await test('product-keyword phase matching: iPad/iPhone/iOS deliverables land in client phase', () => {
-  // 复现 projectRoutes.js 中的 classifyDeliverableProduct + findPhaseByProductKeywords 逻辑
-  function classify(title) {
-    const t = String(title || '').toLowerCase();
-    const hasTrtc = /trtc/i.test(t);
-    if (/(联调|三端|全链路|demo\s*验收|端到端|e2e)/i.test(title)) return { tokens: ['联调', '三端', '全链路', 'e2e', '集成'], prefer: null };
-    if (/trtc.*(后端|asr|usersig|callback|session)/i.test(t)) return { tokens: ['后端', '服务', 'backend'], prefer: 'trtc' };
-    if (/ipad|iphone|ios/i.test(t)) return { tokens: ['客户端', 'ios', 'iphone', 'ipad', '端侧', '移动端'], prefer: hasTrtc ? 'trtc' : 'week1' };
-    if (/(学生|web)/i.test(t)) return { tokens: ['学生', 'web', '客户端', '端侧'], prefer: hasTrtc ? 'trtc' : 'week1' };
-    if (/(后端|服务端|api|session)/i.test(t)) return { tokens: ['后端', '服务', 'api', 'session', 'backend'], prefer: hasTrtc ? 'trtc' : 'week1' };
-    if (/(ci\/cd|railway|部署|deploy|流水线|env|环境)/i.test(t)) return { tokens: ['集成', '部署', '环境', 'ci', '联调'], prefer: null };
-    return { tokens: [], prefer: null };
-  }
-  function bestPhase(title, phases) {
-    const cls = classify(title);
-    if (!cls.tokens.length) return null;
-    let best = null; let bestScore = -1;
-    for (const phase of phases) {
-      const pt = String(phase.title || '').toLowerCase();
-      let s = 0;
-      for (const k of cls.tokens) if (pt.includes(k.toLowerCase())) s++;
-      if (cls.prefer === 'trtc' && /trtc/i.test(pt)) s += 10;
-      else if (cls.prefer === 'trtc' && !/trtc/i.test(pt)) s -= 5;
-      if (cls.prefer === 'week1' && /(第一周|week ?1|首周)/i.test(pt)) s += 10;
-      else if (cls.prefer === 'week1' && /trtc/i.test(pt)) s -= 5;
-      if (s > bestScore) { bestScore = s; best = phase.id; }
+await test('phase matching is project-agnostic: uses LLM-provided productKeywords, no hardcoded project terms', () => {
+  // 复现 projectRoutes.js 中的 findPhaseByLLMKeywords 逻辑（项目无关）
+  function extractTokens(text) {
+    const tokens = new Set();
+    const ascii = String(text || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+    ascii.forEach((t) => tokens.add(t));
+    const cjkRuns = String(text || '').match(/[一-鿿]+/g) || [];
+    for (const run of cjkRuns) {
+      for (let i = 0; i < run.length - 1; i++) tokens.add(run.slice(i, i + 2));
+      if (run.length === 1) tokens.add(run);
     }
-    return bestScore >= 1 ? best : null;
+    return tokens;
+  }
+  function findByKw(title, phases) {
+    if (!title || !phases.length) return { phaseId: null, score: 0 };
+    const tl = title.toLowerCase();
+    const tt = extractTokens(title);
+    let best = null; let bestScore = 0;
+    for (const phase of phases) {
+      const keywords = phase.productKeywords || [];
+      let score = 0;
+      for (const kw of keywords) {
+        const kl = String(kw || '').toLowerCase().trim();
+        if (!kl) continue;
+        if (tl.includes(kl)) { score += 2; continue; }
+        const kt = extractTokens(kw);
+        for (const t of kt) if (tt.has(t)) { score += 1; break; }
+      }
+      if (score > bestScore) { bestScore = score; best = phase.id; }
+    }
+    return { phaseId: best, score: bestScore };
   }
 
-  const phases = [
-    { id: 'p_backend', title: '第一周后端骨架' },
-    { id: 'p_client', title: '第一周客户端骨架' },
-    { id: 'p_integration', title: '第一周三端联调' },
-    { id: 'p_trtc_backend', title: 'TRTC后端改造' },
-    { id: 'p_trtc_client', title: 'TRTC客户端接入' }
+  // 场景 1：cue_ai_classroom（双设备课堂）
+  const classroomPhases = [
+    { id: 'p_backend', title: '第一周后端骨架', productKeywords: ['后端', '服务', 'API', 'Session'] },
+    { id: 'p_client', title: '第一周客户端骨架', productKeywords: ['客户端', 'iPad', 'iPhone', 'iOS', '前端', 'App'] },
+    { id: 'p_integration', title: '第一周三端联调', productKeywords: ['联调', '三端', '全链路', 'CI', '环境'] },
+    { id: 'p_trtc_backend', title: 'TRTC后端改造', productKeywords: ['TRTC', 'UserSig', 'ASR', '后端'] },
+    { id: 'p_trtc_client', title: 'TRTC客户端接入', productKeywords: ['TRTC', '客户端', '学生', 'Web'] }
   ];
+  assert.equal(findByKw('iPad 输入端 MVP', classroomPhases).phaseId, 'p_client', 'iPad → 客户端');
+  assert.equal(findByKw('iPhone 输出端 MVP', classroomPhases).phaseId, 'p_client', 'iPhone → 客户端');
+  assert.equal(findByKw('后端服务 MVP', classroomPhases).phaseId, 'p_backend');
+  assert.equal(findByKw('CI/CD 流水线配置', classroomPhases).phaseId, 'p_integration');
 
-  // iPad/iPhone MVP 应该归到客户端 phase，不能错归到后端
-  assert.equal(bestPhase('iPad 输入端 MVP', phases), 'p_client', 'iPad MVP 应归客户端 phase');
-  assert.equal(bestPhase('iPhone 输出端 MVP', phases), 'p_client', 'iPhone MVP 应归客户端 phase');
-  // 后端 MVP 归后端
-  assert.equal(bestPhase('后端服务 MVP', phases), 'p_backend');
-  // 联调归集成 phase
-  assert.equal(bestPhase('TRTC 联调验收', phases), 'p_integration');
-  assert.equal(bestPhase('CI/CD 流水线配置', phases), 'p_integration');
-  // TRTC 学生端归客户端
-  assert.equal(bestPhase('TRTC 学生端改造', phases), 'p_trtc_client');
-  // 没匹配项返回 null
-  assert.equal(bestPhase('随机标题不含产品端', phases), null);
+  // 场景 2：电商项目（完全不同的产品端，验证项目无关性）
+  const ecommercePhases = [
+    { id: 'p_sku', title: '商品管理', productKeywords: ['SKU', '商品', '库存', '类目'] },
+    { id: 'p_order', title: '订单系统', productKeywords: ['订单', '支付', '退款', '物流'] },
+    { id: 'p_admin', title: '运营后台', productKeywords: ['后台', '管理', '运营', 'Dashboard'] }
+  ];
+  // 在电商场景下也能正确匹配——完全不依赖 iPad/TRTC 等术语
+  assert.equal(findByKw('SKU 批量导入功能', ecommercePhases).phaseId, 'p_sku');
+  assert.equal(findByKw('订单超时退款', ecommercePhases).phaseId, 'p_order');
+  assert.equal(findByKw('运营后台数据看板', ecommercePhases).phaseId, 'p_admin');
+
+  // 场景 3：游戏项目
+  const gamePhases = [
+    { id: 'p_combat', title: '战斗系统', productKeywords: ['战斗', '伤害', '技能', '怪物'] },
+    { id: 'p_economy', title: '经济系统', productKeywords: ['货币', '商城', '充值', '掉落'] }
+  ];
+  assert.equal(findByKw('技能伤害公式调优', gamePhases).phaseId, 'p_combat');
+  assert.equal(findByKw('商城充值入口', gamePhases).phaseId, 'p_economy');
 });
 
 await test('reset-roadmap route strips task/activity/assignment deliverableId for project', async () => {

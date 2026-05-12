@@ -165,7 +165,12 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
 输出严格遵循以下 JSON 对象格式，不输出其他内容：
 {
   "phases": [
-    { "id": "phase_<英文标识>", "title": "阶段名（中文，10字以内）", "status": "待开始|进行中|已完成" }
+    {
+      "id": "phase_<英文标识>",
+      "title": "阶段名（中文，10字以内）",
+      "status": "待开始|进行中|已完成",
+      "productKeywords": ["从文档中识别出来的该阶段关注的产品域关键词（如客户端骨架阶段可能是 iPad/iPhone/iOS/前端/App；后端阶段可能是 API/Session/服务/后端）。3-8 个，要求能让后续根据 deliverable 标题判断它属于该阶段。"]
+    }
   ],
   "nodes": [
     {
@@ -196,13 +201,12 @@ const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负�
   - key 是原始的 deliverableTitle 字符串（一字不差地复用，含空格、标点、英文大小写）
   - value 是 phases 中的 phaseId
   - 输出前自己核对：deliverableAssignments 的 key 数量必须等于列表长度，遗漏任何一个视为失败
-  - 归类硬规则（按交付项标题里出现的产品端关键词来分，不允许把客户端 MVP 当成后端的子目标）：
-    * 含 "iPad" / "iPhone" / "iOS" → 必须归到客户端/iOS 类 phase（如 phase_week1_client / phase_trtc_client）
-    * 含 "学生" / "Web" → 必须归到 Web 学生端类 phase
-    * 含 "后端" / "服务端" / "API" / "Session" → 必须归到后端类 phase
-    * 含 "联调" / "三端" / "全链路" / "Demo 验收" → 必须归到联调类 phase
-    * "MVP" 不影响归类，只看产品端关键词。"iPad 输入端 MVP" 归客户端 phase，"后端服务 MVP" 归后端 phase
-    * 若没有 phase 能匹配，挑功能最贴近的，绝不能默认丢到第一个 phase`;
+  - 归类原则（项目无关，全靠语义匹配）：
+    * 先看 deliverable 标题里出现了什么产品域名词（任何产品的客户端/服务端/特定模块名等），再找该 phase 的 productKeywords 中最匹配的
+    * "里程碑/MVP/验收/交付物" 这类修饰词不影响归类——只看 deliverable 标题中真实指向的产品端或模块
+    * 不要把某个产品端的 MVP 当成其他端的子目标。比如"客户端 MVP"不归后端 phase，"后端 MVP"不归客户端 phase
+    * 若 deliverable 标题不属于任何已规划的 phase，挑文档语义最贴近的，绝不能默认丢到第一个 phase
+  - **重要**：每个 phase 的 productKeywords 必须能让上面这个归类原则跑通——即 productKeywords 至少要包含该 phase 涉及的产品端、模块或功能层名词，覆盖到该 phase 下所有 deliverable 标题中可能出现的关键名词`;
 
 /**
  * 从文档内容用 LLM 提炼开发阶段划分和路径图节点；LLM 失败时按 sourceDoc 文档名兜底归组
@@ -236,7 +240,10 @@ export async function parsePhasesFromDocs(docs, parsedTasks = [], existingNodes 
             .map((p) => ({
               id: String(p.id).replace(/[^\w-]/g, '_').slice(0, 32),
               title: String(p.title).slice(0, 20),
-              status: ['待开始', '进行中', '已完成'].includes(p.status) ? p.status : '待开始'
+              status: ['待开始', '进行中', '已完成'].includes(p.status) ? p.status : '待开始',
+              productKeywords: Array.isArray(p.productKeywords)
+                ? p.productKeywords.slice(0, 10).map((k) => String(k).trim()).filter(Boolean)
+                : []
             }));
           if (!phases.length) throw new Error('no valid phases');
           const phaseIdSet = new Set(phases.map((p) => p.id));

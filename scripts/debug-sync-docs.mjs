@@ -32,34 +32,25 @@ function extractTokens(text) {
   return tokens;
 }
 
-function classifyDeliverableProduct(title) {
-  const t = String(title || '').toLowerCase();
-  const hasTrtc = /trtc/i.test(t);
-  if (/(联调|三端|全链路|demo\s*验收|端到端|e2e)/i.test(title)) return { tokens: ['联调', '三端', '全链路', 'e2e', '集成'], prefer: null };
-  if (/trtc.*(后端|asr|usersig|callback|session)/i.test(t)) return { tokens: ['后端', '服务', 'backend'], prefer: 'trtc' };
-  if (/ipad|iphone|ios/i.test(t)) return { tokens: ['客户端', 'ios', 'iphone', 'ipad', '端侧', '移动端'], prefer: hasTrtc ? 'trtc' : 'week1' };
-  if (/(学生|web)/i.test(t)) return { tokens: ['学生', 'web', '客户端', '端侧'], prefer: hasTrtc ? 'trtc' : 'week1' };
-  if (/(后端|服务端|api|session)/i.test(t)) return { tokens: ['后端', '服务', 'api', 'session', 'backend'], prefer: hasTrtc ? 'trtc' : 'week1' };
-  if (/(ci\/cd|railway|部署|deploy|流水线|env|环境)/i.test(t)) return { tokens: ['集成', '部署', '环境', 'ci', '联调'], prefer: null };
-  if (/(sop|内容|话术|模板|课程包)/i.test(t)) return { tokens: ['内容', 'sop', '课程', '联调'], prefer: null };
-  return { tokens: [], prefer: null };
-}
-
-function findPhaseByProductKeywords(title, phases) {
-  const cls = classifyDeliverableProduct(title);
-  if (!cls.tokens.length || !phases.length) return null;
-  let best = null; let bestScore = -1;
+function findPhaseByLLMKeywords(deliverableTitle, phases) {
+  if (!deliverableTitle || !phases.length) return { phaseId: null, score: 0 };
+  const dlvLower = String(deliverableTitle).toLowerCase();
+  const dlvTokens = extractTokens(deliverableTitle);
+  let best = null; let bestScore = 0;
   for (const phase of phases) {
-    const pTitle = String(phase.title || '').toLowerCase();
-    let s = 0;
-    for (const kw of cls.tokens) if (pTitle.includes(kw.toLowerCase())) s++;
-    if (cls.prefer === 'trtc' && /trtc/i.test(pTitle)) s += 10;
-    else if (cls.prefer === 'trtc' && !/trtc/i.test(pTitle)) s -= 5;
-    if (cls.prefer === 'week1' && /(第一周|week ?1|首周)/i.test(pTitle)) s += 10;
-    else if (cls.prefer === 'week1' && /trtc/i.test(pTitle)) s -= 5;
-    if (s > bestScore) { bestScore = s; best = phase.id; }
+    const keywords = Array.isArray(phase.productKeywords) ? phase.productKeywords : [];
+    if (!keywords.length) continue;
+    let score = 0;
+    for (const kw of keywords) {
+      const kwLower = String(kw || '').toLowerCase().trim();
+      if (!kwLower) continue;
+      if (dlvLower.includes(kwLower)) { score += 2; continue; }
+      const kwTokens = extractTokens(kw);
+      for (const t of kwTokens) if (dlvTokens.has(t)) { score += 1; break; }
+    }
+    if (score > bestScore) { bestScore = score; best = phase.id; }
   }
-  return bestScore >= 1 ? best : null;
+  return { phaseId: best, score: bestScore };
 }
 
 function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
@@ -67,7 +58,7 @@ function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
   const { phases = [], nodes = [], deliverableAssignments = {} } = parsedPhasesResult;
   const phaseIdSet = new Set(phases.map((p) => p.id));
 
-  const expected = findPhaseByProductKeywords(deliverableTitle, phases);
+  const kw = findPhaseByLLMKeywords(deliverableTitle, phases);
 
   const normDlv = normalizeTitle(deliverableTitle);
   let llmMap = deliverableAssignments[deliverableTitle];
@@ -76,16 +67,28 @@ function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
       if (normalizeTitle(k) === normDlv && phaseIdSet.has(v)) { llmMap = v; break; }
     }
   }
-  if (llmMap && expected && llmMap !== expected) {
-    const llmPhaseTitle = String(phases.find((p) => p.id === llmMap)?.title || '').toLowerCase();
-    const dlvHasTrtc = /trtc/i.test(deliverableTitle);
-    const llmHasTrtc = /trtc/i.test(llmPhaseTitle);
-    if (dlvHasTrtc !== llmHasTrtc) return expected;
+  if (llmMap && kw.phaseId && llmMap !== kw.phaseId && kw.score >= 2) {
+    const llmPhaseScore = (() => {
+      const llmPhase = phases.find((p) => p.id === llmMap);
+      if (!llmPhase || !Array.isArray(llmPhase.productKeywords)) return 0;
+      const dl = deliverableTitle.toLowerCase();
+      const dt = extractTokens(deliverableTitle);
+      let s = 0;
+      for (const k of llmPhase.productKeywords) {
+        const kl = String(k || '').toLowerCase().trim();
+        if (!kl) continue;
+        if (dl.includes(kl)) { s += 2; continue; }
+        const kt = extractTokens(k);
+        for (const t of kt) if (dt.has(t)) { s += 1; break; }
+      }
+      return s;
+    })();
+    if (kw.score - llmPhaseScore >= 2) return kw.phaseId;
   }
   if (llmMap && phaseIdSet.has(llmMap)) return llmMap;
   if (!normDlv) return null;
 
-  if (expected) return expected;
+  if (kw.phaseId && kw.score >= 2) return kw.phaseId;
 
   const nodeMatch = nodes.find((n) => {
     const normNode = normalizeTitle(n.title || '');
@@ -101,7 +104,8 @@ function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
     for (const t of dlvTokens) if (phaseTokens.has(t)) score++;
     if (score > bestScore) { bestScore = score; bestPhaseId = phase.id; }
   }
-  return bestScore >= 1 ? bestPhaseId : null;
+  if (bestScore >= 1) return bestPhaseId;
+  return kw.phaseId || null;
 }
 
 async function main() {
@@ -137,7 +141,10 @@ async function main() {
   }
   console.log(`got ${phasesResult.phases?.length || 0} phases, ${phasesResult.nodes?.length || 0} nodes`);
   console.log('\nphases:');
-  (phasesResult.phases || []).forEach((p) => console.log(`  ${p.id}: "${p.title}" (status=${p.status})`));
+  (phasesResult.phases || []).forEach((p) => {
+    console.log(`  ${p.id}: "${p.title}" (status=${p.status})`);
+    console.log(`    productKeywords: [${(p.productKeywords || []).join(', ')}]`);
+  });
   console.log('\nnodes:');
   (phasesResult.nodes || []).forEach((n) => console.log(`  [${n.phaseId}] "${n.title}" (id=${n.id})`));
   console.log('\nnodeAssignments:');

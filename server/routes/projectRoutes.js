@@ -97,77 +97,83 @@ export function createProjectRoutes({
     return tokens;
   }
 
-  // 按产品端硬规则匹配 phase：当 LLM 权威映射缺失时用，比 bigram 更稳
-  // 返回 { kind, keywords } —— kind 是 deliverable 的产品端分类，keywords 是 phase 标题里期望出现的词
-  function classifyDeliverableProduct(title) {
-    const t = String(title || '').toLowerCase();
-    const hasTrtc = /trtc/i.test(t);
-    // 注意顺序：更具体的先匹配。联调、TRTC 后端、客户端/学生、后端、devops、内容
-    if (/(联调|三端|全链路|demo\s*验收|端到端|e2e)/i.test(title)) return { kind: 'integration', tokens: ['联调', '三端', '全链路', 'e2e', '集成'], prefer: null };
-    if (/trtc.*(后端|asr|usersig|callback|session)/i.test(t)) return { kind: 'trtc_backend', tokens: ['后端', '服务', 'backend'], prefer: 'trtc' };
-    if (/ipad|iphone|ios/i.test(t)) return { kind: 'client_ios', tokens: ['客户端', 'ios', 'iphone', 'ipad', '端侧', '移动端'], prefer: hasTrtc ? 'trtc' : 'week1' };
-    if (/(学生|web)/i.test(t)) return { kind: 'client_web', tokens: ['学生', 'web', '客户端', '端侧'], prefer: hasTrtc ? 'trtc' : 'week1' };
-    if (/(后端|服务端|api|session)/i.test(t)) return { kind: 'backend', tokens: ['后端', '服务', 'api', 'session', 'backend'], prefer: hasTrtc ? 'trtc' : 'week1' };
-    if (/(ci\/cd|railway|部署|deploy|流水线|env|环境)/i.test(t)) return { kind: 'devops', tokens: ['集成', '部署', '环境', 'ci', '联调'], prefer: null };
-    if (/(sop|内容|话术|模板|课程包)/i.test(t)) return { kind: 'content', tokens: ['内容', 'sop', '课程', '联调'], prefer: null };
-    return { kind: 'unknown', tokens: [], prefer: null };
-  }
-
-  function findPhaseByProductKeywords(title, phases) {
-    const cls = classifyDeliverableProduct(title);
-    if (!cls.tokens.length || !phases.length) return null;
+  // 用 LLM 自己提取的 phase.productKeywords 匹配 deliverable
+  // 完全项目无关：所有关键词都来自当前项目 LLM 解析出的 phase 数据，没有任何硬编码项目术语
+  // 评分：deliverable 标题（或其 token）包含 phase 的关键词时 +1；选总分最高的 phase
+  function findPhaseByLLMKeywords(deliverableTitle, phases) {
+    if (!deliverableTitle || !phases.length) return { phaseId: null, score: 0 };
+    const dlvLower = String(deliverableTitle).toLowerCase();
+    const dlvTokens = extractTokens(deliverableTitle);
     let best = null;
-    let bestScore = -1;
+    let bestScore = 0;
     for (const phase of phases) {
-      const pTitle = String(phase.title || '').toLowerCase();
+      const keywords = Array.isArray(phase.productKeywords) ? phase.productKeywords : [];
+      if (!keywords.length) continue;
       let score = 0;
-      for (const kw of cls.tokens) if (pTitle.includes(kw.toLowerCase())) score++;
-      // prefer 加权：若 deliverable 暗示 TRTC，phase 标题含 trtc 加 10；若暗示第一周，含"第一周"加 10
-      if (cls.prefer === 'trtc' && /trtc/i.test(pTitle)) score += 10;
-      else if (cls.prefer === 'trtc' && !/trtc/i.test(pTitle)) score -= 5;
-      if (cls.prefer === 'week1' && /(第一周|week ?1|首周)/i.test(pTitle)) score += 10;
-      else if (cls.prefer === 'week1' && /trtc/i.test(pTitle)) score -= 5;
-      if (score > bestScore) {
-        bestScore = score;
-        best = phase.id;
+      for (const kw of keywords) {
+        const kwLower = String(kw || '').toLowerCase().trim();
+        if (!kwLower) continue;
+        // 用子串匹配（ASCII 大小写无关）+ bigram 重叠双通道
+        if (dlvLower.includes(kwLower)) { score += 2; continue; }
+        const kwTokens = extractTokens(kw);
+        for (const t of kwTokens) if (dlvTokens.has(t)) { score += 1; break; }
       }
+      if (score > bestScore) { bestScore = score; best = phase.id; }
     }
-    return bestScore >= 1 ? best : null;
+    return { phaseId: best, score: bestScore };
   }
 
   // 从 parsedPhasesResult 中为一个 deliverableTitle 找最匹配的 phaseId
-  // 优先级：LLM 映射（经硬规则一致性校验）> 产品端硬规则 > node 标题匹配 > bigram 重叠
+  // 项目无关的优先级：
+  //   1. LLM deliverableAssignments（经一致性校验）
+  //   2. 基于 LLM phase.productKeywords 的匹配（评分 ≥ 2）
+  //   3. node 标题包含匹配
+  //   4. bigram 字面重叠 fallback
+  //   一致性校验：若 LLM 把 deliverable 分到一个 phase，但另一个 phase 的 productKeywords
+  //   对该 deliverable 评分明显更高，视为 LLM 错位，回退到关键词最匹配的 phase
   function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
-    if (!parsedPhasesResult) return null;
+    if (!parsedPhasesResult || !deliverableTitle) return null;
     const { phases = [], nodes = [], deliverableAssignments = {} } = parsedPhasesResult;
-    if (!deliverableTitle) return null;
     const phaseIdSet = new Set(phases.map((p) => p.id));
 
-    // 先算产品端硬规则期望的 phase（作为校验基准）
-    const expected = findPhaseByProductKeywords(deliverableTitle, phases);
+    // LLM 给出的 productKeywords 评分结果（同时作为 LLM 映射校验基准）
+    const kw = findPhaseByLLMKeywords(deliverableTitle, phases);
 
-    // 1. LLM 权威映射：deliverableTitle 一字不差
+    // 1. LLM deliverableAssignments
     const normDlv = normalizeTitle(deliverableTitle);
     let llmMap = deliverableAssignments[deliverableTitle];
     if (!llmMap || !phaseIdSet.has(llmMap)) {
-      // 1b. LLM 权威映射的规范化匹配（容忍空格/标点差异）
       for (const [k, v] of Object.entries(deliverableAssignments)) {
         if (normalizeTitle(k) === normDlv && phaseIdSet.has(v)) { llmMap = v; break; }
       }
     }
-    // 1c. 一致性校验：若 LLM 映射的 phase 标题含 "trtc" 但 deliverable 标题不含，或反过来，
-    //     视为 LLM 错位，用硬规则兜底（防止"iPad 输入端 MVP"被 LLM 误丢到 TRTC phase）
-    if (llmMap && expected && llmMap !== expected) {
-      const llmPhaseTitle = String(phases.find((p) => p.id === llmMap)?.title || '').toLowerCase();
-      const dlvHasTrtc = /trtc/i.test(deliverableTitle);
-      const llmHasTrtc = /trtc/i.test(llmPhaseTitle);
-      if (dlvHasTrtc !== llmHasTrtc) return expected;
+    // 1c. 一致性校验：用 LLM 自己的 productKeywords 评估
+    //     若关键词最匹配 phase 与 LLM 映射不同，且关键词得分明显高（≥ 2），用关键词结果
+    //     这是项目无关的——所有信号都来自 LLM 自己的输出
+    if (llmMap && kw.phaseId && llmMap !== kw.phaseId && kw.score >= 2) {
+      const llmPhaseScore = (() => {
+        const llmPhase = phases.find((p) => p.id === llmMap);
+        if (!llmPhase || !Array.isArray(llmPhase.productKeywords)) return 0;
+        const dlvLower = deliverableTitle.toLowerCase();
+        const dlvTokens = extractTokens(deliverableTitle);
+        let s = 0;
+        for (const k of llmPhase.productKeywords) {
+          const kl = String(k || '').toLowerCase().trim();
+          if (!kl) continue;
+          if (dlvLower.includes(kl)) { s += 2; continue; }
+          const kt = extractTokens(k);
+          for (const t of kt) if (dlvTokens.has(t)) { s += 1; break; }
+        }
+        return s;
+      })();
+      // 关键词匹配分至少比 LLM 映射高 2，才视为 LLM 错位
+      if (kw.score - llmPhaseScore >= 2) return kw.phaseId;
     }
     if (llmMap && phaseIdSet.has(llmMap)) return llmMap;
     if (!normDlv) return null;
 
-    // 2. 产品端硬规则匹配
-    if (expected) return expected;
+    // 2. LLM productKeywords 匹配（需要至少 score >= 2，避免噪声）
+    if (kw.phaseId && kw.score >= 2) return kw.phaseId;
 
     // 3. node 标题包含匹配
     const nodeMatch = nodes.find((n) => {
@@ -176,7 +182,7 @@ export function createProjectRoutes({
     });
     if (nodeMatch?.phaseId && phaseIdSet.has(nodeMatch.phaseId)) return nodeMatch.phaseId;
 
-    // 4. bigram 重叠评分（中文 2 字窗口 + ASCII）
+    // 4. bigram 字面重叠 fallback（phase 标题对比）
     const dlvTokens = extractTokens(deliverableTitle);
     let bestPhaseId = null;
     let bestScore = 0;
@@ -184,12 +190,12 @@ export function createProjectRoutes({
       const phaseTokens = extractTokens(phase.title || '');
       let score = 0;
       for (const t of dlvTokens) if (phaseTokens.has(t)) score++;
-      if (score > bestScore) {
-        bestScore = score;
-        bestPhaseId = phase.id;
-      }
+      if (score > bestScore) { bestScore = score; bestPhaseId = phase.id; }
     }
-    return bestScore >= 1 ? bestPhaseId : null;
+    // 同 productKeywords 评分弱兜底，避免噪声匹配
+    if (bestScore >= 1) return bestPhaseId;
+    // 5. 最后兜底：返回 productKeywords 评分最高的（即使 < 2），让 LLM 也尽量给个 phase
+    return kw.phaseId || null;
   }
 
   function normalizeProjectInput(input = {}, fallbackId = '') {
