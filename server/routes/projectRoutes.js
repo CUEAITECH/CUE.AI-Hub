@@ -464,7 +464,10 @@ export function createProjectRoutes({
           existing.unshift({
             id: taskId,
             title: task.title,
-            owner: task.owner || '',
+            // task.owner 永远是 '待认领'：LLM 建议的负责人只是建议，
+            // task.owner 应该只反映"实际领取"状态。LLM 的建议保留在 suggestedOwner，前端可选展示
+            owner: '待认领',
+            suggestedOwner: task.owner || '',
             priority: task.priority || 'P1',
             status: task.status || 'pending',
             description: task.description || '',

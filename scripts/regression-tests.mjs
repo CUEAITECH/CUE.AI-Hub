@@ -1179,3 +1179,52 @@ await test('reset-roadmap route strips task/activity/assignment deliverableId fo
   assert.equal(store.assignments[0].deliverableId, null, 'assignment 的 deliverableId 应当为 null');
   assert.equal(store.docTasks?.cue_ai_classroom, undefined, 'docTasks 应当被清空');
 });
+
+await test('cleanup endpoint resets unclaimed task owner to 待认领 and stashes LLM suggestion', async () => {
+  const { createPlanningRoutes } = await import('../server/routes/planningRoutes.js');
+  let store = migrateStore({
+    deliverables: [],
+    phases: [],
+    currentStage: { id: 'stage', name: 'S', shortName: 'S', checklist: [], phases: [] },
+    tasks: [
+      // 未被认领：LLM 预填了 owner，应被重置
+      { id: 't_unclaimed', title: '未认领任务', projectId: 'cue_ai_classroom', owner: '田家铭', status: 'pending' },
+      // 已认领：owner 应保留
+      { id: 't_claimed', title: '已认领任务', projectId: 'cue_ai_classroom', owner: '罗子宽', status: 'pending' },
+      // 已完成：owner 应保留
+      { id: 't_done', title: '完成任务', projectId: 'cue_ai_classroom', owner: '林世棋', status: '已完成' },
+      // 已是待认领：不动
+      { id: 't_already', title: '已是待认领', projectId: 'cue_ai_classroom', owner: '待认领', status: 'pending' }
+    ],
+    assignments: [
+      { id: 'a1', taskId: 't_claimed', owner: '罗子宽', projectId: 'cue_ai_classroom' }
+    ]
+  });
+
+  let responsePayload = null;
+  const route = createPlanningRoutes({
+    loadStore: async () => store,
+    saveStore: async (next) => { store = next; return next; },
+    updateStore: async (mutator) => { store = await mutator(structuredClone(store)); return store; },
+    readBody: async () => ({ json: {} }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    buildStageChecklist,
+    aggregateDeliverableProgress,
+    buildHybridAnalysis: async () => ({}),
+    scanRisks: () => [],
+    buildMetrics: () => ({}),
+    generatePlanAlternatives: async () => [],
+    normalizePlanStageUpdate: (u) => u,
+    applyPlanAdjustmentToStage: (d) => d
+  });
+
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/tasks/cleanup'));
+
+  assert.equal(responsePayload.resetOwners, 1, '只重置 1 个未认领任务的 owner');
+  const unclaimed = store.tasks.find((t) => t.id === 't_unclaimed');
+  assert.equal(unclaimed.owner, '待认领');
+  assert.equal(unclaimed.suggestedOwner, '田家铭', 'LLM 建议保留到 suggestedOwner');
+  assert.equal(store.tasks.find((t) => t.id === 't_claimed').owner, '罗子宽', '已认领 owner 不变');
+  assert.equal(store.tasks.find((t) => t.id === 't_done').owner, '林世棋', '已完成 owner 不变');
+});
