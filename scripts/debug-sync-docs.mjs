@@ -67,16 +67,25 @@ function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
   const { phases = [], nodes = [], deliverableAssignments = {} } = parsedPhasesResult;
   const phaseIdSet = new Set(phases.map((p) => p.id));
 
-  const llmMap = deliverableAssignments[deliverableTitle];
-  if (llmMap && phaseIdSet.has(llmMap)) return llmMap;
+  const expected = findPhaseByProductKeywords(deliverableTitle, phases);
+
   const normDlv = normalizeTitle(deliverableTitle);
-  for (const [k, v] of Object.entries(deliverableAssignments)) {
-    if (normalizeTitle(k) === normDlv && phaseIdSet.has(v)) return v;
+  let llmMap = deliverableAssignments[deliverableTitle];
+  if (!llmMap || !phaseIdSet.has(llmMap)) {
+    for (const [k, v] of Object.entries(deliverableAssignments)) {
+      if (normalizeTitle(k) === normDlv && phaseIdSet.has(v)) { llmMap = v; break; }
+    }
   }
+  if (llmMap && expected && llmMap !== expected) {
+    const llmPhaseTitle = String(phases.find((p) => p.id === llmMap)?.title || '').toLowerCase();
+    const dlvHasTrtc = /trtc/i.test(deliverableTitle);
+    const llmHasTrtc = /trtc/i.test(llmPhaseTitle);
+    if (dlvHasTrtc !== llmHasTrtc) return expected;
+  }
+  if (llmMap && phaseIdSet.has(llmMap)) return llmMap;
   if (!normDlv) return null;
 
-  const byProduct = findPhaseByProductKeywords(deliverableTitle, phases);
-  if (byProduct) return byProduct;
+  if (expected) return expected;
 
   const nodeMatch = nodes.find((n) => {
     const normNode = normalizeTitle(n.title || '');

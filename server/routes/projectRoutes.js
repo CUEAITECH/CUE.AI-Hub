@@ -136,26 +136,38 @@ export function createProjectRoutes({
   }
 
   // 从 parsedPhasesResult 中为一个 deliverableTitle 找最匹配的 phaseId
-  // 优先级：LLM 权威映射 (deliverableAssignments) > 产品端硬规则 > node 标题匹配 > bigram 重叠
+  // 优先级：LLM 映射（经硬规则一致性校验）> 产品端硬规则 > node 标题匹配 > bigram 重叠
   function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
     if (!parsedPhasesResult) return null;
     const { phases = [], nodes = [], deliverableAssignments = {} } = parsedPhasesResult;
     if (!deliverableTitle) return null;
     const phaseIdSet = new Set(phases.map((p) => p.id));
 
+    // 先算产品端硬规则期望的 phase（作为校验基准）
+    const expected = findPhaseByProductKeywords(deliverableTitle, phases);
+
     // 1. LLM 权威映射：deliverableTitle 一字不差
-    const llmMap = deliverableAssignments[deliverableTitle];
-    if (llmMap && phaseIdSet.has(llmMap)) return llmMap;
-    // 1b. LLM 权威映射的规范化匹配（容忍空格/标点差异）
     const normDlv = normalizeTitle(deliverableTitle);
-    for (const [k, v] of Object.entries(deliverableAssignments)) {
-      if (normalizeTitle(k) === normDlv && phaseIdSet.has(v)) return v;
+    let llmMap = deliverableAssignments[deliverableTitle];
+    if (!llmMap || !phaseIdSet.has(llmMap)) {
+      // 1b. LLM 权威映射的规范化匹配（容忍空格/标点差异）
+      for (const [k, v] of Object.entries(deliverableAssignments)) {
+        if (normalizeTitle(k) === normDlv && phaseIdSet.has(v)) { llmMap = v; break; }
+      }
     }
+    // 1c. 一致性校验：若 LLM 映射的 phase 标题含 "trtc" 但 deliverable 标题不含，或反过来，
+    //     视为 LLM 错位，用硬规则兜底（防止"iPad 输入端 MVP"被 LLM 误丢到 TRTC phase）
+    if (llmMap && expected && llmMap !== expected) {
+      const llmPhaseTitle = String(phases.find((p) => p.id === llmMap)?.title || '').toLowerCase();
+      const dlvHasTrtc = /trtc/i.test(deliverableTitle);
+      const llmHasTrtc = /trtc/i.test(llmPhaseTitle);
+      if (dlvHasTrtc !== llmHasTrtc) return expected;
+    }
+    if (llmMap && phaseIdSet.has(llmMap)) return llmMap;
     if (!normDlv) return null;
 
-    // 2. 产品端硬规则匹配（iPad/iPhone→客户端 phase, 后端→后端 phase, etc）
-    const byProduct = findPhaseByProductKeywords(deliverableTitle, phases);
-    if (byProduct) return byProduct;
+    // 2. 产品端硬规则匹配
+    if (expected) return expected;
 
     // 3. node 标题包含匹配
     const nodeMatch = nodes.find((n) => {
@@ -276,7 +288,18 @@ export function createProjectRoutes({
     ).map((node) => ({ id: node.id, title: node.title, phaseId: node.phaseId }));
     const parsedPhasesResult = await parsePhasesFromDocs(planDocs, parsedTasks, existingNodes);
     const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
-    const importCandidates = selectDailyDocTasks(parsedTasks, importLimit);
+    const dailyCandidates = selectDailyDocTasks(parsedTasks, importLimit);
+    // 保证每个 unique deliverableTitle 至少有一个代表任务入候选（让路径图 phase 都有内容，不留空 phase）
+    const coveredDeliverables = new Set(dailyCandidates.map((t) => t.deliverableTitle).filter(Boolean));
+    const representatives = [];
+    for (const parsed of parsedTasks) {
+      const dlv = parsed.deliverableTitle;
+      if (!dlv || coveredDeliverables.has(dlv)) continue;
+      if (parsed.status === 'completed') continue;
+      coveredDeliverables.add(dlv);
+      representatives.push(parsed);
+    }
+    const importCandidates = [...dailyCandidates, ...representatives];
 
     let imported = 0;
     let createdDeliverables = 0;
