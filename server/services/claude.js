@@ -17,16 +17,20 @@ export function isAvailable() {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
-export async function callClaude(systemPrompt, userPrompt) {
+export async function callClaude(systemPrompt, userPrompt, options = {}) {
   const client = getClient();
   if (!client) return null;
   try {
     const response = await client.messages.create({
       model: getModel(),
-      max_tokens: 4096,
+      max_tokens: options.maxTokens || 4096,
       system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }]
     });
+    // 检测因 max_tokens 截断的情况，给出明确日志
+    if (response.stop_reason === 'max_tokens') {
+      console.warn(`[Claude] 输出在 max_tokens=${options.maxTokens || 4096} 处被截断（stop_reason=max_tokens），输出可能不完整`);
+    }
     return response.content.find((b) => b.type === 'text')?.text ?? null;
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {

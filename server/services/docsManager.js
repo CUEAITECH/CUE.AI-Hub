@@ -113,7 +113,8 @@ const PARSE_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理助手，
 注意：
 - 每个文档可解析多条任务
 - 跳过纯描述性内容（如功能说明、背景），只提取可执行的任务条目
-- 如无明确截止日期，dueDate 留空字符串`;
+- 如无明确截止日期，dueDate 留空字符串
+- **JSON 字符串值中绝对禁止内嵌英文双引号 "**：如需引述名称/术语，使用中文「」或省略引号；任何字段的值里出现未转义的 " 都会导致整个输出解析失败`;
 
 /**
  * 用 LLM 从文档内容解析结构化任务
@@ -129,20 +130,110 @@ export async function parseDocsForTasks(docs) {
     `=== 文档：${d.path} ===\n${d.content.slice(0, 3000)}`
   ).join('\n\n');
 
-  const raw = await callClaude(PARSE_SYSTEM_PROMPT, userPrompt);
+  // 文档任务解析容易输出长 JSON 数组（40+ 任务、详细描述），把 max_tokens 拉到 8192 防止截断
+  const raw = await callClaude(PARSE_SYSTEM_PROMPT, userPrompt, { maxTokens: 8192 });
   if (!raw) { console.error('[DocsManager] callClaude 返回 null，API key 缺失或调用失败'); return []; }
 
-  try {
-    // 提取第一个 JSON 数组（兼容 markdown 代码块包裹）
-    const match = raw.match(/\[[\s\S]*?\]/s) || raw.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/s);
-    const jsonStr = match?.[1] || match?.[0];
-    if (!jsonStr) { console.error('[DocsManager] LLM 输出未找到 JSON 数组，原始内容:', raw.slice(0, 300)); return []; }
-    const tasks = JSON.parse(jsonStr);
-    return Array.isArray(tasks) ? tasks : [];
-  } catch (e) {
-    console.error('[DocsManager] LLM 输出解析失败:', e.message, raw.slice(0, 300));
+  const parsed = extractJsonArray(raw);
+  if (!parsed) {
+    console.error('[DocsManager] LLM 输出解析失败，原始内容前 500 字:', raw.slice(0, 500));
     return [];
   }
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+/**
+ * 从 LLM 输出中提取第一个完整 JSON 数组
+ * 用括号配对扫描代替非贪婪正则（后者会被数组内嵌套的 ] 误截断）
+ * 兼容 ```json``` 代码块包裹
+ */
+export function extractJsonArray(raw) {
+  if (!raw) return null;
+  let text = String(raw);
+  // 去掉 markdown 代码块包裹
+  const fenced = text.match(/```(?:json)?\s*([\s\S]+?)\s*```/);
+  if (fenced) text = fenced[1];
+  // 找第一个 [，然后用栈匹配到对应的 ]
+  const start = text.indexOf('[');
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (inString) {
+      if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '[') depth++;
+    else if (ch === ']') {
+      depth--;
+      if (depth === 0) {
+        const jsonStr = text.slice(start, i + 1);
+        try { return JSON.parse(jsonStr); } catch (e) {
+          // 尝试修复 LLM 常见错误：字符串值内未转义的英文双引号
+          const repaired = repairLLMJson(jsonStr);
+          if (repaired) {
+            try {
+              const result = JSON.parse(repaired);
+              console.warn('[DocsManager] JSON 经过自动修复后解析成功（建议改进 LLM prompt）');
+              return result;
+            } catch { /* 继续报错 */ }
+          }
+          console.error('[DocsManager] JSON.parse 失败:', e.message);
+          const m = e.message.match(/position\s+(\d+)/);
+          if (m) {
+            const pos = Number(m[1]);
+            console.error('[DocsManager] 错误位置上下文:', JSON.stringify(jsonStr.slice(Math.max(0, pos - 80), pos + 80)));
+          }
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * 修复 LLM 输出中字符串值内未转义的英文双引号
+ * 策略：状态机扫描，进入字符串后遇到 "，向后看：
+ *   - 后面紧跟 :  → 当前是 key 的结束引号（不在 value 里），正常关闭
+ *   - 后面紧跟 , } ] 或换行+空白+这些 → 当前是 value 的结束引号，正常关闭
+ *   - 其他情况 → 视为字符串内未转义的引号，改写为 \"
+ */
+export function repairLLMJson(input) {
+  if (!input) return null;
+  const out = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (escaped) { out.push(ch); escaped = false; continue; }
+    if (ch === '\\') { out.push(ch); escaped = true; continue; }
+    if (!inString) {
+      out.push(ch);
+      if (ch === '"') inString = true;
+      continue;
+    }
+    // inString === true
+    if (ch !== '"') { out.push(ch); continue; }
+    // 看下一个非空白字符
+    let j = i + 1;
+    while (j < input.length && /\s/.test(input[j])) j++;
+    const next = input[j] || '';
+    if (next === ':' || next === ',' || next === '}' || next === ']' || next === '') {
+      // 真正的字符串结束
+      out.push(ch);
+      inString = false;
+    } else {
+      // 内嵌未转义双引号，转义掉
+      out.push('\\"');
+    }
+  }
+  return out.join('');
 }
 
 export function parseProgressDoc(markdownContent = '') {
@@ -228,7 +319,8 @@ export async function parsePhasesFromDocs(docs, parsedTasks = [], existingNodes 
     const deliverableContext = uniqueDeliverables.length
       ? `\n\n=== 交付项标题列表（必须在 deliverableAssignments 中为每一个分配一个 phaseId，key 一字不差复用）===\n${JSON.stringify(uniqueDeliverables)}`
       : '';
-    const raw = await callClaude(PHASES_SYSTEM_PROMPT, teamContext + docsText + existingNodesText + deliverableContext);
+    // phases 解析也是结构化长输出（phases + nodes + nodeAssignments + deliverableAssignments），拉到 8192
+    const raw = await callClaude(PHASES_SYSTEM_PROMPT, teamContext + docsText + existingNodesText + deliverableContext, { maxTokens: 8192 });
     if (raw) {
       try {
         const parsed = parseJsonOutput(raw);

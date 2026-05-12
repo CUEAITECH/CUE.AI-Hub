@@ -8,7 +8,7 @@ import { createProjectRoutes } from '../server/routes/projectRoutes.js';
 import { createWeComRoutes } from '../server/routes/wecomRoutes.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
 import { normalizeAssignment, normalizeStandup } from '../server/services/dailyBrief.js';
-import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc } from '../server/services/docsManager.js';
+import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc, extractJsonArray, repairLLMJson } from '../server/services/docsManager.js';
 
 async function test(name, fn) {
   try {
@@ -880,6 +880,40 @@ await test('phase matching is project-agnostic: uses LLM-provided productKeyword
   ];
   assert.equal(findByKw('技能伤害公式调优', gamePhases).phaseId, 'p_combat');
   assert.equal(findByKw('商城充值入口', gamePhases).phaseId, 'p_economy');
+});
+
+await test('extractJsonArray: balanced bracket matching survives nested arrays', () => {
+  // 之前的 bug：非贪婪正则 \[[\s\S]*?\] 会在第一个 ] 截断
+  const input = '```json\n[\n  {"title": "T1", "tags": ["a", "b"]},\n  {"title": "T2"}\n]\n```';
+  const parsed = extractJsonArray(input);
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[0].tags.length, 2);
+  assert.equal(parsed[1].title, 'T2');
+});
+
+await test('repairLLMJson: fixes unescaped double quotes inside string values', () => {
+  // 用户实测看到的 LLM 错误：description 字段里有未转义的英文引号
+  const broken = '[{"title": "T1", "description": "清理 UI 中"输入端/输出端"旧叙事", "status": "pending"}]';
+  // 直接 JSON.parse 会失败
+  assert.throws(() => JSON.parse(broken));
+  // repairLLMJson 修复后能解析
+  const repaired = repairLLMJson(broken);
+  const parsed = JSON.parse(repaired);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].title, 'T1');
+  assert.match(parsed[0].description, /输入端\/输出端/);
+  assert.equal(parsed[0].status, 'pending');
+
+  // 多层嵌套
+  const broken2 = '[{"x": "前后"中"间"末"}]';
+  const r2 = JSON.parse(repairLLMJson(broken2));
+  assert.equal(r2[0].x, '前后"中"间"末');
+
+  // 正常 JSON 不应被破坏
+  const normal = '[{"a": "b", "c": "d\\"e"}]';
+  const r3 = JSON.parse(repairLLMJson(normal));
+  assert.equal(r3[0].a, 'b');
+  assert.equal(r3[0].c, 'd"e');
 });
 
 await test('reset-roadmap purges stale doc-imported tasks but preserves completed/evidenced/claimed/manual', async () => {
