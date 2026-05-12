@@ -524,6 +524,33 @@ h1 {
   line-height: 1.6;
 }
 
+.dashboard-title-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.logout-btn {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 6px;
+  color: #ef4444;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: all 0.15s ease;
+}
+
+.logout-btn:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.7);
+  opacity: 1;
+}
+
 .dashboard-title-card h1,
 .dashboard-title-card p,
 .health-card small,

@@ -254,6 +254,15 @@ function setAuthVisible(isAuthenticated) {
   document.body.classList.toggle('authenticated', state.isAuthenticated);
 }
 
+function logout() {
+  sessionStorage.removeItem('cueHubSessionToken');
+  sessionStorage.removeItem('cueHubAuthenticated');
+  sessionStorage.removeItem('cueHubUser');
+  sessionStorage.removeItem('cueHubUserRole');
+  // 整页重载，确保所有状态干净归零，回到登录页
+  window.location.reload();
+}
+
 async function loadLoginProjects() {
   const payload = await api('/api/projects');
   state.projects = payload.projects || [];
@@ -2744,6 +2753,9 @@ function bindEvents() {
       setText('#loginHint', error.message === 'invalid credentials' ? '账号或密码不正确。' : error.message);
       toast(error.message);
     });
+  });
+  document.querySelector('#logoutBtn')?.addEventListener('click', () => {
+    if (window.confirm('确认退出当前账号？将返回登录页面。')) logout();
   });
   document.querySelector('#registerUserForm')?.addEventListener('submit', (event) => {
     registerProjectUser(event).catch((error) => {
