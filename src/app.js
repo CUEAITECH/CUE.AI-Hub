@@ -552,7 +552,10 @@ function renderRoadmap() {
   }
 
   if (phases.length) {
-    laneEl.innerHTML = phases.map((phase, phaseIndex) => {
+    // 隐藏 0 交付项的 phase（LLM 创建了历史阶段但无新 deliverable 落入），
+    // 同时保持 P{n} 编号按"可见 phase 的连续序号"递增，看着干净
+    const visiblePhases = phases.filter((phase) => (nodesByPhase[phase.id] || []).length > 0);
+    laneEl.innerHTML = visiblePhases.map((phase, phaseIndex) => {
       const nodes = nodesByPhase[phase.id] || [];
       const phaseStatusClass = roadmapStatusClass(phase.status || '待开始');
       return `
@@ -566,7 +569,7 @@ function renderRoadmap() {
             ${phase.progress != null ? `<div class="roadmap-phase-progress"><i style="width:${phase.progress}%"></i></div>` : ''}
           </div>
           <div class="roadmap-phase-nodes">
-            ${nodes.length ? renderPhaseNodes(nodes) : '<p class="muted-line" style="padding:8px 12px">暂无交付项</p>'}
+            ${renderPhaseNodes(nodes)}
           </div>
         </section>`;
     }).join('') + (unphased.length ? `<section class="roadmap-phase roadmap-phase-other"><div class="roadmap-phase-header">其他</div><div class="roadmap-phase-nodes">${renderPhaseNodes(unphased)}</div></section>` : '');
