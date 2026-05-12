@@ -3238,6 +3238,18 @@ select:focus {
 }
 .assign-item.assign-已完成 { opacity: 0.55; }
 .assign-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assign-task-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  padding: 0;
+  text-align: left;
+}
+.assign-task-link:hover { color: var(--blue); text-decoration: underline; }
 .assign-status-badge {
   font-size: 11px;
   padding: 1px 6px;

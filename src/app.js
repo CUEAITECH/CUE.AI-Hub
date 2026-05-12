@@ -1475,9 +1475,12 @@ function renderAssignments() {
           const linkedTask = (state.tasks || []).find((t) => t.id === a.taskId);
           const aiSug = linkedTask?.aiProgressSuggestion;
           const showAiSuggest = showDoneBtn && a.status !== '已完成' && aiSug?.suggestComplete;
+          const taskId = linkedTask?.id || a.taskId || '';
           return `
           <div class="assign-item assign-${escapeHtml(a.status || '进行中')}">
-            <span class="assign-title">${escapeHtml(a.taskTitle || '未知任务')}</span>
+            ${taskId
+              ? `<button class="assign-title assign-task-link" type="button" data-task-id="${escapeHtml(taskId)}">${escapeHtml(a.taskTitle || linkedTask?.title || '未知任务')}</button>`
+              : `<span class="assign-title">${escapeHtml(a.taskTitle || '未知任务')}</span>`}
             <span class="assign-status-badge">${escapeHtml(a.status || '进行中')}</span>
             ${linkedTask ? `<span class="assign-progress-badge">${linkedTask.progress || 0}%</span>` : ''}
             ${a.date !== today ? `<span class="assign-carryover-badge">续 ${a.date}</span>` : ''}
@@ -1525,6 +1528,9 @@ function renderAssignments() {
       });
       summaryEl.querySelectorAll('.assign-cancel-btn').forEach((btn) => {
         btn.addEventListener('click', () => cancelAssignment(btn.dataset.assignId).catch((e) => toast(e.message)));
+      });
+      summaryEl.querySelectorAll('.assign-task-link').forEach((btn) => {
+        btn.addEventListener('click', () => openTaskDetail(btn.dataset.taskId));
       });
     }
   }
