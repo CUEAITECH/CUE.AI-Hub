@@ -327,6 +327,10 @@ function roleLabel(role) {
   return '项目开发者';
 }
 
+function currentSessionUsername() {
+  return sessionStorage.getItem('cueHubUser') || '';
+}
+
 async function loadProjectUsers() {
   const projectId = getCurrentProjectId();
   if (!projectId) return [];
@@ -350,28 +354,54 @@ async function renderAccountAdmin() {
   }
   try {
     const users = await loadProjectUsers();
+    const callerUsername = currentSessionUsername();
     list.innerHTML = users.length
-      ? users.map((user) => `
+      ? users.map((user) => {
+        // 创始人受保护：角色不可被他人调整，账号不可被他人停用
+        const isFounder = Boolean(user.isFounder);
+        const isSelfFounder = isFounder && user.username === callerUsername;
+        const lockReason = user.role === 'admin' || isFounder;
+        const founderBadge = isFounder ? '<span class="founder-badge" title="项目创始人，角色不可被他人调整">创始人</span>' : '';
+        return `
         <div class="admin-user-row ${user.active === false ? 'is-disabled' : ''}" data-user-id="${escapeHtml(user.id)}">
           <div class="admin-user-main">
-            <strong>${escapeHtml(user.name || user.username)}</strong>
+            <strong>${escapeHtml(user.name || user.username)} ${founderBadge}</strong>
             <span>${escapeHtml(user.username)} · ${roleLabel(user.projectRole || user.role)} · ${user.active === false ? '已停用' : '已启用'}</span>
           </div>
           <div class="admin-user-controls">
-            <select data-action="update-user-role" ${user.role === 'admin' ? 'disabled' : ''}>
+            <select data-action="update-user-role" ${lockReason ? 'disabled' : ''}>
               <option value="developer" ${(user.projectRole || user.role) === 'developer' ? 'selected' : ''}>项目开发者</option>
               <option value="project_admin" ${(user.projectRole || user.role) === 'project_admin' ? 'selected' : ''}>项目管理员</option>
             </select>
-            <button type="button" data-action="toggle-user-active" ${user.role === 'admin' ? 'disabled' : ''}>
+            <button type="button" data-action="toggle-user-active" ${lockReason ? 'disabled' : ''}>
               ${user.active === false ? '启用' : '停用'}
             </button>
             <button type="button" data-action="reset-user-password" ${user.role === 'admin' ? 'disabled' : ''}>重置密码</button>
+            ${isSelfFounder ? '<button type="button" data-action="transfer-founder" class="btn-danger-soft">转移创始人</button>' : ''}
           </div>
         </div>
-      `).join('')
+      `;
+      }).join('')
       : '<div class="empty-state">当前项目还没有账号。</div>';
   } catch (error) {
     list.innerHTML = `<div class="empty-state">${escapeHtml(error.message || '账号列表加载失败')}</div>`;
+  }
+}
+
+async function transferFounder() {
+  const projectId = getCurrentProjectId();
+  const targetUsername = window.prompt('请输入新创始人的登录账号（必须是该项目的现有成员）：');
+  if (!targetUsername) return;
+  if (!window.confirm(`确认把 ${projectId} 项目的创始人权限转移给 ${targetUsername}？\n\n转移后你将不再是创始人，但仍保留项目管理员角色。`)) return;
+  try {
+    const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/transfer-founder`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUsername: targetUsername.trim() })
+    });
+    toast(`✅ 创始人已转移给 ${payload.newFounderUsername}`);
+    await renderAccountAdmin();
+  } catch (error) {
+    toast(`❌ 转移失败：${error.message}`);
   }
 }
 
@@ -2796,6 +2826,9 @@ function bindEvents() {
     }
     if (target.dataset.action === 'reset-user-password') {
       updateProjectUserFromAdminPage(userId, { password: '123456' }).catch((error) => toast(error.message));
+    }
+    if (target.dataset.action === 'transfer-founder') {
+      transferFounder();
     }
   });
 

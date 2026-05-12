@@ -1192,6 +1192,88 @@ await test('reset-roadmap route strips task/activity/assignment deliverableId fo
   assert.equal(store.docTasks?.cue_ai_classroom, undefined, 'docTasks 应当被清空');
 });
 
+await test('migrateStore backfills project.founderId from project_admin or system admin', () => {
+  const migrated = migrateStore({
+    projects: [{ id: 'p1', name: 'Test', githubFullRepo: 'a/b' }],
+    users: [
+      { id: 'user_a', username: 'alice', role: 'developer', projectIds: ['p1'], projectRoles: { p1: 'project_admin' }, passwordHash: 'x' },
+      { id: 'user_b', username: 'bob', role: 'developer', projectIds: ['p1'], projectRoles: { p1: 'developer' }, passwordHash: 'x' }
+    ]
+  });
+  const project = migrated.projects.find((p) => p.id === 'p1');
+  assert.ok(project.founderId, 'founderId 应当被补齐');
+  assert.equal(project.founderId, 'user_a', '应当选项目内 project_admin 作为创始人');
+});
+
+await test('system admin user is hidden from non-admin callers in GET /api/auth/users', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_pa' }],
+    users: [
+      { id: 'user_admin', username: 'sysadmin', role: 'admin', projectIds: ['*'], projectRoles: { '*': 'admin' }, passwordHash: 'x', active: true },
+      { id: 'user_pa', username: 'pa', name: 'PA', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_dev', username: 'dev', name: 'Dev', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const paUser = store.users.find((u) => u.id === 'user_pa');
+  const token = createSessionToken(paUser, 'cue_ai_classroom');
+  let payload = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    sendJson: (_r, _s, p) => { payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route(
+    { method: 'GET', headers: { authorization: `Bearer ${token}` } },
+    {},
+    new URL('http://localhost/api/auth/users?projectId=cue_ai_classroom')
+  );
+  const usernames = (payload.users || []).map((u) => u.username);
+  assert.ok(!usernames.includes('sysadmin'), '系统管理员对项目管理员不可见');
+  assert.ok(usernames.includes('pa'), '项目管理员对自己可见');
+  assert.ok(usernames.includes('dev'), '开发者对项目管理员可见');
+  const founder = payload.users.find((u) => u.username === 'pa');
+  assert.equal(founder.isFounder, true, '创始人应携带 isFounder=true');
+});
+
+await test('PATCH /api/auth/users blocks role change on project founder', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_founder' }],
+    users: [
+      { id: 'user_founder', username: 'founder', name: 'Founder', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_admin2', username: 'admin2', name: 'Admin2', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const admin2 = store.users.find((u) => u.id === 'user_admin2');
+  const token = createSessionToken(admin2, 'cue_ai_classroom');
+  let payload = null; let status = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom', role: 'developer' } }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route(
+    { method: 'PATCH', headers: { authorization: `Bearer ${token}` } },
+    {},
+    new URL('http://localhost/api/auth/users/user_founder')
+  );
+  assert.equal(status, 403, '另一个项目管理员不能降级创始人');
+  assert.match(payload.error, /founder is protected/);
+  // 创始人角色没变
+  assert.equal(store.users.find((u) => u.id === 'user_founder').projectRoles.cue_ai_classroom, 'project_admin');
+});
+
 await test('cleanup endpoint resets unclaimed task owner to 待认领 and stashes LLM suggestion', async () => {
   const { createPlanningRoutes } = await import('../server/routes/planningRoutes.js');
   let store = migrateStore({

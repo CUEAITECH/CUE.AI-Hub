@@ -65,6 +65,12 @@ export function userCanManageProject(user = {}, projectId = '') {
   return userCanAccessProject(user, projectId);
 }
 
+// 项目创始人：项目创建者，自动是项目管理员，角色不可被他人降级、账号不可被他人停用
+// 唯一变更途径：本人主动调用「转移创始人」接口
+export function isProjectFounder(user = {}, project = {}) {
+  return Boolean(user?.id && project?.founderId && user.id === project.founderId);
+}
+
 export function findUserForProject(users = [], username = '', projectId = '') {
   const normalized = String(username || '').trim();
   return users.find((user) => (

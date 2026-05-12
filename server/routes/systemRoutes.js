@@ -2,6 +2,7 @@ import {
   createSessionToken,
   findUserForProject,
   hashPassword,
+  isProjectFounder,
   roleForProject,
   sanitizeUser,
   userCanManageProject,
@@ -22,10 +23,11 @@ function getSessionUser(req, users, projectId) {
   return user && userCanManageProject(user, projectId) ? user : null;
 }
 
-function sanitizeUserForProject(user, projectId) {
+function sanitizeUserForProject(user, projectId, project = null) {
   return {
     ...sanitizeUser(user),
-    projectRole: roleForProject(user, projectId)
+    projectRole: roleForProject(user, projectId),
+    isFounder: project ? isProjectFounder(user, project) : false
   };
 }
 
@@ -65,9 +67,10 @@ export function createSystemRoutes({
         sendJson(res, 401, { ok: false, error: 'invalid credentials' });
         return true;
       }
+      const project = (store.projects || []).find((p) => p.id === targetProjectId) || null;
       sendJson(res, 200, {
         ok: true,
-        user: sanitizeUserForProject(user, targetProjectId),
+        user: sanitizeUserForProject(user, targetProjectId, project),
         projectId: targetProjectId,
         token: createSessionToken(user, targetProjectId)
       });
@@ -83,9 +86,13 @@ export function createSystemRoutes({
         sendJson(res, 403, { ok: false, error: 'forbidden' });
         return true;
       }
+      const project = (store.projects || []).find((p) => p.id === targetProjectId) || null;
+      const callerIsSystemAdmin = adminUser.role === 'admin';
       const users = (store.users || [])
         .filter((user) => (user.projectIds || []).some((id) => id === '*' || id === targetProjectId))
-        .map((user) => sanitizeUserForProject(user, targetProjectId));
+        // 系统管理员账号是 bootstrap 兜底账号，平时只对系统管理员可见
+        .filter((user) => user.role !== 'admin' || callerIsSystemAdmin)
+        .map((user) => sanitizeUserForProject(user, targetProjectId, project));
       sendJson(res, 200, { users });
       return true;
     }
@@ -162,7 +169,8 @@ export function createSystemRoutes({
         draft.users.push(createdUser);
         return draft;
       });
-      sendJson(res, existingUser ? 200 : 201, { ok: true, user: sanitizeUserForProject(createdUser, projectId) });
+      const project = (before.projects || []).find((p) => p.id === projectId) || null;
+      sendJson(res, existingUser ? 200 : 201, { ok: true, user: sanitizeUserForProject(createdUser, projectId, project) });
       return true;
     }
 
@@ -195,6 +203,20 @@ export function createSystemRoutes({
         sendJson(res, 403, { ok: false, error: 'system admin account is protected' });
         return true;
       }
+      // 创始人保护：项目创始人的角色不可被他人降级，账号不可被他人停用
+      // 例外：系统管理员或创始人本人调用可以放行（但本人也不能把自己降级——通过 UI 不暴露该按钮即可）
+      const project = (before.projects || []).find((p) => p.id === projectId) || null;
+      const targetIsFounder = isProjectFounder(target, project);
+      const callerIsFounder = isProjectFounder(adminUser, project);
+      const callerIsSystemAdmin = adminUser.role === 'admin';
+      if (targetIsFounder && !callerIsSystemAdmin && !callerIsFounder) {
+        const wantsRoleChange = json?.role && json.role !== roleForProject(target, projectId);
+        const wantsDeactivate = json?.active === false;
+        if (wantsRoleChange || wantsDeactivate) {
+          sendJson(res, 403, { ok: false, error: 'project founder is protected; use transfer-founder to change' });
+          return true;
+        }
+      }
 
       const nextRole = ['developer', 'project_admin'].includes(json?.role) ? json.role : undefined;
       const hasActivePatch = typeof json?.active === 'boolean';
@@ -220,7 +242,7 @@ export function createSystemRoutes({
         draft.users[index] = updatedUser;
         return draft;
       });
-      sendJson(res, 200, { ok: true, user: sanitizeUserForProject(updatedUser, projectId) });
+      sendJson(res, 200, { ok: true, user: sanitizeUserForProject(updatedUser, projectId, project) });
       return true;
     }
 
