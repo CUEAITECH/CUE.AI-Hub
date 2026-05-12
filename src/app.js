@@ -274,10 +274,16 @@ async function login(event) {
   sessionStorage.setItem('cueHubSessionToken', payload.token || '');
   sessionStorage.setItem('cueHubAuthenticated', 'true');
   sessionStorage.setItem('cueHubUser', payload.user?.name || payload.user?.username || username);
-  sessionStorage.setItem('cueHubUserRole', payload.user?.role || 'developer');
+  sessionStorage.setItem('cueHubUserRole', payload.user?.projectRole || payload.user?.role || 'developer');
   syncCurrentProject(projectId);
   setAuthVisible(true);
   await loadState();
+  const routeAfterLogin = sessionStorage.getItem('cueHubPostLoginRoute') || '';
+  sessionStorage.removeItem('cueHubPostLoginRoute');
+  if (routeAfterLogin === 'account-admin') {
+    if (['admin', 'project_admin'].includes(payload.user?.projectRole || payload.user?.role)) setRoute('account-admin');
+    else toast('当前账号没有账号管理权限。');
+  }
 }
 
 async function registerProjectUser(event) {
@@ -296,6 +302,107 @@ async function registerProjectUser(event) {
   });
   setText('#registerHint', `已创建 ${payload.user?.name || username}，可直接登录当前项目。`);
   document.querySelector('#registerUserForm')?.reset();
+}
+
+function currentSessionRole() {
+  return sessionStorage.getItem('cueHubUserRole') || 'developer';
+}
+
+function currentUserCanManageAccounts() {
+  return ['admin', 'project_admin'].includes(currentSessionRole());
+}
+
+function roleLabel(role) {
+  if (role === 'admin') return '系统管理员';
+  if (role === 'project_admin') return '项目管理员';
+  return '项目开发者';
+}
+
+async function loadProjectUsers() {
+  const projectId = getCurrentProjectId();
+  if (!projectId) return [];
+  const payload = await api(`/api/auth/users?projectId=${encodeURIComponent(projectId)}`);
+  return payload.users || [];
+}
+
+async function renderAccountAdmin() {
+  const list = document.querySelector('#adminPageUserList');
+  const form = document.querySelector('#adminPageRegisterForm');
+  if (!list || !form) return;
+  const isAdmin = currentUserCanManageAccounts();
+  form.style.display = isAdmin ? '' : 'none';
+  if (!state.isAuthenticated) {
+    list.innerHTML = '<div class="empty-state">请先登录项目中枢。</div>';
+    return;
+  }
+  if (!isAdmin) {
+    list.innerHTML = '<div class="empty-state">只有项目管理员可以注册开发账号。</div>';
+    return;
+  }
+  try {
+    const users = await loadProjectUsers();
+    list.innerHTML = users.length
+      ? users.map((user) => `
+        <div class="admin-user-row ${user.active === false ? 'is-disabled' : ''}" data-user-id="${escapeHtml(user.id)}">
+          <div class="admin-user-main">
+            <strong>${escapeHtml(user.name || user.username)}</strong>
+            <span>${escapeHtml(user.username)} · ${roleLabel(user.projectRole || user.role)} · ${user.active === false ? '已停用' : '已启用'}</span>
+          </div>
+          <div class="admin-user-controls">
+            <select data-action="update-user-role" ${user.role === 'admin' ? 'disabled' : ''}>
+              <option value="developer" ${(user.projectRole || user.role) === 'developer' ? 'selected' : ''}>项目开发者</option>
+              <option value="project_admin" ${(user.projectRole || user.role) === 'project_admin' ? 'selected' : ''}>项目管理员</option>
+            </select>
+            <button type="button" data-action="toggle-user-active" ${user.role === 'admin' ? 'disabled' : ''}>
+              ${user.active === false ? '启用' : '停用'}
+            </button>
+            <button type="button" data-action="reset-user-password" ${user.role === 'admin' ? 'disabled' : ''}>重置密码</button>
+          </div>
+        </div>
+      `).join('')
+      : '<div class="empty-state">当前项目还没有账号。</div>';
+  } catch (error) {
+    list.innerHTML = `<div class="empty-state">${escapeHtml(error.message || '账号列表加载失败')}</div>`;
+  }
+}
+
+async function registerProjectUserFromAdminPage(event) {
+  event.preventDefault();
+  const projectId = getCurrentProjectId();
+  const name = document.querySelector('#adminPageRegisterName')?.value.trim() || '';
+  const username = document.querySelector('#adminPageRegisterUsername')?.value.trim() || '';
+  const password = document.querySelector('#adminPageRegisterPassword')?.value || '';
+  const role = document.querySelector('#adminPageRegisterRole')?.value || 'developer';
+  const payload = await api('/api/auth/users', {
+    method: 'POST',
+    body: JSON.stringify({ projectId, name, username, password, role })
+  });
+  setText('#adminPageRegisterHint', `已创建 ${payload.user?.name || username}，可登录当前项目。`);
+  document.querySelector('#adminPageRegisterForm')?.reset();
+  const passwordInput = document.querySelector('#adminPageRegisterPassword');
+  if (passwordInput) passwordInput.value = '123456';
+  await renderAccountAdmin();
+}
+
+async function updateProjectUserFromAdminPage(userId, patch) {
+  const projectId = getCurrentProjectId();
+  const payload = await api(`/api/auth/users/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ projectId, ...patch })
+  });
+  setText('#adminPageRegisterHint', `已更新 ${payload.user?.name || payload.user?.username || '账号'}。`);
+  await renderAccountAdmin();
+}
+
+function requestAccountAdminLogin() {
+  if (state.isAuthenticated) {
+    setRoute('account-admin');
+    return;
+  }
+  sessionStorage.setItem('cueHubPostLoginRoute', 'account-admin');
+  const usernameInput = document.querySelector('#loginUsername');
+  if (usernameInput && !usernameInput.value) usernameInput.value = 'admin';
+  setText('#loginHint', '请使用系统管理员账号 admin / 123456 登录后进入账号管理。');
 }
 
 function getTodayAssignments() {
@@ -2526,6 +2633,7 @@ function setRoute(route) {
     roadmap: 'command',
     'ai-pm': 'command',
     meeting: 'command',
+    'account-admin': 'command',
     'risk-detail': 'overview',
     planning: 'execution',
     reviews: 'execution',
@@ -2548,6 +2656,9 @@ function setRoute(route) {
   document.querySelectorAll('.nav-menu').forEach((menu) => {
     menu.classList.toggle('expanded', menu.dataset.navParent === activeParent);
   });
+  if (route === 'account-admin') {
+    renderAccountAdmin().catch((error) => toast(error.message));
+  }
 }
 
 let _briefPollTimer = null;
@@ -2612,6 +2723,41 @@ function bindEvents() {
       setText('#registerHint', error.message === 'project admin credentials required' ? '管理员账号或密码不正确。' : error.message);
       toast(error.message);
     });
+  });
+  document.querySelector('#adminPageRegisterForm')?.addEventListener('submit', (event) => {
+    registerProjectUserFromAdminPage(event).catch((error) => {
+      setText('#adminPageRegisterHint', error.message === 'project admin credentials required' ? '当前账号没有管理员权限。' : error.message);
+      toast(error.message);
+    });
+  });
+  document.querySelector('[data-action="open-account-admin-login"]')?.addEventListener('click', requestAccountAdminLogin);
+  document.querySelector('[data-action="refresh-project-users"]')?.addEventListener('click', () => {
+    renderAccountAdmin().catch((error) => toast(error.message));
+  });
+  document.querySelector('#adminPageUserList')?.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement) || target.dataset.action !== 'update-user-role') return;
+    const row = target.closest('[data-user-id]');
+    const userId = row?.dataset.userId || '';
+    if (!userId) return;
+    updateProjectUserFromAdminPage(userId, { role: target.value }).catch((error) => {
+      toast(error.message);
+      renderAccountAdmin().catch(() => {});
+    });
+  });
+  document.querySelector('#adminPageUserList')?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const row = target.closest('[data-user-id]');
+    const userId = row?.dataset.userId || '';
+    if (!userId) return;
+    if (target.dataset.action === 'toggle-user-active') {
+      const active = target.textContent?.trim() === '启用';
+      updateProjectUserFromAdminPage(userId, { active }).catch((error) => toast(error.message));
+    }
+    if (target.dataset.action === 'reset-user-password') {
+      updateProjectUserFromAdminPage(userId, { password: '123456' }).catch((error) => toast(error.message));
+    }
   });
 
   document.querySelectorAll('[data-route]').forEach((button) => {

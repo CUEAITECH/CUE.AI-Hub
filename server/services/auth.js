@@ -49,13 +49,19 @@ export function sanitizeUser(user = {}) {
   return safeUser;
 }
 
+export function roleForProject(user = {}, projectId = '') {
+  if (user.role === 'admin') return 'admin';
+  const projectRoles = user.projectRoles && typeof user.projectRoles === 'object' ? user.projectRoles : {};
+  return projectRoles[projectId] || projectRoles['*'] || user.role || 'developer';
+}
+
 export function userCanAccessProject(user = {}, projectId = '') {
   const projectIds = Array.isArray(user.projectIds) ? user.projectIds : [];
   return projectIds.includes('*') || projectIds.includes(projectId);
 }
 
 export function userCanManageProject(user = {}, projectId = '') {
-  if (!['admin', 'project_admin'].includes(user.role)) return false;
+  if (!['admin', 'project_admin'].includes(roleForProject(user, projectId))) return false;
   return userCanAccessProject(user, projectId);
 }
 
@@ -72,7 +78,7 @@ export function createSessionToken(user, projectId, now = Date.now()) {
   const payload = {
     sub: user.id,
     username: user.username,
-    role: user.role,
+    role: roleForProject(user, projectId),
     projectId,
     exp: now + DEFAULT_SESSION_TTL_MS
   };
@@ -96,12 +102,18 @@ export function verifySessionToken(token) {
 }
 
 export function normalizeUserRecord(user, now = new Date().toISOString()) {
+  const projectIds = Array.isArray(user.projectIds) && user.projectIds.length ? user.projectIds : ['cue_ai_classroom'];
+  const role = user.role || 'developer';
+  const projectRoles = user.projectRoles && typeof user.projectRoles === 'object'
+    ? user.projectRoles
+    : Object.fromEntries(projectIds.map((projectId) => [projectId, role]));
   return {
     id: user.id || `user_${String(user.username || 'unknown').replace(/[^a-z0-9_-]/gi, '_')}`,
     username: String(user.username || '').trim(),
     name: String(user.name || user.username || '').trim(),
-    role: user.role || 'developer',
-    projectIds: Array.isArray(user.projectIds) && user.projectIds.length ? user.projectIds : ['cue_ai_classroom'],
+    role,
+    projectIds,
+    projectRoles,
     active: user.active !== false,
     passwordHash: user.passwordHash || hashPassword(user.password || ''),
     createdAt: user.createdAt || now,

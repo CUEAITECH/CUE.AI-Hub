@@ -88,7 +88,7 @@ function normalizeDeliverableRecord(deliverable, overrides, now) {
 
 function defaultAdminCredentials() {
   const username = process.env.HUB_ADMIN_USER || process.env.HUB_LOGIN_USER || 'admin';
-  const password = process.env.HUB_ADMIN_PASSWORD || process.env.HUB_LOGIN_PASSWORD || 'cueai';
+  const password = process.env.HUB_ADMIN_PASSWORD || process.env.HUB_LOGIN_PASSWORD || '123456';
   return { username, password };
 }
 
@@ -97,11 +97,22 @@ function defaultAdminUser(now) {
   return normalizeUserRecord({
     id: 'user_project_admin',
     username,
-    name: '项目管理员',
-    role: 'project_admin',
+    name: '系统管理员',
+    role: 'admin',
     projectIds: ['*'],
+    projectRoles: { '*': 'admin' },
     password
   }, now);
+}
+
+function defaultTeamUsers(now) {
+  const password = process.env.HUB_LOGIN_PASSWORD || '123456';
+  return [
+    { id: 'user_tian_jiaming', username: '田家铭', name: '田家铭', role: 'developer', projectIds: ['*'], projectRoles: { '*': 'developer' }, password },
+    { id: 'user_lin_shiqi', username: '林世棋', name: '林世棋', role: 'developer', projectIds: ['*'], projectRoles: { '*': 'developer' }, password },
+    { id: 'user_hu_jiatao', username: '胡佳涛', name: '胡佳涛', role: 'developer', projectIds: ['*'], projectRoles: { '*': 'developer' }, password },
+    { id: 'user_luo_zikuan', username: '罗子宽', name: '罗子宽', role: 'developer', projectIds: ['*'], projectRoles: { '*': 'developer' }, password }
+  ].map((user) => normalizeUserRecord(user, now));
 }
 
 function syncBootstrapAdmin(users, now) {
@@ -116,19 +127,43 @@ function syncBootstrapAdmin(users, now) {
   if (byIdIndex === -1) {
     return users.some((user) => user.username === admin.username) ? users : [admin, ...users];
   }
-  if (!hasExplicitAdminConfig) return users;
-
   const current = users[byIdIndex];
   const { password } = defaultAdminCredentials();
+  const shouldReplaceLegacyDefault = !hasExplicitAdminConfig && verifyPassword('cueai', current.passwordHash);
   users[byIdIndex] = {
     ...current,
     username: admin.username,
-    role: 'project_admin',
+    name: admin.name,
+    role: 'admin',
     projectIds: ['*'],
+    projectRoles: { '*': 'admin' },
     active: true,
-    passwordHash: verifyPassword(password, current.passwordHash) ? current.passwordHash : admin.passwordHash,
+    passwordHash: shouldReplaceLegacyDefault || (hasExplicitAdminConfig && !verifyPassword(password, current.passwordHash))
+      ? admin.passwordHash
+      : current.passwordHash,
     updatedAt: now
   };
+  return users;
+}
+
+function syncDefaultTeamUsers(users, now) {
+  for (const teamUser of defaultTeamUsers(now)) {
+    const index = users.findIndex((user) => user.id === teamUser.id || user.username === teamUser.username);
+    if (index === -1) {
+      users.push(teamUser);
+      continue;
+    }
+    users[index] = {
+      ...users[index],
+      username: teamUser.username,
+      name: teamUser.name,
+      role: 'developer',
+      projectIds: Array.isArray(users[index].projectIds) && users[index].projectIds.length ? users[index].projectIds : teamUser.projectIds,
+      projectRoles: { ...(users[index].projectRoles || {}), '*': 'developer' },
+      active: users[index].active !== false,
+      updatedAt: now
+    };
+  }
   return users;
 }
 
@@ -244,9 +279,10 @@ export function migrateStore(store) {
   next.riskAnalyses = next.riskAnalyses || [];
   next.healthAnalysis = next.healthAnalysis || null;
   if (!Array.isArray(next.users) || !next.users.length) {
-    next.users = [defaultAdminUser(now)];
+    next.users = [defaultAdminUser(now), ...defaultTeamUsers(now)];
   } else {
     next.users = syncBootstrapAdmin(next.users.map((user) => normalizeUserRecord(user, now)), now);
+    next.users = syncDefaultTeamUsers(next.users, now);
   }
   const currentStage = next.currentStage || {};
   const isLegacyHubStage = currentStage.id === 'stage_mvp'
