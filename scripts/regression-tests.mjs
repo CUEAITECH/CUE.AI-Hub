@@ -11,6 +11,7 @@ import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js'
 import { normalizeAssignment, normalizeStandup } from '../server/services/dailyBrief.js';
 import { generateAssignmentBrief } from '../server/services/assignmentBrief.js';
 import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc, extractJsonArray, repairLLMJson } from '../server/services/docsManager.js';
+import { createSessionToken } from '../server/services/auth.js';
 
 async function test(name, fn) {
   try {
@@ -569,7 +570,7 @@ await test('phase4 auth route validates hub login credentials', async () => {
   assert.equal(responseStatus, 200);
   assert.equal(responsePayload.ok, true);
   assert.equal(responsePayload.user.username, 'tester');
-  assert.equal(responsePayload.user.role, 'project_admin');
+  assert.equal(responsePayload.user.role, 'admin');
   assert.equal(typeof responsePayload.token, 'string');
 
   requestJson = { username: 'tester', password: 'wrong', projectId: 'cue_ai_classroom' };
@@ -625,7 +626,18 @@ await test('phase4 auth route lets project admin register project developer acco
   assert.equal(responseStatus, 201);
   assert.equal(responsePayload.user.username, 'dev_one');
   assert.equal(responsePayload.user.role, 'developer');
+  assert.equal(responsePayload.user.projectRole, 'developer');
   assert.equal(responsePayload.user.passwordHash, undefined);
+
+  const admin = store.users.find((user) => user.username === 'admin_test');
+  requestJson = { projectId: 'cue_ai_classroom', role: 'project_admin' };
+  await route(
+    { method: 'PATCH', headers: { 'x-cue-session-token': createSessionToken(admin, 'cue_ai_classroom') } },
+    {},
+    new URL(`http://localhost/api/auth/users/${responsePayload.user.id}`)
+  );
+  assert.equal(responseStatus, 200);
+  assert.equal(responsePayload.user.projectRole, 'project_admin');
 
   requestJson = { username: 'dev_one', password: 'dev_secret', projectId: 'cue_ai_classroom' };
   await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));

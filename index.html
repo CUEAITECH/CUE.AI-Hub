@@ -28,6 +28,7 @@
             <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••" required />
           </label>
           <button type="submit">进入 Hub</button>
+          <button class="auth-link-button" type="button" data-action="open-account-admin-login">管理员账号管理入口</button>
           <small id="loginHint">项目列表会从服务器自动读取。</small>
         </form>
         <details class="auth-admin-tools">
@@ -81,6 +82,7 @@
                 <button class="nav-item" type="button" data-route="roadmap" role="menuitem">路径图</button>
                 <button class="nav-item" type="button" data-route="ai-pm" role="menuitem">AI PM</button>
                 <button class="nav-item" type="button" data-route="meeting" role="menuitem">晚会闭环</button>
+                <button class="nav-item" type="button" data-route="account-admin" role="menuitem">账号管理</button>
               </div>
             </div>
             <div class="nav-menu" data-nav-parent="execution">
@@ -323,6 +325,61 @@
                 <div id="aiPmTriggerList" class="ai-pm-list">
                   <div class="empty-state">等待 GitHub Webhook 或手动同步提交。</div>
                 </div>
+              </article>
+            </div>
+          </section>
+        </section>
+
+
+        <!-- 账号管理 -->
+        <section class="view" id="account-admin">
+          <section class="workspace-shell">
+            <div class="workspace-header">
+              <div>
+                <span class="workspace-kicker">指挥 / 账号</span>
+                <h2>账号管理</h2>
+                <p>系统管理员或项目管理员可以在当前项目下创建账号、调整角色，并停用不再参与项目的账号。</p>
+              </div>
+              <div class="workspace-actions">
+                <button type="button" data-action="refresh-project-users">刷新账号</button>
+              </div>
+            </div>
+            <div class="workspace-grid planning-workbench">
+              <article class="workspace-card">
+                <div class="workspace-card-head">
+                  <span>项目账号</span>
+                  <strong>新增账号</strong>
+                </div>
+                <form class="admin-register-form" id="adminPageRegisterForm">
+                  <label>
+                    <span>成员姓名</span>
+                    <input id="adminPageRegisterName" type="text" placeholder="例如：胡佳涛" required />
+                  </label>
+                  <label>
+                    <span>登录账号</span>
+                    <input id="adminPageRegisterUsername" type="text" autocomplete="username" placeholder="建议使用成员姓名" required />
+                  </label>
+                  <label>
+                    <span>初始密码</span>
+                    <input id="adminPageRegisterPassword" type="password" autocomplete="new-password" value="123456" required />
+                  </label>
+                  <label>
+                    <span>角色</span>
+                    <select id="adminPageRegisterRole">
+                      <option value="developer">项目开发者</option>
+                      <option value="project_admin">项目管理员</option>
+                    </select>
+                  </label>
+                  <button class="submit-btn" type="submit">创建项目账号</button>
+                  <p class="muted-line" id="adminPageRegisterHint">账号会绑定到当前选择的项目。</p>
+                </form>
+              </article>
+              <article class="workspace-card workspace-card-wide">
+                <div class="workspace-card-head">
+                  <span>当前项目</span>
+                  <strong>权限管理</strong>
+                </div>
+                <div class="admin-user-list" id="adminPageUserList"></div>
               </article>
             </div>
           </section>

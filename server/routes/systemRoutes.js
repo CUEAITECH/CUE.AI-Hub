@@ -2,6 +2,7 @@ import {
   createSessionToken,
   findUserForProject,
   hashPassword,
+  roleForProject,
   sanitizeUser,
   userCanManageProject,
   verifyPassword,
@@ -19,6 +20,13 @@ function getSessionUser(req, users, projectId) {
   if (!session || session.projectId !== projectId) return null;
   const user = users.find((item) => item.id === session.sub && item.active !== false) || null;
   return user && userCanManageProject(user, projectId) ? user : null;
+}
+
+function sanitizeUserForProject(user, projectId) {
+  return {
+    ...sanitizeUser(user),
+    projectRole: roleForProject(user, projectId)
+  };
 }
 
 export function createSystemRoutes({
@@ -59,7 +67,7 @@ export function createSystemRoutes({
       }
       sendJson(res, 200, {
         ok: true,
-        user: sanitizeUser(user),
+        user: sanitizeUserForProject(user, targetProjectId),
         projectId: targetProjectId,
         token: createSessionToken(user, targetProjectId)
       });
@@ -76,8 +84,8 @@ export function createSystemRoutes({
         return true;
       }
       const users = (store.users || [])
-        .filter((user) => user.active !== false && (user.projectIds || []).some((id) => id === '*' || id === targetProjectId))
-        .map(sanitizeUser);
+        .filter((user) => (user.projectIds || []).some((id) => id === '*' || id === targetProjectId))
+        .map((user) => sanitizeUserForProject(user, targetProjectId));
       sendJson(res, 200, { users });
       return true;
     }
@@ -113,7 +121,8 @@ export function createSystemRoutes({
         sendJson(res, 403, { ok: false, error: 'project admin credentials required' });
         return true;
       }
-      if ((before.users || []).some((user) => user.username === username)) {
+      const existingUser = (before.users || []).find((user) => user.username === username) || null;
+      if (existingUser && (existingUser.projectIds || []).some((id) => id === '*' || id === projectId)) {
         sendJson(res, 409, { ok: false, error: 'username already exists' });
         return true;
       }
@@ -122,12 +131,29 @@ export function createSystemRoutes({
       let createdUser = null;
       await updateStore((draft) => {
         draft.users = draft.users || [];
+        if (existingUser) {
+          const index = draft.users.findIndex((user) => user.id === existingUser.id);
+          if (index !== -1) {
+            const current = draft.users[index];
+            createdUser = {
+              ...current,
+              name: name || current.name,
+              projectIds: [...new Set([...(current.projectIds || []), projectId])],
+              projectRoles: { ...(current.projectRoles || {}), [projectId]: role },
+              active: true,
+              updatedAt: now
+            };
+            draft.users[index] = createdUser;
+          }
+          return draft;
+        }
         createdUser = {
           id: `user_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
           username,
           name,
           role,
           projectIds: [projectId],
+          projectRoles: { [projectId]: role },
           active: true,
           passwordHash: hashPassword(password),
           createdAt: now,
@@ -136,7 +162,65 @@ export function createSystemRoutes({
         draft.users.push(createdUser);
         return draft;
       });
-      sendJson(res, 201, { ok: true, user: sanitizeUser(createdUser) });
+      sendJson(res, existingUser ? 200 : 201, { ok: true, user: sanitizeUserForProject(createdUser, projectId) });
+      return true;
+    }
+
+    if (req.method === 'PATCH' && url.pathname.startsWith('/api/auth/users/')) {
+      if (typeof updateStore !== 'function') {
+        sendJson(res, 500, { ok: false, error: 'auth store is not writable' });
+        return true;
+      }
+      const userId = decodeURIComponent(url.pathname.split('/').pop() || '');
+      const { json } = await readBody(req);
+      const projectId = String(json?.projectId || '').trim();
+      if (!projectId || !userId) {
+        sendJson(res, 400, { ok: false, error: 'projectId and user id are required' });
+        return true;
+      }
+
+      const before = await loadStore();
+      const adminUser = getSessionUser(req, before.users || [], projectId);
+      if (!adminUser) {
+        sendJson(res, 403, { ok: false, error: 'forbidden' });
+        return true;
+      }
+
+      const target = (before.users || []).find((user) => user.id === userId) || null;
+      if (!target || !(target.projectIds || []).some((id) => id === '*' || id === projectId)) {
+        sendJson(res, 404, { ok: false, error: 'user not found' });
+        return true;
+      }
+      if (target.role === 'admin' && roleForProject(adminUser, projectId) !== 'admin') {
+        sendJson(res, 403, { ok: false, error: 'system admin account is protected' });
+        return true;
+      }
+
+      const nextRole = ['developer', 'project_admin'].includes(json?.role) ? json.role : undefined;
+      const hasActivePatch = typeof json?.active === 'boolean';
+      const nextPassword = typeof json?.password === 'string' && json.password ? json.password : '';
+      let updatedUser = null;
+      const now = new Date().toISOString();
+      await updateStore((draft) => {
+        draft.users = draft.users || [];
+        const index = draft.users.findIndex((user) => user.id === userId);
+        if (index === -1) return draft;
+        const current = draft.users[index];
+        const projectRoles = current.projectRoles && typeof current.projectRoles === 'object' ? current.projectRoles : {};
+        updatedUser = {
+          ...current,
+          role: current.role === 'admin' ? 'admin' : current.role,
+          projectRoles: current.role === 'admin'
+            ? projectRoles
+            : { ...projectRoles, ...(nextRole ? { [projectId]: nextRole } : {}) },
+          active: current.role === 'admin' ? true : (hasActivePatch ? json.active : current.active !== false),
+          passwordHash: nextPassword ? hashPassword(nextPassword) : current.passwordHash,
+          updatedAt: now
+        };
+        draft.users[index] = updatedUser;
+        return draft;
+      });
+      sendJson(res, 200, { ok: true, user: sanitizeUserForProject(updatedUser, projectId) });
       return true;
     }
 

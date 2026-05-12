@@ -123,6 +123,12 @@ body.authenticated .auth-shell {
   font-weight: 700;
 }
 
+.auth-form .auth-link-button {
+  background: transparent;
+  color: var(--blue);
+  border-color: var(--line);
+}
+
 .auth-form small {
   color: var(--muted);
   line-height: 1.5;
@@ -146,6 +152,82 @@ body.authenticated .auth-shell {
   border: 0;
   background: transparent;
   padding: 0;
+}
+
+.admin-register-form {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-register-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-register-form input,
+.admin-register-form select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.admin-user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.admin-user-row.is-disabled {
+  opacity: 0.62;
+}
+
+.admin-user-main {
+  display: grid;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.admin-user-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-user-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-user-controls select,
+.admin-user-controls button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.admin-user-controls button {
+  font-weight: 700;
 }
 
 .topbar {
