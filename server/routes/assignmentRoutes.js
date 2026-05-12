@@ -93,6 +93,7 @@ export function createAssignmentRoutes({
             task.completedBy = updated.owner;
             task.completedAt = updated.updatedAt;
             task.completionSource = 'assignment';
+            task.progressSource = 'manual';
             task.signal = updated.note || task.signal || '分工领取确认完成';
             task.updatedAt = updated.updatedAt;
           }

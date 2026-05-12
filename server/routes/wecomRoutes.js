@@ -333,7 +333,7 @@ export function createWeComRoutes({
       await updateStore((draft) => {
         const idx = (draft.tasks || []).findIndex((item) => item.id === task.id);
         if (idx >= 0) {
-          draft.tasks[idx] = normalizeTask({ ...draft.tasks[idx], progress: newProgress, status: newStatus });
+          draft.tasks[idx] = normalizeTask({ ...draft.tasks[idx], progress: newProgress, status: newStatus, progressSource: 'manual' });
         }
         return draft;
       });

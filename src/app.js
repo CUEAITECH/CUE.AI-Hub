@@ -1308,6 +1308,8 @@ function renderTaskDetail() {
   const assignmentDone = latestAssignment?.status === '已完成' || task.status === '已完成';
   const briefAge = latestAssignment ? Date.now() - new Date(latestAssignment.createdAt || 0).getTime() : 0;
   const progress = Number(task.progress) || 0;
+  const progressSource = task.progressSource || (task.completionSource ? 'manual' : 'auto');
+  const progressSourceLabel = progressSource === 'manual' ? '人工确认' : '自动进度';
   if (title) title.textContent = task.title;
   if (subtitle) {
     subtitle.textContent = `${task.owner || '未指定'} · ${task.status || '未知状态'} · 风险 ${task.risk || '未设置'} · 截止 ${task.due || task.dueDate || '未设置'}`;
@@ -1315,7 +1317,7 @@ function renderTaskDetail() {
 
   content.innerHTML = `
     <article class="task-detail-card task-detail-overview">
-      <span>任务状态</span>
+      <span>任务状态 · ${progressSourceLabel}</span>
       <div class="task-detail-status">
         <strong>${progress}%</strong>
         <div class="progress"><i style="width:${progress}%"></i></div>
@@ -1350,13 +1352,14 @@ function renderTaskDetail() {
       if (!sug) return '';
       const updatedAt = sug.updatedAt ? new Date(sug.updatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
       const aiProgress = Math.max(0, Math.min(100, Number(sug.progress) || 0));
-      const confirmedProgress = Math.max(0, Math.min(100, Number(sug.appliedProgress ?? task.progress) || 0));
-      const progressLabel = aiProgress === confirmedProgress
-        ? `${confirmedProgress}%`
-        : `AI估算 ${aiProgress}% / 当前确认 ${confirmedProgress}%`;
+      const systemProgress = Math.max(0, Math.min(100, Number(sug.appliedProgress ?? task.progress) || 0));
+      const systemLabel = progressSource === 'manual' ? '人工确认' : '自动进度';
+      const progressLabel = aiProgress === systemProgress
+        ? `${systemProgress}%`
+        : `AI估算 ${aiProgress}% / ${systemLabel} ${systemProgress}%`;
       return `<article class="task-detail-card task-ai-progress-card">
       <span>AI 进度判断 · ${progressLabel} <small>${updatedAt}</small></span>
-      ${aiProgress !== confirmedProgress ? '<p class="ai-progress-note">当前确认进度不会被 AI 自动调低；AI 估算仅作为复核参考。</p>' : ''}
+      ${aiProgress !== systemProgress ? `<p class="ai-progress-note">${systemLabel}不会被本次 AI 估算自动调低；AI 估算仅作为复核参考。</p>` : ''}
       ${sug.reason ? `<p class="ai-progress-reason"><strong>判断依据：</strong>${escapeHtml(sug.reason)}</p>` : ''}
       ${sug.hint ? `<p class="ai-progress-hint"><strong>提高进度需补充：</strong>${escapeHtml(sug.hint)}</p>` : ''}
       ${sug.suggestComplete ? '<p class="ai-progress-suggest">AI 建议标记为已完成，请在分工领取中确认。</p>' : ''}

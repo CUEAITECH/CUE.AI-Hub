@@ -40,6 +40,7 @@ export function createTaskRoutes({
           const newProgress = Math.max(0, Math.min(100, Number(result.progress) || 0));
           const appliedProgress = Math.max(task.progress || 0, newProgress);
           task.progress = appliedProgress;
+          task.progressSource = 'auto';
           task.aiProgressSuggestion = {
             progress: newProgress,
             appliedProgress,
@@ -64,11 +65,15 @@ export function createTaskRoutes({
       const nextStore = await updateStore((store) => {
         const index = store.tasks.findIndex((task) => task.id === id);
         if (index === -1) return store;
+        const manualPatch = Object.hasOwn(json || {}, 'progress')
+          || Object.hasOwn(json || {}, 'status')
+          || Object.hasOwn(json || {}, 'completionSource');
         store.tasks[index] = normalizeTask({
           ...store.tasks[index],
           ...json,
           id,
-          createdAt: store.tasks[index].createdAt
+          createdAt: store.tasks[index].createdAt,
+          progressSource: manualPatch ? 'manual' : store.tasks[index].progressSource
         });
         return store;
       });

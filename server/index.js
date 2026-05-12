@@ -175,7 +175,8 @@ function normalizeTask(input) {
     aiProgressSuggestion: input.aiProgressSuggestion || null,
     completedBy: input.completedBy || '',
     completedAt: input.completedAt || '',
-    completionSource: input.completionSource || ''
+    completionSource: input.completionSource || '',
+    progressSource: input.progressSource || (input.completionSource ? 'manual' : 'auto')
   };
 }
 
@@ -792,6 +793,7 @@ async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
           const newProgress = Math.max(0, Math.min(100, Number(r.progress) || 0));
           const appliedProgress = Math.max(task.progress || 0, newProgress);
           task.progress = appliedProgress;
+          task.progressSource = 'auto';
           task.aiProgressSuggestion = {
             progress: newProgress,
             appliedProgress,

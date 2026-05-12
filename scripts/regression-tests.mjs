@@ -375,6 +375,7 @@ await test('phase3.2 assignment completion confirms linked task completion', asy
   assert.equal(responsePayload.task.status, '已完成');
   assert.equal(responsePayload.task.progress, 100);
   assert.equal(store.tasks[0].completionSource, 'assignment');
+  assert.equal(store.tasks[0].progressSource, 'manual');
 });
 
 await test('task AI progress keeps confirmed progress while preserving AI estimate', async () => {
@@ -404,6 +405,7 @@ await test('task AI progress keeps confirmed progress while preserving AI estima
   const handled = await route({ method: 'POST' }, {}, new URL('http://localhost/api/tasks/ai-progress'));
   assert.equal(handled, true);
   assert.equal(responsePayload.tasks[0].progress, 70);
+  assert.equal(responsePayload.tasks[0].progressSource, 'auto');
   assert.equal(responsePayload.tasks[0].aiProgressSuggestion.progress, 40);
   assert.equal(responsePayload.tasks[0].aiProgressSuggestion.appliedProgress, 70);
 });
