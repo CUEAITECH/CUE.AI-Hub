@@ -12,19 +12,30 @@
         <div>
           <span class="eyebrow">CUE AI Project Hub</span>
           <h1>进入项目中枢</h1>
-          <p>使用内部账号登录后进入项目中枢。项目上下文会自动跟随当前团队默认项目。</p>
+          <p>???????????????????????????????????</p>
         </div>
         <form class="auth-form" id="loginForm">
           <label>
-            <span>账号</span>
-            <input id="loginUsername" type="text" autocomplete="username" placeholder="项目管理员或开发账号" required />
+            <span>账号 / 手机号 / 邮箱</span>
+            <input id="loginUsername" type="text" autocomplete="username" placeholder="登录账号、已绑定手机号或邮箱" required />
           </label>
-          <label>
+          <div class="auth-mode-switch" role="group" aria-label="登录方式">
+            <button type="button" class="active" data-login-mode="password">密码登录</button>
+            <button type="button" data-login-mode="email">邮箱验证码</button>
+          </div>
+          <label id="loginPasswordField">
             <span>密码</span>
             <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••" required />
           </label>
+          <div class="auth-code-field" id="loginEmailCodeField" hidden>
+            <label>
+              <span>邮箱验证码</span>
+              <input id="loginEmailCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" />
+            </label>
+            <button type="button" class="auth-secondary-button" data-action="send-login-email-code">获取验证码</button>
+          </div>
           <button type="submit">进入 Hub</button>
-          <small id="loginHint">登录后可在个人中心查看当前账号与项目。</small>
+          <small id="loginHint">???????????????????</small>
         </form>
       </div>
     </section>
@@ -63,7 +74,7 @@
                 <button class="nav-item" type="button" data-route="automation" role="menuitem">自动提醒</button>
               </div>
             </div>
-            <button class="nav-item nav-primary" type="button" data-route="personal-center" data-nav-parent="personal">个人中心</button>
+            <button class="nav-item nav-primary" type="button" data-route="personal-center" data-nav-parent="personal">&#20010;&#20154;&#20013;&#24515;</button>
           </nav>
           <div class="topbar-actions">
             <span class="status-pill" id="syncStatus">API 未连接</span>
@@ -78,9 +89,13 @@
         <section class="view active" id="overview">
           <section class="dashboard-grid">
             <article class="dashboard-title-card">
-              <span class="eyebrow">AI 研发项目指挥中心</span>
-              <h1>CUE 项目中枢</h1>
-              <p>阶段目标、分工、Git 提交、代码审阅、站会和风险提醒的研发交付闭环。</p>
+              <div class="dashboard-title-head">
+                <div>
+                  <span class="eyebrow">AI 研发项目指挥中心</span>
+                  <h1>CUE 项目中枢</h1>
+                  <p>阶段目标、分工、Git 提交、代码审阅、站会和风险提醒的研发交付闭环。</p>
+                </div>
+              </div>
             </article>
 
             <article class="health-card dashboard-health">
@@ -347,39 +362,40 @@
           </section>
         </section>
 
-        <!-- 个人中心 -->
+        <!-- 晚会闭环 -->
+        
         <section class="view" id="personal-center">
           <section class="workspace-shell">
             <div class="workspace-header">
               <div>
-                <span class="workspace-kicker">个人中心</span>
-                <h2>账号设置</h2>
-                <p>查看当前登录身份、项目权限，并在需要时退出登录。</p>
+                <span class="workspace-kicker">&#20010;&#20154;&#20013;&#24515;</span>
+                <h2>&#36134;&#21495;&#35774;&#32622;</h2>
+                <p>&#26597;&#30475;&#24403;&#21069;&#30331;&#24405;&#36523;&#20221;&#12289;&#39033;&#30446;&#26435;&#38480;&#65292;&#24182;&#31649;&#29702;&#23494;&#30721;&#12289;&#25163;&#26426;&#21495;&#12289;&#37038;&#31665;&#21644;&#30331;&#24405;&#29366;&#24577;&#12290;</p>
               </div>
               <div class="workspace-actions">
-                <button type="button" data-action="logout">退出登录</button>
+                <button type="button" id="accountSettingsBtn" class="account-settings-btn">&#36134;&#21495;&#35774;&#32622;</button>
+                <button type="button" id="logoutBtn" class="logout-btn">&#36864;&#20986;&#30331;&#24405;</button>
               </div>
             </div>
             <div class="workspace-grid workspace-grid-single">
               <article class="workspace-card">
                 <div class="workspace-card-head">
-                  <span>当前账号</span>
-                  <strong id="profileUserName">未登录</strong>
-                  <small id="profileUserMeta">暂无账号信息</small>
+                  <span>&#24403;&#21069;&#36134;&#21495;</span>
+                  <strong id="profileUserName">&#26410;&#30331;&#24405;</strong>
+                  <small id="profileUserMeta">&#26242;&#26080;&#36134;&#21495;&#20449;&#24687;</small>
                 </div>
                 <div class="profile-settings">
                   <label>
-                    <span>当前项目</span>
+                    <span>&#24403;&#21069;&#39033;&#30446;</span>
                     <select id="profileProjectSelect" data-project-switcher></select>
                   </label>
-                  <p class="muted-line">切换项目后，任务、分工、账号名单都会刷新到对应项目。</p>
+                  <p class="muted-line">&#20999;&#25442;&#39033;&#30446;&#21518;&#65292;&#20219;&#21153;&#12289;&#20998;&#24037;&#12289;&#36134;&#21495;&#21517;&#21333;&#37117;&#20250;&#21047;&#26032;&#21040;&#23545;&#24212;&#39033;&#30446;&#12290;</p>
                 </div>
               </article>
             </div>
           </section>
         </section>
 
-        <!-- 晚会闭环 -->
         <section class="view" id="meeting">
           <section class="meeting-command">
             <div class="meeting-hero">
@@ -751,6 +767,121 @@
           </section>
         </section>
       </main>
+    </div>
+
+    <!-- 账号设置 Modal：个人改密 + 绑定手机号 -->
+    <div class="modal-backdrop" id="accountSettingsBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="accountSettingsTitle">
+      <div class="modal account-settings-modal">
+        <div class="modal-head">
+          <h2 id="accountSettingsTitle">账号设置</h2>
+          <button type="button" class="modal-close" data-action="close-account-settings" aria-label="关闭">✕</button>
+        </div>
+        <div class="account-settings-body">
+          <section class="account-settings-section">
+            <h3>个人资料</h3>
+            <dl class="account-settings-info">
+              <div><dt>姓名</dt><dd id="accountSettingsName">—</dd></div>
+              <div><dt>登录账号</dt><dd id="accountSettingsUsername">—</dd></div>
+              <div><dt>当前手机号</dt><dd id="accountSettingsPhoneCurrent">未绑定</dd></div>
+              <div><dt>当前邮箱</dt><dd id="accountSettingsEmailCurrent">未绑定</dd></div>
+            </dl>
+          </section>
+
+          <section class="account-settings-section">
+            <h3>修改密码</h3>
+            <form class="account-settings-form" id="changePasswordForm" autocomplete="off">
+              <label>
+                <span>当前密码</span>
+                <input type="password" id="currentPasswordInput" autocomplete="current-password" required />
+              </label>
+              <label>
+                <span>新密码（≥ 6 位）</span>
+                <input type="password" id="newPasswordInput" autocomplete="new-password" minlength="6" required />
+              </label>
+              <label>
+                <span>确认新密码</span>
+                <input type="password" id="newPasswordConfirmInput" autocomplete="new-password" minlength="6" required />
+              </label>
+              <button type="submit" class="modal-primary">保存新密码</button>
+              <p class="account-settings-hint" id="changePasswordHint"></p>
+            </form>
+          </section>
+
+          <section class="account-settings-section">
+            <h3>绑定手机号</h3>
+            <p class="account-settings-desc">绑定后可用手机号登录。手机号需在所有账号中唯一，仅本人可见。</p>
+            <form class="account-settings-form" id="bindPhoneForm" autocomplete="off">
+              <label>
+                <span>手机号（留空则清除当前绑定）</span>
+                <input type="tel" id="newPhoneInput" autocomplete="tel" placeholder="例如 13812345678 或 +8613812345678" />
+              </label>
+              <div class="account-settings-code-row">
+                <label>
+                  <span>验证码</span>
+                  <input type="text" id="bindPhoneCodeInput" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" />
+                </label>
+                <button type="button" class="modal-secondary" data-action="send-bind-phone-code">获取验证码</button>
+              </div>
+              <button type="submit" class="modal-primary">保存手机号</button>
+              <p class="account-settings-hint" id="bindPhoneHint"></p>
+            </form>
+          </section>
+
+          <section class="account-settings-section">
+            <h3>绑定邮箱</h3>
+            <p class="account-settings-desc">绑定后可用邮箱验证码登录。邮箱需在所有账号中唯一。</p>
+            <form class="account-settings-form" id="bindEmailForm" autocomplete="off">
+              <label>
+                <span>邮箱（留空则清除当前绑定）</span>
+                <input type="email" id="newEmailInput" autocomplete="email" placeholder="例如 noreply@cueai.top" />
+              </label>
+              <div class="account-settings-code-row">
+                <label>
+                  <span>验证码</span>
+                  <input type="text" id="bindEmailCodeInput" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" />
+                </label>
+                <button type="button" class="modal-secondary" data-action="send-bind-email-code">获取验证码</button>
+              </div>
+              <button type="submit" class="modal-primary">保存邮箱</button>
+              <p class="account-settings-hint" id="bindEmailHint"></p>
+            </form>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- 权限调整 Modal -->
+    <div class="modal-backdrop" id="roleModalBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="roleModalTitle">
+      <div class="modal role-modal">
+        <div class="modal-head">
+          <h2 id="roleModalTitle">调整成员权限</h2>
+          <button type="button" class="modal-close" data-action="close-role-modal" aria-label="关闭">✕</button>
+        </div>
+        <div class="role-modal-body">
+          <p class="role-modal-target">为 <strong id="roleModalTargetName">—</strong>（<span id="roleModalTargetHandle">—</span>） 调整本项目内的权限等级</p>
+          <div class="role-choice-list">
+            <label class="role-choice" data-role="project_admin">
+              <input type="radio" name="roleChoice" value="project_admin" />
+              <div>
+                <strong>项目管理员</strong>
+                <p>可创建账号、停用账号、重置密码；<u>不能</u>调整他人权限或转移创始人。适合日常协助管理项目成员的同事。</p>
+              </div>
+            </label>
+            <label class="role-choice" data-role="developer">
+              <input type="radio" name="roleChoice" value="developer" />
+              <div>
+                <strong>项目开发者</strong>
+                <p>普通成员，可领取任务、提交代码、参与晚会闭环，无账号管理权限。新加入项目的人默认是此等级。</p>
+              </div>
+            </label>
+          </div>
+          <p class="role-modal-hint">⚠️ 只有项目创始人能调整权限。调整后立即生效。</p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" data-action="close-role-modal" class="modal-secondary">取消</button>
+          <button type="button" data-action="confirm-role-change" class="modal-primary">确认调整</button>
+        </div>
+      </div>
     </div>
 
     <!-- 任务编辑 Modal -->

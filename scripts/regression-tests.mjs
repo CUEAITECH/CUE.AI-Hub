@@ -1192,6 +1192,341 @@ await test('reset-roadmap route strips task/activity/assignment deliverableId fo
   assert.equal(store.docTasks?.cue_ai_classroom, undefined, 'docTasks 应当被清空');
 });
 
+await test('migrateStore backfills project.founderId from project_admin or system admin', () => {
+  const migrated = migrateStore({
+    projects: [{ id: 'p1', name: 'Test', githubFullRepo: 'a/b' }],
+    users: [
+      { id: 'user_a', username: 'alice', role: 'developer', projectIds: ['p1'], projectRoles: { p1: 'project_admin' }, passwordHash: 'x' },
+      { id: 'user_b', username: 'bob', role: 'developer', projectIds: ['p1'], projectRoles: { p1: 'developer' }, passwordHash: 'x' }
+    ]
+  });
+  const project = migrated.projects.find((p) => p.id === 'p1');
+  assert.ok(project.founderId, 'founderId 应当被补齐');
+  assert.equal(project.founderId, 'user_a', '应当选项目内 project_admin 作为创始人');
+});
+
+await test('system admin user is hidden from non-admin callers in GET /api/auth/users', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_pa' }],
+    users: [
+      { id: 'user_admin', username: 'sysadmin', role: 'admin', projectIds: ['*'], projectRoles: { '*': 'admin' }, passwordHash: 'x', active: true },
+      { id: 'user_pa', username: 'pa', name: 'PA', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_dev', username: 'dev', name: 'Dev', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const paUser = store.users.find((u) => u.id === 'user_pa');
+  const token = createSessionToken(paUser, 'cue_ai_classroom');
+  let payload = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    sendJson: (_r, _s, p) => { payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route(
+    { method: 'GET', headers: { authorization: `Bearer ${token}` } },
+    {},
+    new URL('http://localhost/api/auth/users?projectId=cue_ai_classroom')
+  );
+  const usernames = (payload.users || []).map((u) => u.username);
+  assert.ok(!usernames.includes('sysadmin'), '系统管理员对项目管理员不可见');
+  assert.ok(usernames.includes('pa'), '项目管理员对自己可见');
+  assert.ok(usernames.includes('dev'), '开发者对项目管理员可见');
+  const founder = payload.users.find((u) => u.username === 'pa');
+  assert.equal(founder.isFounder, true, '创始人应携带 isFounder=true');
+});
+
+await test('PATCH /api/auth/users blocks role change by non-founder project admin', async () => {
+  // 即使是另一个项目管理员，也不能把开发者提为项目管理员（或反之）。
+  // 只有项目创始人能调权限等级。
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_founder' }],
+    users: [
+      { id: 'user_founder', username: 'founder', name: 'Founder', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_admin2', username: 'admin2', name: 'Admin2', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_dev', username: 'dev', name: 'Dev', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const admin2 = store.users.find((u) => u.id === 'user_admin2');
+  const token = createSessionToken(admin2, 'cue_ai_classroom');
+  let payload = null; let status = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom', role: 'project_admin' } }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route(
+    { method: 'PATCH', headers: { authorization: `Bearer ${token}` } },
+    {},
+    new URL('http://localhost/api/auth/users/user_dev')
+  );
+  assert.equal(status, 403);
+  assert.match(payload.error, /only project founder can change role/);
+  // 开发者角色没变
+  assert.equal(store.users.find((u) => u.id === 'user_dev').projectRoles.cue_ai_classroom, 'developer');
+});
+
+await test('PATCH /api/auth/users allows role change by project founder', async () => {
+  // 创始人能正常调整他人角色
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_founder' }],
+    users: [
+      { id: 'user_founder', username: 'founder', name: 'Founder', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_dev', username: 'dev', name: 'Dev', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const founder = store.users.find((u) => u.id === 'user_founder');
+  const token = createSessionToken(founder, 'cue_ai_classroom');
+  let status = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom', role: 'project_admin' } }),
+    sendJson: (_r, s) => { status = s; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route(
+    { method: 'PATCH', headers: { authorization: `Bearer ${token}` } },
+    {},
+    new URL('http://localhost/api/auth/users/user_dev')
+  );
+  assert.equal(status, 200);
+  assert.equal(store.users.find((u) => u.id === 'user_dev').projectRoles.cue_ai_classroom, 'project_admin');
+});
+
+await test('PATCH /api/auth/users blocks role change on project founder', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_founder' }],
+    users: [
+      { id: 'user_founder', username: 'founder', name: 'Founder', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_admin2', username: 'admin2', name: 'Admin2', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const admin2 = store.users.find((u) => u.id === 'user_admin2');
+  const token = createSessionToken(admin2, 'cue_ai_classroom');
+  let payload = null; let status = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom', role: 'developer' } }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route(
+    { method: 'PATCH', headers: { authorization: `Bearer ${token}` } },
+    {},
+    new URL('http://localhost/api/auth/users/user_founder')
+  );
+  assert.equal(status, 403, '另一个项目管理员不能降级创始人');
+  assert.match(payload.error, /founder is protected/);
+  // 创始人角色没变
+  assert.equal(store.users.find((u) => u.id === 'user_founder').projectRoles.cue_ai_classroom, 'project_admin');
+});
+
+await test('PATCH /api/auth/me changes own password only with correct current password', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken, hashPassword, verifyPassword } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_me' }],
+    users: [
+      { id: 'user_me', username: 'alice', name: 'A', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('oldpass'), active: true }
+    ]
+  });
+  const me = store.users.find((u) => u.id === 'user_me');
+  const token = createSessionToken(me, 'cue_ai_classroom');
+  let status = null; let payload = null;
+  let bodyJson = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: bodyJson }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+
+  // 错误的当前密码 → 403
+  bodyJson = { currentPassword: 'wrong', newPassword: 'newpass1' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 403);
+  assert.match(payload.error, /current password is incorrect/);
+  // 密码未变
+  assert.ok(verifyPassword('oldpass', store.users.find((u) => u.id === 'user_me').passwordHash));
+
+  // 正确的当前密码 → 200，新密码生效
+  bodyJson = { currentPassword: 'oldpass', newPassword: 'newpass1' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 200);
+  assert.ok(verifyPassword('newpass1', store.users.find((u) => u.id === 'user_me').passwordHash));
+  assert.ok(!verifyPassword('oldpass', store.users.find((u) => u.id === 'user_me').passwordHash));
+});
+
+await test('PATCH /api/auth/me verifies code before binding phone and allows SMS login', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken, findUserForProject, hashPassword, verifyPassword } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_alice' }],
+    users: [
+      { id: 'user_alice', username: 'alice', name: 'A', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('p'), active: true },
+      { id: 'user_bob', username: 'bob', name: 'B', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('p'), phone: '13800000001', active: true }
+    ]
+  });
+  const alice = store.users.find((u) => u.id === 'user_alice');
+  const token = createSessionToken(alice, 'cue_ai_classroom');
+  let status = null; let payload = null;
+  let bodyJson = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: bodyJson }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+
+  // 与别人重复 → 409
+  bodyJson = { phone: '13800000001' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 409);
+
+  // 非法格式 → 400
+  bodyJson = { phone: 'abc' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 400);
+
+  // 合法手机号但无验证码 → 403
+  bodyJson = { phone: '138 1234-5678' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 403);
+
+  // 先发绑定验证码，再提交绑定
+  bodyJson = { phone: '138 1234-5678', purpose: 'bind_phone' };
+  await route({ method: 'POST', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/phone-code'));
+  assert.equal(status, 200);
+  const bindCode = payload.devCode;
+  bodyJson = { phone: '138 1234-5678', phoneCode: bindCode }; // 含格式字符，应被 normalize
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 200);
+  assert.equal(payload.user.phone, '13812345678');
+  // findUserForProject 可以通过手机号找到 alice
+  const found = findUserForProject(store.users, '13812345678', 'cue_ai_classroom');
+  assert.equal(found.id, 'user_alice');
+
+  // 手机号验证码登录
+  bodyJson = { phone: '13812345678', purpose: 'login', projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/phone-code'));
+  assert.equal(status, 200);
+  const loginCode = payload.devCode;
+  bodyJson = { username: '13812345678', phoneCode: loginCode, projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
+  assert.equal(status, 200);
+  assert.equal(payload.user.username, 'alice');
+  assert.equal(typeof payload.token, 'string');
+});
+
+await test('PATCH /api/auth/me verifies code before binding email and allows email code login', async () => {
+  const originalSmtp = {
+    SMTP_HOST: process.env.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT,
+    SMTP_USER: process.env.SMTP_USER,
+    SMTP_PASS: process.env.SMTP_PASS,
+    SMTP_FROM: process.env.SMTP_FROM
+  };
+  delete process.env.SMTP_HOST;
+  delete process.env.SMTP_PORT;
+  delete process.env.SMTP_USER;
+  delete process.env.SMTP_PASS;
+  delete process.env.SMTP_FROM;
+
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken, findUserForProject, hashPassword } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_alice' }],
+    users: [
+      { id: 'user_alice', username: 'alice', name: 'A', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('p'), active: true },
+      { id: 'user_bob', username: 'bob', name: 'B', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('p'), email: 'bob@example.com', active: true }
+    ]
+  });
+  const alice = store.users.find((u) => u.id === 'user_alice');
+  const token = createSessionToken(alice, 'cue_ai_classroom');
+  let status = null; let payload = null;
+  let bodyJson = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: bodyJson }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+
+  bodyJson = { email: 'bob@example.com' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 409);
+
+  bodyJson = { email: 'bad-email' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 400);
+
+  bodyJson = { email: 'alice@example.com' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 403);
+
+  bodyJson = { email: 'alice@example.com', purpose: 'bind_email' };
+  await route({ method: 'POST', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/email-code'));
+  assert.equal(status, 200);
+  assert.equal(payload.email, 'alice@example.com');
+  const bindCode = payload.devCode;
+  bodyJson = { email: 'Alice@Example.com', emailCode: bindCode };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 200);
+  assert.equal(payload.user.email, 'alice@example.com');
+  const found = findUserForProject(store.users, 'ALICE@example.com', 'cue_ai_classroom');
+  assert.equal(found.id, 'user_alice');
+
+  bodyJson = { email: 'alice@example.com', purpose: 'login', projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/email-code'));
+  assert.equal(status, 200);
+  const loginCode = payload.devCode;
+  bodyJson = { username: 'alice@example.com', emailCode: loginCode, projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
+  assert.equal(status, 200);
+  assert.equal(payload.user.username, 'alice');
+  assert.equal(typeof payload.token, 'string');
+
+  for (const [key, value] of Object.entries(originalSmtp)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
+
 await test('cleanup endpoint resets unclaimed task owner to 待认领 and stashes LLM suggestion', async () => {
   const { createPlanningRoutes } = await import('../server/routes/planningRoutes.js');
   let store = migrateStore({

@@ -36,6 +36,7 @@ const state = {
 let selectedTaskId = '';
 let selectedRiskId = '';
 let activeRiskTab = 'P1';
+let loginMode = 'password';
 const _submitting = new Set();
 
 // 防重复提交：key 相同的调用在前一次完成前直接忽略
@@ -242,6 +243,209 @@ function setAuthVisible(isAuthenticated) {
   document.body.classList.toggle('authenticated', state.isAuthenticated);
 }
 
+function logout() {
+  sessionStorage.removeItem('cueHubSessionToken');
+  sessionStorage.removeItem('cueHubAuthenticated');
+  sessionStorage.removeItem('cueHubUser');
+  sessionStorage.removeItem('cueHubUserRole');
+  // 整页重载，确保所有状态干净归零，回到登录页
+  window.location.reload();
+}
+
+async function openAccountSettings() {
+  const backdrop = document.querySelector('#accountSettingsBackdrop');
+  if (!backdrop) return;
+  // 拉当前账号的最新信息（手机号可能在别处改过）
+  const projectId = getCurrentProjectId();
+  let me = null;
+  try {
+    const payload = await api(`/api/auth/users?projectId=${encodeURIComponent(projectId)}`);
+    me = (payload.users || []).find((u) => u.username === currentSessionUsername()) || null;
+  } catch { /* 拉不到也允许打开（用户可能不是管理员看不到列表，但还是要能改自己密码） */ }
+  setText('#accountSettingsName', me?.name || currentSessionUsername() || '—');
+  setText('#accountSettingsUsername', me?.username || currentSessionUsername() || '—');
+  setText('#accountSettingsPhoneCurrent', me?.phone || '未绑定');
+  setText('#accountSettingsEmailCurrent', me?.email || '未绑定');
+  const phoneInput = document.querySelector('#newPhoneInput');
+  if (phoneInput) phoneInput.value = me?.phone || '';
+  const phoneCodeInput = document.querySelector('#bindPhoneCodeInput');
+  if (phoneCodeInput) phoneCodeInput.value = '';
+  const emailInput = document.querySelector('#newEmailInput');
+  if (emailInput) emailInput.value = me?.email || '';
+  const emailCodeInput = document.querySelector('#bindEmailCodeInput');
+  if (emailCodeInput) emailCodeInput.value = '';
+  setText('#changePasswordHint', '');
+  setText('#bindPhoneHint', '');
+  setText('#bindEmailHint', '');
+  document.querySelector('#changePasswordForm')?.reset();
+  backdrop.style.display = 'flex';
+}
+
+function closeAccountSettings() {
+  const backdrop = document.querySelector('#accountSettingsBackdrop');
+  if (backdrop) backdrop.style.display = 'none';
+}
+
+async function submitChangePassword(event) {
+  event.preventDefault();
+  const currentPassword = document.querySelector('#currentPasswordInput')?.value || '';
+  const newPassword = document.querySelector('#newPasswordInput')?.value || '';
+  const confirm = document.querySelector('#newPasswordConfirmInput')?.value || '';
+  const hint = document.querySelector('#changePasswordHint');
+  if (newPassword !== confirm) {
+    if (hint) hint.textContent = '两次新密码不一致';
+    return;
+  }
+  if (newPassword.length < 6) {
+    if (hint) hint.textContent = '新密码至少 6 位';
+    return;
+  }
+  try {
+    await api('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    if (hint) hint.textContent = '✅ 密码已更新';
+    toast('密码已更新，请下次登录使用新密码');
+    document.querySelector('#changePasswordForm')?.reset();
+  } catch (error) {
+    if (hint) hint.textContent = error.message === 'current password is incorrect' ? '当前密码不正确' : `失败：${error.message}`;
+  }
+}
+
+async function submitBindPhone(event) {
+  event.preventDefault();
+  const phone = document.querySelector('#newPhoneInput')?.value.trim() || '';
+  const phoneCode = document.querySelector('#bindPhoneCodeInput')?.value.trim() || '';
+  const hint = document.querySelector('#bindPhoneHint');
+  if (phone && !phoneCode) {
+    if (hint) hint.textContent = '请先获取并填写验证码';
+    return;
+  }
+  try {
+    const payload = await api('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ phone, phoneCode })
+    });
+    const saved = payload.user?.phone || '';
+    if (hint) hint.textContent = saved ? `✅ 已绑定 ${saved}，可用于登录` : '✅ 已清除手机号绑定';
+    setText('#accountSettingsPhoneCurrent', saved || '未绑定');
+    toast(saved ? '手机号已绑定' : '手机号绑定已清除');
+  } catch (error) {
+    if (hint) {
+      if (error.message === 'invalid phone number') hint.textContent = '手机号格式不正确';
+      else if (error.message === 'phone already bound to another account') hint.textContent = '该手机号已被其他账号绑定';
+      else if (error.message === 'invalid verification code') hint.textContent = '验证码不正确或已过期';
+      else hint.textContent = `失败：${error.message}`;
+    }
+  }
+}
+
+async function submitBindEmail(event) {
+  event.preventDefault();
+  const email = document.querySelector('#newEmailInput')?.value.trim() || '';
+  const emailCode = document.querySelector('#bindEmailCodeInput')?.value.trim() || '';
+  const hint = document.querySelector('#bindEmailHint');
+  if (email && !emailCode) {
+    if (hint) hint.textContent = '请先获取并填写验证码';
+    return;
+  }
+  try {
+    const payload = await api('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ email, emailCode })
+    });
+    const saved = payload.user?.email || '';
+    if (hint) hint.textContent = saved ? `✅ 已绑定 ${saved}，可用于邮箱验证码登录` : '✅ 已清除邮箱绑定';
+    setText('#accountSettingsEmailCurrent', saved || '未绑定');
+    toast(saved ? '邮箱已绑定' : '邮箱绑定已清除');
+  } catch (error) {
+    if (hint) {
+      if (error.message === 'invalid email address') hint.textContent = '邮箱格式不正确';
+      else if (error.message === 'email already bound to another account') hint.textContent = '该邮箱已被其他账号绑定';
+      else if (error.message === 'invalid verification code') hint.textContent = '验证码不正确或已过期';
+      else hint.textContent = `失败：${error.message}`;
+    }
+  }
+}
+
+function setLoginMode(mode) {
+  loginMode = mode === 'email' ? 'email' : 'password';
+  document.querySelectorAll('[data-login-mode]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.loginMode === loginMode);
+  });
+  const passwordField = document.querySelector('#loginPasswordField');
+  const passwordInput = document.querySelector('#loginPassword');
+  const emailCodeField = document.querySelector('#loginEmailCodeField');
+  const emailCodeInput = document.querySelector('#loginEmailCode');
+  if (passwordField) passwordField.hidden = loginMode !== 'password';
+  if (passwordInput) passwordInput.required = loginMode === 'password';
+  if (emailCodeField) emailCodeField.hidden = loginMode !== 'email';
+  if (emailCodeInput) emailCodeInput.required = loginMode === 'email';
+  const hintText = loginMode === 'email'
+      ? '??????????????????'
+      : '???????????????????';
+  setText('#loginHint', hintText);
+}
+
+async function sendLoginPhoneCode() {
+  const projectId = getCurrentProjectId();
+  const phone = document.querySelector('#loginUsername')?.value.trim() || '';
+  if (!projectId) { toast('请选择项目'); return; }
+  if (!phone) { setText('#loginHint', '请先输入已绑定手机号。'); return; }
+  const payload = await api('/api/auth/phone-code', {
+    method: 'POST',
+    body: JSON.stringify({ phone, projectId, purpose: 'login' })
+  });
+  const suffix = payload.devCode ? ` 验证码：${payload.devCode}` : '';
+  setText('#loginHint', `验证码已发送，10 分钟内有效。${suffix}`);
+  toast('验证码已发送');
+}
+
+async function sendLoginEmailCode() {
+  const projectId = getCurrentProjectId();
+  const email = document.querySelector('#loginUsername')?.value.trim() || '';
+  if (!projectId) { toast('请选择项目'); return; }
+  if (!email) { setText('#loginHint', '请先输入已绑定邮箱。'); return; }
+  const payload = await api('/api/auth/email-code', {
+    method: 'POST',
+    body: JSON.stringify({ email, projectId, purpose: 'login' })
+  });
+  const suffix = payload.devCode ? ` 验证码：${payload.devCode}` : '';
+  setText('#loginHint', `验证码已发送到邮箱，10 分钟内有效。${suffix}`);
+  toast('邮箱验证码已发送');
+}
+
+async function sendBindPhoneCode() {
+  const phone = document.querySelector('#newPhoneInput')?.value.trim() || '';
+  const hint = document.querySelector('#bindPhoneHint');
+  if (!phone) {
+    if (hint) hint.textContent = '请输入要绑定的手机号';
+    return;
+  }
+  const payload = await api('/api/auth/phone-code', {
+    method: 'POST',
+    body: JSON.stringify({ phone, purpose: 'bind_phone' })
+  });
+  if (hint) hint.textContent = `验证码已发送，10 分钟内有效。${payload.devCode ? `验证码：${payload.devCode}` : ''}`;
+  toast('验证码已发送');
+}
+
+async function sendBindEmailCode() {
+  const email = document.querySelector('#newEmailInput')?.value.trim() || '';
+  const hint = document.querySelector('#bindEmailHint');
+  if (!email) {
+    if (hint) hint.textContent = '请输入要绑定的邮箱';
+    return;
+  }
+  const payload = await api('/api/auth/email-code', {
+    method: 'POST',
+    body: JSON.stringify({ email, purpose: 'bind_email' })
+  });
+  if (hint) hint.textContent = `验证码已发送到邮箱，10 分钟内有效。${payload.devCode ? `验证码：${payload.devCode}` : ''}`;
+  toast('邮箱验证码已发送');
+}
+
 async function loadLoginProjects() {
   const payload = await api('/api/projects');
   state.projects = payload.projects || [];
@@ -254,10 +458,14 @@ async function login(event) {
   const projectId = getCurrentProjectId();
   const username = document.querySelector('#loginUsername')?.value.trim() || '';
   const password = document.querySelector('#loginPassword')?.value || '';
+  const emailCode = document.querySelector('#loginEmailCode')?.value.trim() || '';
   if (!projectId) { toast('请选择项目'); return; }
+  if (loginMode === 'email' && !emailCode) { setText('#loginHint', '请输入邮箱验证码。'); return; }
   const payload = await api('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password, projectId })
+    body: JSON.stringify(loginMode === 'email'
+        ? { username, emailCode, projectId }
+        : { username, password, projectId })
   });
   sessionStorage.setItem('cueHubSessionToken', payload.token || '');
   sessionStorage.setItem('cueHubAuthenticated', 'true');
@@ -274,7 +482,6 @@ async function login(event) {
   }
 }
 
-
 function currentSessionRole() {
   return sessionStorage.getItem('cueHubUserRole') || 'developer';
 }
@@ -287,6 +494,10 @@ function roleLabel(role) {
   if (role === 'admin') return '系统管理员';
   if (role === 'project_admin') return '项目管理员';
   return '项目开发者';
+}
+
+function currentSessionUsername() {
+  return sessionStorage.getItem('cueHubUser') || '';
 }
 
 async function loadProjectUsers() {
@@ -310,28 +521,115 @@ async function renderAccountAdmin() {
   }
   try {
     const users = await loadProjectUsers();
-    list.innerHTML = users.length
-      ? users.map((user) => `
-        <div class="admin-user-row ${user.active === false ? 'is-disabled' : ''}" data-user-id="${escapeHtml(user.id)}">
-          <div class="admin-user-main">
-            <strong>${escapeHtml(user.name || user.username)}</strong>
-            <span>${escapeHtml(user.username)} · ${roleLabel(user.projectRole || user.role)} · ${user.active === false ? '已停用' : '已启用'}</span>
+    const callerUsername = currentSessionUsername();
+    // 当前调用者是否为本项目创始人——决定他能否看到「权限调整」按钮
+    const callerIsFounder = isAdmin && users.some((u) => u.username === callerUsername && u.isFounder);
+    // 创始人排在最前面，剩下按角色排：项目管理员 > 开发者
+    const sortedUsers = [...users].sort((a, b) => {
+      if (a.isFounder !== b.isFounder) return a.isFounder ? -1 : 1;
+      const aIsAdmin = (a.projectRole || a.role) === 'project_admin';
+      const bIsAdmin = (b.projectRole || b.role) === 'project_admin';
+      if (aIsAdmin !== bIsAdmin) return aIsAdmin ? -1 : 1;
+      return 0;
+    });
+    list.innerHTML = sortedUsers.length
+      ? sortedUsers.map((user) => {
+        const isFounder = Boolean(user.isFounder);
+        const isSelfFounder = isFounder && user.username === callerUsername;
+        const role = user.projectRole || user.role;
+        // 创始人是独立的最高权限等级：UI 上不再展示"项目管理员"角色，直接显示"创始人"
+        const displayRole = isFounder ? '创始人' : roleLabel(role);
+        const roleTone = isFounder ? 'founder' : role === 'project_admin' ? 'admin' : 'developer';
+        return `
+        <div class="admin-user-card ${user.active === false ? 'is-disabled' : ''} ${isFounder ? 'is-founder' : ''}" data-user-id="${escapeHtml(user.id)}">
+          <div class="admin-user-card-head">
+            <div class="admin-user-identity">
+              <strong>${escapeHtml(user.name || user.username)}</strong>
+              <span class="admin-user-handle">@${escapeHtml(user.username)}</span>
+            </div>
+            <span class="admin-user-role-pill admin-user-role-${roleTone}">${displayRole}</span>
           </div>
-          ${isAdmin ? `<div class="admin-user-controls">
-            <select data-action="update-user-role" ${user.role === 'admin' ? 'disabled' : ''}>
-              <option value="developer" ${(user.projectRole || user.role) === 'developer' ? 'selected' : ''}>项目开发者</option>
-              <option value="project_admin" ${(user.projectRole || user.role) === 'project_admin' ? 'selected' : ''}>项目管理员</option>
-            </select>
-            <button type="button" data-action="toggle-user-active" ${user.role === 'admin' ? 'disabled' : ''}>
-              ${user.active === false ? '启用' : '停用'}
-            </button>
-            <button type="button" data-action="reset-user-password" ${user.role === 'admin' ? 'disabled' : ''}>重置密码</button>
+          <div class="admin-user-card-status">
+            <span class="admin-user-status-dot admin-user-status-${user.active === false ? 'off' : 'on'}"></span>
+            <span>${user.active === false ? '已停用' : '已启用'}</span>
+          </div>
+          ${isAdmin ? `<div class="admin-user-card-actions">
+            ${isFounder
+              ? `<span class="admin-user-locked-hint">创始人角色受保护，调整请使用「转移创始人」</span>`
+              : `${callerIsFounder
+                  ? `<button type="button" data-action="open-role-change" data-target-name="${escapeHtml(user.name || user.username)}" data-target-handle="${escapeHtml(user.username)}" data-current-role="${escapeHtml(role)}">权限调整</button>`
+                  : ''}
+                <button type="button" data-action="toggle-user-active">
+                  ${user.active === false ? '启用' : '停用'}
+                </button>`}
+            ${isSelfFounder ? '<button type="button" data-action="transfer-founder" class="admin-user-btn-danger">转移创始人</button>' : ''}
           </div>` : ''}
         </div>
-      `).join('')
+      `;
+      }).join('')
       : '<div class="empty-state">当前项目还没有账号。</div>';
   } catch (error) {
     list.innerHTML = `<div class="empty-state">${escapeHtml(error.message || '账号列表加载失败')}</div>`;
+  }
+}
+
+let _roleChangeContext = null;
+
+function openRoleChangeModal({ userId, targetName, targetHandle, currentRole }) {
+  _roleChangeContext = { userId, currentRole };
+  const backdrop = document.querySelector('#roleModalBackdrop');
+  if (!backdrop) return;
+  setText('#roleModalTargetName', targetName);
+  setText('#roleModalTargetHandle', `@${targetHandle}`);
+  // 默认选中当前角色，让用户清楚现在是什么
+  backdrop.querySelectorAll('input[name="roleChoice"]').forEach((radio) => {
+    radio.checked = radio.value === currentRole;
+  });
+  backdrop.style.display = 'flex';
+}
+
+function closeRoleChangeModal() {
+  const backdrop = document.querySelector('#roleModalBackdrop');
+  if (backdrop) backdrop.style.display = 'none';
+  _roleChangeContext = null;
+}
+
+async function confirmRoleChange() {
+  if (!_roleChangeContext) return;
+  const checked = document.querySelector('input[name="roleChoice"]:checked');
+  if (!checked) {
+    toast('请先选择一个权限等级');
+    return;
+  }
+  const nextRole = checked.value;
+  const { userId, currentRole } = _roleChangeContext;
+  if (nextRole === currentRole) {
+    toast('权限未变化，无需调整');
+    closeRoleChangeModal();
+    return;
+  }
+  try {
+    await updateProjectUserFromAdminPage(userId, { role: nextRole });
+    closeRoleChangeModal();
+  } catch (error) {
+    toast(`❌ 调整失败：${error.message}`);
+  }
+}
+
+async function transferFounder() {
+  const projectId = getCurrentProjectId();
+  const targetUsername = window.prompt('请输入新创始人的登录账号（必须是该项目的现有成员）：');
+  if (!targetUsername) return;
+  if (!window.confirm(`确认把 ${projectId} 项目的创始人权限转移给 ${targetUsername}？\n\n转移后你将不再是创始人，但仍保留项目管理员角色。`)) return;
+  try {
+    const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/transfer-founder`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUsername: targetUsername.trim() })
+    });
+    toast(`✅ 创始人已转移给 ${payload.newFounderUsername}`);
+    await renderAccountAdmin();
+  } catch (error) {
+    toast(`❌ 转移失败：${error.message}`);
   }
 }
 
@@ -363,23 +661,12 @@ async function updateProjectUserFromAdminPage(userId, patch) {
   await renderAccountAdmin();
 }
 
-function requestAccountAdminLogin() {
-  if (state.isAuthenticated) {
-    setRoute('account-admin');
-    return;
-  }
-  sessionStorage.setItem('cueHubPostLoginRoute', 'account-admin');
-  const usernameInput = document.querySelector('#loginUsername');
-  if (usernameInput && !usernameInput.value) usernameInput.value = 'admin';
-  setText('#loginHint', '请使用系统管理员账号 admin / 123456 登录后进入账号管理。');
-}
-
 function renderPersonalCenter() {
-  const username = sessionStorage.getItem('cueHubUser') || '未登录';
+  const username = sessionStorage.getItem('cueHubUser') || '???';
   const role = currentSessionRole();
   const projectName = state.currentProject?.name || getCurrentProjectId();
   setText('#profileUserName', username);
-  setText('#profileUserMeta', `${roleLabel(role)} · ${projectName || '暂无项目'}`);
+  setText('#profileUserMeta', `${roleLabel(role)} ? ${projectName || '????'}`);
   renderProjectSwitcher();
 }
 
@@ -390,16 +677,6 @@ async function switchProfileProject(event) {
   await loadState();
   renderPersonalCenter();
   setRoute('overview');
-}
-
-function logout() {
-  sessionStorage.removeItem('cueHubSessionToken');
-  sessionStorage.removeItem('cueHubAuthenticated');
-  sessionStorage.removeItem('cueHubUser');
-  sessionStorage.removeItem('cueHubUserRole');
-  sessionStorage.removeItem('cueHubPostLoginRoute');
-  setAuthVisible(false);
-  setText('#loginHint', '已退出登录。');
 }
 
 function getTodayAssignments() {
@@ -2741,9 +3018,65 @@ function toast(message) {
 // ── 事件绑定 ─────────────────────────────────────────────────
 
 function bindEvents() {
+  setLoginMode(loginMode);
+  document.querySelectorAll('[data-login-mode]').forEach((button) => {
+    button.addEventListener('click', () => setLoginMode(button.dataset.loginMode));
+  });
+  document.querySelector('[data-action="send-login-email-code"]')?.addEventListener('click', () => {
+    sendLoginEmailCode().catch((error) => {
+      if (error.message === 'invalid email address') setText('#loginHint', '请输入有效邮箱。');
+      else if (error.message === 'email is not bound to an active account') setText('#loginHint', '该邮箱尚未绑定当前项目账号。');
+      else if (error.message === 'email code sent too frequently') setText('#loginHint', '验证码发送太频繁，请稍后再试。');
+      else if (error.message === 'email delivery failed') setText('#loginHint', '邮件发送失败，请检查 SMTP 配置。');
+      else setText('#loginHint', error.message);
+      toast(error.message);
+    });
+  });
   document.querySelector('#loginForm')?.addEventListener('submit', (event) => {
     login(event).catch((error) => {
-      setText('#loginHint', error.message === 'invalid credentials' ? '账号或密码不正确。' : error.message);
+      if (error.message === 'invalid credentials') setText('#loginHint', '账号或密码不正确。');
+      else if (error.message === 'invalid verification code') setText('#loginHint', '验证码不正确或已过期。');
+      else setText('#loginHint', error.message);
+      toast(error.message);
+    });
+  });
+  document.querySelector('#logoutBtn')?.addEventListener('click', () => {
+    if (window.confirm('确认退出当前账号？将返回登录页面。')) logout();
+  });
+  document.querySelector('#accountSettingsBtn')?.addEventListener('click', () => {
+    openAccountSettings().catch((error) => toast(error.message));
+  });
+  // 账号设置 modal 内事件
+  document.querySelector('#accountSettingsBackdrop')?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (target === event.currentTarget) { closeAccountSettings(); return; }
+    if (target instanceof HTMLElement && target.dataset.action === 'close-account-settings') closeAccountSettings();
+  });
+  document.querySelector('#changePasswordForm')?.addEventListener('submit', submitChangePassword);
+  document.querySelector('#bindPhoneForm')?.addEventListener('submit', submitBindPhone);
+  document.querySelector('#bindEmailForm')?.addEventListener('submit', submitBindEmail);
+  document.querySelector('[data-action="send-bind-phone-code"]')?.addEventListener('click', () => {
+    sendBindPhoneCode().catch((error) => {
+      const hint = document.querySelector('#bindPhoneHint');
+      if (hint) {
+        if (error.message === 'invalid phone number') hint.textContent = '手机号格式不正确';
+        else if (error.message === 'phone already bound to another account') hint.textContent = '该手机号已被其他账号绑定';
+        else if (error.message === 'phone code sent too frequently') hint.textContent = '验证码发送太频繁，请稍后再试';
+        else hint.textContent = `失败：${error.message}`;
+      }
+      toast(error.message);
+    });
+  });
+  document.querySelector('[data-action="send-bind-email-code"]')?.addEventListener('click', () => {
+    sendBindEmailCode().catch((error) => {
+      const hint = document.querySelector('#bindEmailHint');
+      if (hint) {
+        if (error.message === 'invalid email address') hint.textContent = '邮箱格式不正确';
+        else if (error.message === 'email already bound to another account') hint.textContent = '该邮箱已被其他账号绑定';
+        else if (error.message === 'email code sent too frequently') hint.textContent = '验证码发送太频繁，请稍后再试';
+        else if (error.message === 'email delivery failed') hint.textContent = '邮件发送失败，请检查 SMTP 配置';
+        else hint.textContent = `失败：${error.message}`;
+      }
       toast(error.message);
     });
   });
@@ -2756,20 +3089,8 @@ function bindEvents() {
   document.querySelector('[data-action="refresh-project-users"]')?.addEventListener('click', () => {
     renderAccountAdmin().catch((error) => toast(error.message));
   });
-  document.querySelector('[data-action="logout"]')?.addEventListener('click', logout);
   document.querySelector('#profileProjectSelect')?.addEventListener('change', (event) => {
     switchProfileProject(event).catch((error) => toast(error.message));
-  });
-  document.querySelector('#adminPageUserList')?.addEventListener('change', (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement) || target.dataset.action !== 'update-user-role') return;
-    const row = target.closest('[data-user-id]');
-    const userId = row?.dataset.userId || '';
-    if (!userId) return;
-    updateProjectUserFromAdminPage(userId, { role: target.value }).catch((error) => {
-      toast(error.message);
-      renderAccountAdmin().catch(() => {});
-    });
   });
   document.querySelector('#adminPageUserList')?.addEventListener('click', (event) => {
     const target = event.target;
@@ -2781,9 +3102,25 @@ function bindEvents() {
       const active = target.textContent?.trim() === '启用';
       updateProjectUserFromAdminPage(userId, { active }).catch((error) => toast(error.message));
     }
-    if (target.dataset.action === 'reset-user-password') {
-      updateProjectUserFromAdminPage(userId, { password: '123456' }).catch((error) => toast(error.message));
+    if (target.dataset.action === 'transfer-founder') {
+      transferFounder();
     }
+    if (target.dataset.action === 'open-role-change') {
+      openRoleChangeModal({
+        userId,
+        targetName: target.dataset.targetName || '',
+        targetHandle: target.dataset.targetHandle || '',
+        currentRole: target.dataset.currentRole || 'developer'
+      });
+    }
+  });
+  // 权限调整 modal 的关闭 / 确认按钮
+  document.querySelector('#roleModalBackdrop')?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (target === event.currentTarget) { closeRoleChangeModal(); return; } // 点 backdrop 关闭
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action === 'close-role-modal') closeRoleChangeModal();
+    if (target.dataset.action === 'confirm-role-change') confirmRoleChange();
   });
 
   document.querySelectorAll('[data-route]').forEach((button) => {

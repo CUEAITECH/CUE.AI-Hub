@@ -284,6 +284,19 @@ export function migrateStore(store) {
     next.users = syncBootstrapAdmin(next.users.map((user) => normalizeUserRecord(user, now)), now);
     next.users = syncDefaultTeamUsers(next.users, now);
   }
+
+  // 为存量项目补 founderId（项目创始人）。注意必须在 users bootstrap 之后跑：
+  // 已有项目无 founderId 时，挑当前在该项目里 role=project_admin 的第一个非系统管理员；
+  // 没有就 fallback 到系统管理员，确保每个项目都有一个不可降级的"创始人"
+  next.projects = next.projects.map((project) => {
+    if (project.founderId) return project;
+    const candidate = (next.users || []).find((user) => {
+      const roles = user.projectRoles && typeof user.projectRoles === 'object' ? user.projectRoles : {};
+      return user.role !== 'admin' && (roles[project.id] === 'project_admin' || roles['*'] === 'project_admin');
+    }) || (next.users || []).find((user) => user.role === 'admin');
+    return candidate ? { ...project, founderId: candidate.id } : project;
+  });
+
   const currentStage = next.currentStage || {};
   const isLegacyHubStage = currentStage.id === 'stage_mvp'
     || currentStage.name === 'CUE 项目中枢 MVP'

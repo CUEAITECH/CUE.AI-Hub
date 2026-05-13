@@ -141,6 +141,9 @@ function requiresApiKey(req, url) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return false;
   if (url.pathname === '/api/webhooks/github') return false;
   if (url.pathname === '/api/auth/login') return false;
+  if (url.pathname === '/api/auth/email-code') return false;
+  if (url.pathname === '/api/auth/phone-code') return false;
+  if (url.pathname === '/api/auth/me') return false;
   if (url.pathname === '/api/auth/users') return false;
   // 企微插件接口无需 API key（企微本身已是内部工具）
   if (url.pathname.startsWith('/api/wecom/')) return false;
@@ -859,9 +862,18 @@ async function serveStatic(res, pathname) {
 
   try {
     const data = await readFile(filePath);
-    res.writeHead(200, {
-      'content-type': contentTypes[extname(filePath)] || 'application/octet-stream'
-    });
+    const ext = extname(filePath);
+    // 防止浏览器/CDN 缓存住旧版前端文件：
+    // - HTML/JS/CSS 用 no-cache（允许缓存但每次必须向服务器校验，无 ETag 时强制重新拉）
+    // - 其他静态资源（图片/字体）保持默认（可长期缓存）
+    const noCacheExts = new Set(['.html', '.js', '.css', '.mjs']);
+    const headers = {
+      'content-type': contentTypes[ext] || 'application/octet-stream'
+    };
+    if (noCacheExts.has(ext)) {
+      headers['cache-control'] = 'no-cache, must-revalidate';
+    }
+    res.writeHead(200, headers);
     res.end(data);
   } catch {
     sendError(res, 404, 'not found');
@@ -1060,6 +1072,7 @@ server.listen(port, host, () => {
     GITHUB_TOKEN       ${process.env.GITHUB_TOKEN ? '✅ 已配置（GitHub API 同步）' : '❌ 未配置（限速 60次/小时）'}
     WECOM_WEBHOOK_URL  ${process.env.WECOM_WEBHOOK_URL ? '✅ 已配置（企微推送启用）' : '❌ 未配置（推送不可用）'}
     CUE_API_KEY        ${process.env.CUE_API_KEY ? '✅ 已配置（写接口鉴权）' : '⚪ 未配置（写接口对外开放）'}
+    SMTP               ${process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS ? '✅ 已配置（邮箱验证码启用）' : '⚪ 未配置（页面显示开发验证码）'}
     HUB_URL            ${hubUrl}
     MEETING_HOUR       ${meetingHour}:00（作战包 ${prepHour}:45 自动推送）
     GITHUB_AUTO_SYNC   ${githubSyncIntervalMinutes > 0 ? `✅ 每 ${githubSyncIntervalMinutes} 分钟同步一次` : '⏸️ 已关闭'}

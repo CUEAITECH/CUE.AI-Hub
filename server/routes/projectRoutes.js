@@ -1,3 +1,5 @@
+import { isProjectFounder, verifySessionToken } from '../services/auth.js';
+
 function getProjectRepo(project) {
   if (project.githubFullRepo?.includes('/')) {
     const [owner, repo] = project.githubFullRepo.split('/');
@@ -624,18 +626,92 @@ export function createProjectRoutes({
         sendError(res, 409, 'project id already exists');
         return true;
       }
+      // 把当前调用者（session 中的 user）设为创始人，自动赋项目管理员角色
+      const callerSession = (() => {
+        const headers = req.headers || {};
+        const header = headers.authorization || '';
+        const token = header.startsWith('Bearer ') ? header.slice(7).trim() : (headers['x-cue-session-token'] || '');
+        return verifySessionToken(token);
+      })();
+      const callerUser = callerSession
+        ? (store.users || []).find((u) => u.id === callerSession.sub && u.active !== false)
+        : null;
       const nextStore = await updateStore((draft) => {
         draft.projects = draft.projects || [];
         draft.projects.push({
           ...project,
+          founderId: callerUser?.id || '',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
+        // 创始人自动获得本项目的 project_admin 角色
+        if (callerUser) {
+          const idx = (draft.users || []).findIndex((u) => u.id === callerUser.id);
+          if (idx !== -1) {
+            const u = draft.users[idx];
+            const roles = u.projectRoles && typeof u.projectRoles === 'object' ? u.projectRoles : {};
+            draft.users[idx] = {
+              ...u,
+              projectIds: Array.from(new Set([...(u.projectIds || []), project.id])),
+              projectRoles: { ...roles, [project.id]: 'project_admin' },
+              updatedAt: new Date().toISOString()
+            };
+          }
+        }
         return draft;
       });
       const saved = (nextStore.projects || []).find((item) => item.id === project.id);
       if (!saved) { sendError(res, 409, 'project id already exists'); return true; }
       sendJson(res, 201, { project: saved });
+      return true;
+    }
+
+    // 转移项目创始人：只有当前创始人本人能调用
+    if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/transfer-founder')) {
+      const projectId = decodeURIComponent(url.pathname.split('/')[3] || '');
+      const { json } = await readBody(req);
+      const targetUsername = String(json?.targetUsername || '').trim();
+      if (!targetUsername) { sendError(res, 400, 'targetUsername required'); return true; }
+      const before = await loadStore();
+      const project = (before.projects || []).find((p) => p.id === projectId);
+      if (!project) { sendError(res, 404, 'project not found'); return true; }
+      const callerSession = (() => {
+        const headers = req.headers || {};
+        const header = headers.authorization || '';
+        const token = header.startsWith('Bearer ') ? header.slice(7).trim() : (headers['x-cue-session-token'] || '');
+        return verifySessionToken(token);
+      })();
+      const callerUser = callerSession
+        ? (before.users || []).find((u) => u.id === callerSession.sub && u.active !== false)
+        : null;
+      if (!callerUser || !isProjectFounder(callerUser, project)) {
+        sendError(res, 403, 'only the current founder can transfer ownership');
+        return true;
+      }
+      const target = (before.users || []).find((u) =>
+        u.username === targetUsername && u.active !== false && u.id !== callerUser.id
+      );
+      if (!target) { sendError(res, 404, 'target user not found or is current founder'); return true; }
+      const now = new Date().toISOString();
+      await updateStore((draft) => {
+        const pIdx = (draft.projects || []).findIndex((p) => p.id === projectId);
+        if (pIdx !== -1) draft.projects[pIdx] = { ...draft.projects[pIdx], founderId: target.id, updatedAt: now };
+        // 新创始人 → project_admin
+        const tIdx = (draft.users || []).findIndex((u) => u.id === target.id);
+        if (tIdx !== -1) {
+          const u = draft.users[tIdx];
+          const roles = u.projectRoles && typeof u.projectRoles === 'object' ? u.projectRoles : {};
+          draft.users[tIdx] = {
+            ...u,
+            projectIds: Array.from(new Set([...(u.projectIds || []), projectId])),
+            projectRoles: { ...roles, [projectId]: 'project_admin' },
+            updatedAt: now
+          };
+        }
+        // 老创始人保留 project_admin 角色（不强降，留个管理权）
+        return draft;
+      });
+      sendJson(res, 200, { ok: true, projectId, newFounderId: target.id, newFounderUsername: target.username });
       return true;
     }
 

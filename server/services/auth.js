@@ -1,6 +1,10 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto';
 
 const DEFAULT_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const PHONE_CODE_TTL_MS = 10 * 60 * 1000;
+const PHONE_CODE_RESEND_MS = 60 * 1000;
+const phoneCodeStore = new Map();
+const emailCodeStore = new Map();
 
 function sessionSecret() {
   return process.env.CUE_SESSION_SECRET
@@ -65,13 +69,26 @@ export function userCanManageProject(user = {}, projectId = '') {
   return userCanAccessProject(user, projectId);
 }
 
-export function findUserForProject(users = [], username = '', projectId = '') {
-  const normalized = String(username || '').trim();
-  return users.find((user) => (
-    user.active !== false
-    && user.username === normalized
-    && userCanAccessProject(user, projectId)
-  )) || null;
+// 项目创始人：项目创建者，自动是项目管理员，角色不可被他人降级、账号不可被他人停用
+// 唯一变更途径：本人主动调用「转移创始人」接口
+export function isProjectFounder(user = {}, project = {}) {
+  return Boolean(user?.id && project?.founderId && user.id === project.founderId);
+}
+
+export function findUserForProject(users = [], identifier = '', projectId = '') {
+  const normalized = String(identifier || '').trim();
+  if (!normalized) return null;
+  // 识别手机号：纯数字（可带 +）且长度 6-20 → 走手机号匹配，否则走 username
+  const asPhone = normalizePhone(normalized);
+  const asEmail = normalizeEmail(normalized);
+  return users.find((user) => {
+    if (user.active === false) return false;
+    if (!userCanAccessProject(user, projectId)) return false;
+    if (user.username === normalized) return true;
+    if (asPhone && user.phone && user.phone === asPhone) return true;
+    if (asEmail && user.email && user.email === asEmail) return true;
+    return false;
+  }) || null;
 }
 
 export function createSessionToken(user, projectId, now = Date.now()) {
@@ -101,6 +118,115 @@ export function verifySessionToken(token) {
   }
 }
 
+function phoneCodeKey(phone, purpose = 'login') {
+  return `${purpose}:${phone}`;
+}
+
+export function issuePhoneCode(phone, purpose = 'login', now = Date.now()) {
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) return { ok: false, error: 'invalid phone number' };
+  const key = phoneCodeKey(normalizedPhone, purpose);
+  const existing = phoneCodeStore.get(key);
+  if (existing && existing.expiresAt > now && now - existing.createdAt < PHONE_CODE_RESEND_MS) {
+    return {
+      ok: false,
+      error: 'phone code sent too frequently',
+      retryAfterMs: PHONE_CODE_RESEND_MS - (now - existing.createdAt)
+    };
+  }
+  const code = String(randomInt(0, 1000000)).padStart(6, '0');
+  phoneCodeStore.set(key, {
+    code,
+    createdAt: now,
+    expiresAt: now + PHONE_CODE_TTL_MS
+  });
+  return {
+    ok: true,
+    phone: normalizedPhone,
+    code,
+    expiresAt: now + PHONE_CODE_TTL_MS
+  };
+}
+
+export function verifyPhoneCode(phone, code, purpose = 'login', now = Date.now(), { consume = true } = {}) {
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) return false;
+  const key = phoneCodeKey(normalizedPhone, purpose);
+  const record = phoneCodeStore.get(key);
+  if (!record || record.expiresAt < now) {
+    phoneCodeStore.delete(key);
+    return false;
+  }
+  const expected = String(record.code || '');
+  const actual = String(code || '').trim();
+  const ok = expected.length === actual.length && timingSafeTextEqual(expected, actual);
+  if (ok && consume) phoneCodeStore.delete(key);
+  return ok;
+}
+
+function emailCodeKey(email, purpose = 'login') {
+  return `${purpose}:${email}`;
+}
+
+export function issueEmailCode(email, purpose = 'login', now = Date.now()) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return { ok: false, error: 'invalid email address' };
+  const key = emailCodeKey(normalizedEmail, purpose);
+  const existing = emailCodeStore.get(key);
+  if (existing && existing.expiresAt > now && now - existing.createdAt < PHONE_CODE_RESEND_MS) {
+    return {
+      ok: false,
+      error: 'email code sent too frequently',
+      retryAfterMs: PHONE_CODE_RESEND_MS - (now - existing.createdAt)
+    };
+  }
+  const code = String(randomInt(0, 1000000)).padStart(6, '0');
+  emailCodeStore.set(key, {
+    code,
+    createdAt: now,
+    expiresAt: now + PHONE_CODE_TTL_MS
+  });
+  return {
+    ok: true,
+    email: normalizedEmail,
+    code,
+    expiresAt: now + PHONE_CODE_TTL_MS
+  };
+}
+
+export function verifyEmailCode(email, code, purpose = 'login', now = Date.now(), { consume = true } = {}) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+  const key = emailCodeKey(normalizedEmail, purpose);
+  const record = emailCodeStore.get(key);
+  if (!record || record.expiresAt < now) {
+    emailCodeStore.delete(key);
+    return false;
+  }
+  const expected = String(record.code || '');
+  const actual = String(code || '').trim();
+  const ok = expected.length === actual.length && timingSafeTextEqual(expected, actual);
+  if (ok && consume) emailCodeStore.delete(key);
+  return ok;
+}
+
+// 手机号规范化：去掉空格/横线/括号，保留 +/数字；长度合理才作为有效号
+export function normalizePhone(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const cleaned = raw.replace(/[\s\-()（）]/g, '');
+  if (!/^\+?\d{6,20}$/.test(cleaned)) return '';
+  return cleaned;
+}
+
+export function normalizeEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  if (!email) return '';
+  if (email.length > 254) return '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return '';
+  return email;
+}
+
 export function normalizeUserRecord(user, now = new Date().toISOString()) {
   const projectIds = Array.isArray(user.projectIds) && user.projectIds.length ? user.projectIds : ['cue_ai_classroom'];
   const role = user.role || 'developer';
@@ -111,6 +237,8 @@ export function normalizeUserRecord(user, now = new Date().toISOString()) {
     id: user.id || `user_${String(user.username || 'unknown').replace(/[^a-z0-9_-]/gi, '_')}`,
     username: String(user.username || '').trim(),
     name: String(user.name || user.username || '').trim(),
+    phone: normalizePhone(user.phone || ''),
+    email: normalizeEmail(user.email || ''),
     role,
     projectIds,
     projectRoles,

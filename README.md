@@ -92,6 +92,7 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。�
 | `HUB_ADMIN_USER` | 初始项目管理员账号（默认 `admin`，兼容旧变量 `HUB_LOGIN_USER`） |
 | `HUB_ADMIN_PASSWORD` | 初始项目管理员密码（默认 `cueai`，兼容旧变量 `HUB_LOGIN_PASSWORD`） |
 | `CUE_SESSION_SECRET` | Hub 登录会话签名密钥（可选，默认复用 `CUE_API_KEY` / 管理员密码） |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | 邮箱验证码发信配置；未配置时验证码仅在页面提示中显示 |
 | `MEETING_HOUR` | 晚会时间（默认 18），作战包在 `MEETING_HOUR-1:45` 推送 |
 | `PORT` | 服务端口（默认 4317） |
 | `HUB_URL` | 对外访问地址，用于企微消息链接 |
