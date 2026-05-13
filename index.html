@@ -764,6 +764,40 @@
       </main>
     </div>
 
+    <!-- 权限调整 Modal -->
+    <div class="modal-backdrop" id="roleModalBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="roleModalTitle">
+      <div class="modal role-modal">
+        <div class="modal-head">
+          <h2 id="roleModalTitle">调整成员权限</h2>
+          <button type="button" class="modal-close" data-action="close-role-modal" aria-label="关闭">✕</button>
+        </div>
+        <div class="role-modal-body">
+          <p class="role-modal-target">为 <strong id="roleModalTargetName">—</strong>（<span id="roleModalTargetHandle">—</span>） 调整本项目内的权限等级</p>
+          <div class="role-choice-list">
+            <label class="role-choice" data-role="project_admin">
+              <input type="radio" name="roleChoice" value="project_admin" />
+              <div>
+                <strong>项目管理员</strong>
+                <p>可创建账号、停用账号、重置密码；<u>不能</u>调整他人权限或转移创始人。适合日常协助管理项目成员的同事。</p>
+              </div>
+            </label>
+            <label class="role-choice" data-role="developer">
+              <input type="radio" name="roleChoice" value="developer" />
+              <div>
+                <strong>项目开发者</strong>
+                <p>普通成员，可领取任务、提交代码、参与晚会闭环，无账号管理权限。新加入项目的人默认是此等级。</p>
+              </div>
+            </label>
+          </div>
+          <p class="role-modal-hint">⚠️ 只有项目创始人能调整权限。调整后立即生效。</p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" data-action="close-role-modal" class="modal-secondary">取消</button>
+          <button type="button" data-action="confirm-role-change" class="modal-primary">确认调整</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 任务编辑 Modal -->
     <div class="modal-backdrop" id="taskModalBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
       <div class="modal">

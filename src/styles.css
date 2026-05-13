@@ -340,6 +340,143 @@ body.authenticated .auth-shell {
   border-radius: 6px;
 }
 
+/* 权限调整 Modal */
+.role-modal {
+  max-width: 520px;
+}
+
+.role-modal-body {
+  padding: 20px 24px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.role-modal-target {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.role-modal-target strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.role-modal-target span {
+  font-family: ui-monospace, SF Mono, Menlo, monospace;
+  font-size: 12px;
+}
+
+.role-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.role-choice {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  background: var(--panel);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.role-choice:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.role-choice input[type="radio"] {
+  margin-top: 4px;
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+}
+
+.role-choice:has(input:checked) {
+  border-color: #2563eb;
+  background: rgba(59, 130, 246, 0.06);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.role-choice div {
+  flex: 1;
+}
+
+.role-choice strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.role-choice p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.role-choice p u {
+  text-decoration: none;
+  color: #b91c1c;
+  font-weight: 500;
+}
+
+.role-modal-hint {
+  margin: 0;
+  padding: 10px 14px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  color: rgba(146, 64, 14, 0.95);
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+}
+
+.modal-secondary,
+.modal-primary {
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--line);
+}
+
+.modal-secondary {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.modal-secondary:hover {
+  background: var(--panel-2);
+}
+
+.modal-primary {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.modal-primary:hover {
+  background: #1d4ed8;
+}
+
 @media (max-width: 720px) {
   .admin-user-card {
     grid-template-columns: 1fr;

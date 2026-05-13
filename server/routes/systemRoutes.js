@@ -209,13 +209,19 @@ export function createSystemRoutes({
       const targetIsFounder = isProjectFounder(target, project);
       const callerIsFounder = isProjectFounder(adminUser, project);
       const callerIsSystemAdmin = adminUser.role === 'admin';
+      const wantsRoleChange = json?.role && json.role !== roleForProject(target, projectId);
       if (targetIsFounder && !callerIsSystemAdmin && !callerIsFounder) {
-        const wantsRoleChange = json?.role && json.role !== roleForProject(target, projectId);
         const wantsDeactivate = json?.active === false;
         if (wantsRoleChange || wantsDeactivate) {
           sendJson(res, 403, { ok: false, error: 'project founder is protected; use transfer-founder to change' });
           return true;
         }
+      }
+      // 角色调整权限：只有项目创始人（或系统管理员）能改角色。
+      // 项目管理员只能创建账号 / 停用账号 / 重置密码，不能把别人提到其他权限等级
+      if (wantsRoleChange && !callerIsFounder && !callerIsSystemAdmin) {
+        sendJson(res, 403, { ok: false, error: 'only project founder can change role' });
+        return true;
       }
 
       const nextRole = ['developer', 'project_admin'].includes(json?.role) ? json.role : undefined;

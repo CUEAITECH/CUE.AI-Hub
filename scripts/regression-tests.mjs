@@ -1240,6 +1240,76 @@ await test('system admin user is hidden from non-admin callers in GET /api/auth/
   assert.equal(founder.isFounder, true, '创始人应携带 isFounder=true');
 });
 
+await test('PATCH /api/auth/users blocks role change by non-founder project admin', async () => {
+  // 即使是另一个项目管理员，也不能把开发者提为项目管理员（或反之）。
+  // 只有项目创始人能调权限等级。
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_founder' }],
+    users: [
+      { id: 'user_founder', username: 'founder', name: 'Founder', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_admin2', username: 'admin2', name: 'Admin2', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_dev', username: 'dev', name: 'Dev', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const admin2 = store.users.find((u) => u.id === 'user_admin2');
+  const token = createSessionToken(admin2, 'cue_ai_classroom');
+  let payload = null; let status = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom', role: 'project_admin' } }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route(
+    { method: 'PATCH', headers: { authorization: `Bearer ${token}` } },
+    {},
+    new URL('http://localhost/api/auth/users/user_dev')
+  );
+  assert.equal(status, 403);
+  assert.match(payload.error, /only project founder can change role/);
+  // 开发者角色没变
+  assert.equal(store.users.find((u) => u.id === 'user_dev').projectRoles.cue_ai_classroom, 'developer');
+});
+
+await test('PATCH /api/auth/users allows role change by project founder', async () => {
+  // 创始人能正常调整他人角色
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_founder' }],
+    users: [
+      { id: 'user_founder', username: 'founder', name: 'Founder', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_dev', username: 'dev', name: 'Dev', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const founder = store.users.find((u) => u.id === 'user_founder');
+  const token = createSessionToken(founder, 'cue_ai_classroom');
+  let status = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom', role: 'project_admin' } }),
+    sendJson: (_r, s) => { status = s; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route(
+    { method: 'PATCH', headers: { authorization: `Bearer ${token}` } },
+    {},
+    new URL('http://localhost/api/auth/users/user_dev')
+  );
+  assert.equal(status, 200);
+  assert.equal(store.users.find((u) => u.id === 'user_dev').projectRoles.cue_ai_classroom, 'project_admin');
+});
+
 await test('PATCH /api/auth/users blocks role change on project founder', async () => {
   const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
   const { createSessionToken } = await import('../server/services/auth.js');

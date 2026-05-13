@@ -355,6 +355,8 @@ async function renderAccountAdmin() {
   try {
     const users = await loadProjectUsers();
     const callerUsername = currentSessionUsername();
+    // 当前调用者是否为本项目创始人——决定他能否看到「权限调整」按钮
+    const callerIsFounder = users.some((u) => u.username === callerUsername && u.isFounder);
     // 创始人排在最前面，剩下按角色排：项目管理员 > 开发者
     const sortedUsers = [...users].sort((a, b) => {
       if (a.isFounder !== b.isFounder) return a.isFounder ? -1 : 1;
@@ -387,10 +389,9 @@ async function renderAccountAdmin() {
           <div class="admin-user-card-actions">
             ${isFounder
               ? `<span class="admin-user-locked-hint">创始人角色受保护，调整请使用「转移创始人」</span>`
-              : `<select data-action="update-user-role">
-                  <option value="developer" ${role === 'developer' ? 'selected' : ''}>项目开发者</option>
-                  <option value="project_admin" ${role === 'project_admin' ? 'selected' : ''}>项目管理员</option>
-                </select>
+              : `${callerIsFounder
+                  ? `<button type="button" data-action="open-role-change" data-target-name="${escapeHtml(user.name || user.username)}" data-target-handle="${escapeHtml(user.username)}" data-current-role="${escapeHtml(role)}">权限调整</button>`
+                  : ''}
                 <button type="button" data-action="toggle-user-active">
                   ${user.active === false ? '启用' : '停用'}
                 </button>`}
@@ -403,6 +404,49 @@ async function renderAccountAdmin() {
       : '<div class="empty-state">当前项目还没有账号。</div>';
   } catch (error) {
     list.innerHTML = `<div class="empty-state">${escapeHtml(error.message || '账号列表加载失败')}</div>`;
+  }
+}
+
+let _roleChangeContext = null;
+
+function openRoleChangeModal({ userId, targetName, targetHandle, currentRole }) {
+  _roleChangeContext = { userId, currentRole };
+  const backdrop = document.querySelector('#roleModalBackdrop');
+  if (!backdrop) return;
+  setText('#roleModalTargetName', targetName);
+  setText('#roleModalTargetHandle', `@${targetHandle}`);
+  // 默认选中当前角色，让用户清楚现在是什么
+  backdrop.querySelectorAll('input[name="roleChoice"]').forEach((radio) => {
+    radio.checked = radio.value === currentRole;
+  });
+  backdrop.style.display = 'flex';
+}
+
+function closeRoleChangeModal() {
+  const backdrop = document.querySelector('#roleModalBackdrop');
+  if (backdrop) backdrop.style.display = 'none';
+  _roleChangeContext = null;
+}
+
+async function confirmRoleChange() {
+  if (!_roleChangeContext) return;
+  const checked = document.querySelector('input[name="roleChoice"]:checked');
+  if (!checked) {
+    toast('请先选择一个权限等级');
+    return;
+  }
+  const nextRole = checked.value;
+  const { userId, currentRole } = _roleChangeContext;
+  if (nextRole === currentRole) {
+    toast('权限未变化，无需调整');
+    closeRoleChangeModal();
+    return;
+  }
+  try {
+    await updateProjectUserFromAdminPage(userId, { role: nextRole });
+    closeRoleChangeModal();
+  } catch (error) {
+    toast(`❌ 调整失败：${error.message}`);
   }
 }
 
@@ -2821,17 +2865,6 @@ function bindEvents() {
   document.querySelector('[data-action="refresh-project-users"]')?.addEventListener('click', () => {
     renderAccountAdmin().catch((error) => toast(error.message));
   });
-  document.querySelector('#adminPageUserList')?.addEventListener('change', (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement) || target.dataset.action !== 'update-user-role') return;
-    const row = target.closest('[data-user-id]');
-    const userId = row?.dataset.userId || '';
-    if (!userId) return;
-    updateProjectUserFromAdminPage(userId, { role: target.value }).catch((error) => {
-      toast(error.message);
-      renderAccountAdmin().catch(() => {});
-    });
-  });
   document.querySelector('#adminPageUserList')?.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement)) return;
@@ -2848,6 +2881,22 @@ function bindEvents() {
     if (target.dataset.action === 'transfer-founder') {
       transferFounder();
     }
+    if (target.dataset.action === 'open-role-change') {
+      openRoleChangeModal({
+        userId,
+        targetName: target.dataset.targetName || '',
+        targetHandle: target.dataset.targetHandle || '',
+        currentRole: target.dataset.currentRole || 'developer'
+      });
+    }
+  });
+  // 权限调整 modal 的关闭 / 确认按钮
+  document.querySelector('#roleModalBackdrop')?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (target === event.currentTarget) { closeRoleChangeModal(); return; } // 点 backdrop 关闭
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action === 'close-role-modal') closeRoleChangeModal();
+    if (target.dataset.action === 'confirm-role-change') confirmRoleChange();
   });
 
   document.querySelectorAll('[data-route]').forEach((button) => {
