@@ -370,24 +370,6 @@ async function login(event) {
   }
 }
 
-async function registerProjectUser(event) {
-  event.preventDefault();
-  const projectId = document.querySelector('#loginProjectSelect')?.value || '';
-  const adminUsername = document.querySelector('#registerAdminUsername')?.value.trim() || '';
-  const adminPassword = document.querySelector('#registerAdminPassword')?.value || '';
-  const name = document.querySelector('#registerName')?.value.trim() || '';
-  const username = document.querySelector('#registerUsername')?.value.trim() || '';
-  const password = document.querySelector('#registerPassword')?.value || '';
-  const role = document.querySelector('#registerRole')?.value || 'developer';
-  if (!projectId) { toast('请选择项目'); return; }
-  const payload = await api('/api/auth/users', {
-    method: 'POST',
-    body: JSON.stringify({ projectId, adminUsername, adminPassword, name, username, password, role })
-  });
-  setText('#registerHint', `已创建 ${payload.user?.name || username}，可直接登录当前项目。`);
-  document.querySelector('#registerUserForm')?.reset();
-}
-
 function currentSessionRole() {
   return sessionStorage.getItem('cueHubUserRole') || 'developer';
 }
@@ -2934,12 +2916,6 @@ function bindEvents() {
   });
   document.querySelector('#changePasswordForm')?.addEventListener('submit', submitChangePassword);
   document.querySelector('#bindPhoneForm')?.addEventListener('submit', submitBindPhone);
-  document.querySelector('#registerUserForm')?.addEventListener('submit', (event) => {
-    registerProjectUser(event).catch((error) => {
-      setText('#registerHint', error.message === 'project admin credentials required' ? '管理员账号或密码不正确。' : error.message);
-      toast(error.message);
-    });
-  });
   document.querySelector('#adminPageRegisterForm')?.addEventListener('submit', (event) => {
     registerProjectUserFromAdminPage(event).catch((error) => {
       setText('#adminPageRegisterHint', error.message === 'project admin credentials required' ? '当前账号没有管理员权限。' : error.message);
