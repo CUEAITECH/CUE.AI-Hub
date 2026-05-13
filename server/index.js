@@ -66,6 +66,7 @@ import {
 import { buildHybridAnalysis } from './services/semanticLinker.js';
 import { generateAssignmentBrief } from './services/assignmentBrief.js';
 import { bindActivityToExplicitRefs } from './services/bindingEngine.js';
+import { verifySessionToken } from './services/auth.js';
 import { dispatchRoutes } from './routes/index.js';
 import { createSystemRoutes } from './routes/systemRoutes.js';
 import { createAssignmentRoutes } from './routes/assignmentRoutes.js';
@@ -124,6 +125,14 @@ function hasValidApiKey(req) {
   if (!cueApiKey) return true;
   const provided = req.headers['x-cue-api-key'];
   return typeof provided === 'string' && provided === cueApiKey;
+}
+
+function hasValidSession(req) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ')
+    ? header.slice(7).trim()
+    : req.headers['x-cue-session-token'] || '';
+  return Boolean(verifySessionToken(token));
 }
 
 function requiresApiKey(req, url) {
@@ -872,7 +881,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      if (requiresApiKey(req, url) && !hasValidApiKey(req)) {
+      if (requiresApiKey(req, url) && !hasValidApiKey(req) && !hasValidSession(req)) {
         sendError(res, 401, 'invalid api key', '写入或触发动作的 API 需要请求头 X-CUE-API-Key。');
         return;
       }

@@ -12,13 +12,9 @@
         <div>
           <span class="eyebrow">CUE AI Project Hub</span>
           <h1>进入项目中枢</h1>
-          <p>先选择本次要管理的项目，再使用内部账号登录。进入后 Hub 将固定在该项目上下文内。</p>
+          <p>使用内部账号登录后进入项目中枢。项目上下文会自动跟随当前团队默认项目。</p>
         </div>
         <form class="auth-form" id="loginForm">
-          <label>
-            <span>项目</span>
-            <select id="loginProjectSelect" aria-label="选择项目"></select>
-          </label>
           <label>
             <span>账号</span>
             <input id="loginUsername" type="text" autocomplete="username" placeholder="项目管理员或开发账号" required />
@@ -28,43 +24,8 @@
             <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••" required />
           </label>
           <button type="submit">进入 Hub</button>
-          <button class="auth-link-button" type="button" data-action="open-account-admin-login">管理员账号管理入口</button>
-          <small id="loginHint">项目列表会从服务器自动读取。</small>
+          <small id="loginHint">登录后可在个人中心查看当前账号与项目。</small>
         </form>
-        <details class="auth-admin-tools">
-          <summary>项目管理员注册开发账号</summary>
-          <form class="auth-form auth-register-form" id="registerUserForm">
-            <label>
-              <span>管理员账号</span>
-              <input id="registerAdminUsername" type="text" autocomplete="username" placeholder="admin" required />
-            </label>
-            <label>
-              <span>管理员密码</span>
-              <input id="registerAdminPassword" type="password" autocomplete="current-password" required />
-            </label>
-            <label>
-              <span>开发者姓名</span>
-              <input id="registerName" type="text" placeholder="例如：胡佳涛" required />
-            </label>
-            <label>
-              <span>开发者账号</span>
-              <input id="registerUsername" type="text" autocomplete="username" placeholder="例如：hujt" required />
-            </label>
-            <label>
-              <span>初始密码</span>
-              <input id="registerPassword" type="password" autocomplete="new-password" required />
-            </label>
-            <label>
-              <span>角色</span>
-              <select id="registerRole">
-                <option value="developer">项目开发者</option>
-                <option value="project_admin">项目管理员</option>
-              </select>
-            </label>
-            <button type="submit">创建开发账号</button>
-            <small id="registerHint">账号会绑定到当前选择的项目。</small>
-          </form>
-        </details>
       </div>
     </section>
     <div class="app-shell">
@@ -102,6 +63,7 @@
                 <button class="nav-item" type="button" data-route="automation" role="menuitem">自动提醒</button>
               </div>
             </div>
+            <button class="nav-item nav-primary" type="button" data-route="personal-center" data-nav-parent="personal">个人中心</button>
           </nav>
           <div class="topbar-actions">
             <span class="status-pill" id="syncStatus">API 未连接</span>
@@ -380,6 +342,38 @@
                   <strong>权限管理</strong>
                 </div>
                 <div class="admin-user-list" id="adminPageUserList"></div>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <!-- 个人中心 -->
+        <section class="view" id="personal-center">
+          <section class="workspace-shell">
+            <div class="workspace-header">
+              <div>
+                <span class="workspace-kicker">个人中心</span>
+                <h2>账号设置</h2>
+                <p>查看当前登录身份、项目权限，并在需要时退出登录。</p>
+              </div>
+              <div class="workspace-actions">
+                <button type="button" data-action="logout">退出登录</button>
+              </div>
+            </div>
+            <div class="workspace-grid workspace-grid-single">
+              <article class="workspace-card">
+                <div class="workspace-card-head">
+                  <span>当前账号</span>
+                  <strong id="profileUserName">未登录</strong>
+                  <small id="profileUserMeta">暂无账号信息</small>
+                </div>
+                <div class="profile-settings">
+                  <label>
+                    <span>当前项目</span>
+                    <select id="profileProjectSelect" data-project-switcher></select>
+                  </label>
+                  <p class="muted-line">切换项目后，任务、分工、账号名单都会刷新到对应项目。</p>
+                </div>
               </article>
             </div>
           </section>

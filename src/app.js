@@ -116,22 +116,12 @@ function _hideLoader() {
 
 async function api(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
-  const needsApiKey = state.config?.apiKeyRequiredForWrites
-    && ['POST', 'PATCH', 'DELETE'].includes(method);
   const headers = { 'content-type': 'application/json', ...(options.headers || {}) };
   const sessionToken = sessionStorage.getItem('cueHubSessionToken') || '';
   if (sessionToken && !headers.Authorization && !headers['X-CUE-Session-Token']) {
     headers['X-CUE-Session-Token'] = sessionToken;
   }
 
-  if (needsApiKey && !headers['X-CUE-API-Key']) {
-    const storedKey = localStorage.getItem('cueApiKey') || '';
-    const apiKey = storedKey || window.prompt('请输入 CUE API Key，用于执行写入或触发动作。') || '';
-    if (apiKey) {
-      localStorage.setItem('cueApiKey', apiKey);
-      headers['X-CUE-API-Key'] = apiKey;
-    }
-  }
 
   _showLoader(options.loadingText || (method !== 'GET' ? '处理中...' : '加载中...'));
   let response;
@@ -142,9 +132,6 @@ async function api(path, options = {}) {
   }
 
   const payload = await response.json().catch(() => ({}));
-  if (response.status === 401 && payload.error === 'invalid api key' && needsApiKey) {
-    localStorage.removeItem('cueApiKey');
-  }
   if (!response.ok) {
     const message = payload.details
       ? `${payload.error || `Request failed: ${response.status}`}：${payload.details}`
@@ -235,12 +222,13 @@ function syncCurrentProject(projectId = '') {
 }
 
 function renderProjectSwitcher() {
-  const select = document.querySelector('#loginProjectSelect');
-  if (!select) return;
-  select.innerHTML = (state.projects || []).map((project) => `
+  const options = (state.projects || []).map((project) => `
     <option value="${escapeHtml(project.id)}">${escapeHtml(project.name || project.id)}</option>
   `).join('');
-  select.value = getCurrentProjectId();
+  document.querySelectorAll('[data-project-switcher]').forEach((select) => {
+    select.innerHTML = options;
+    select.value = getCurrentProjectId();
+  });
 }
 
 function getApiScopeLabel() {
@@ -263,7 +251,7 @@ async function loadLoginProjects() {
 
 async function login(event) {
   event.preventDefault();
-  const projectId = document.querySelector('#loginProjectSelect')?.value || '';
+  const projectId = getCurrentProjectId();
   const username = document.querySelector('#loginUsername')?.value.trim() || '';
   const password = document.querySelector('#loginPassword')?.value || '';
   if (!projectId) { toast('请选择项目'); return; }
@@ -286,23 +274,6 @@ async function login(event) {
   }
 }
 
-async function registerProjectUser(event) {
-  event.preventDefault();
-  const projectId = document.querySelector('#loginProjectSelect')?.value || '';
-  const adminUsername = document.querySelector('#registerAdminUsername')?.value.trim() || '';
-  const adminPassword = document.querySelector('#registerAdminPassword')?.value || '';
-  const name = document.querySelector('#registerName')?.value.trim() || '';
-  const username = document.querySelector('#registerUsername')?.value.trim() || '';
-  const password = document.querySelector('#registerPassword')?.value || '';
-  const role = document.querySelector('#registerRole')?.value || 'developer';
-  if (!projectId) { toast('请选择项目'); return; }
-  const payload = await api('/api/auth/users', {
-    method: 'POST',
-    body: JSON.stringify({ projectId, adminUsername, adminPassword, name, username, password, role })
-  });
-  setText('#registerHint', `已创建 ${payload.user?.name || username}，可直接登录当前项目。`);
-  document.querySelector('#registerUserForm')?.reset();
-}
 
 function currentSessionRole() {
   return sessionStorage.getItem('cueHubUserRole') || 'developer';
@@ -328,15 +299,13 @@ async function loadProjectUsers() {
 async function renderAccountAdmin() {
   const list = document.querySelector('#adminPageUserList');
   const form = document.querySelector('#adminPageRegisterForm');
+  const refreshButton = document.querySelector('[data-action="refresh-project-users"]');
   if (!list || !form) return;
   const isAdmin = currentUserCanManageAccounts();
   form.style.display = isAdmin ? '' : 'none';
+  if (refreshButton) refreshButton.style.display = isAdmin ? '' : 'none';
   if (!state.isAuthenticated) {
     list.innerHTML = '<div class="empty-state">请先登录项目中枢。</div>';
-    return;
-  }
-  if (!isAdmin) {
-    list.innerHTML = '<div class="empty-state">只有项目管理员可以注册开发账号。</div>';
     return;
   }
   try {
@@ -348,7 +317,7 @@ async function renderAccountAdmin() {
             <strong>${escapeHtml(user.name || user.username)}</strong>
             <span>${escapeHtml(user.username)} · ${roleLabel(user.projectRole || user.role)} · ${user.active === false ? '已停用' : '已启用'}</span>
           </div>
-          <div class="admin-user-controls">
+          ${isAdmin ? `<div class="admin-user-controls">
             <select data-action="update-user-role" ${user.role === 'admin' ? 'disabled' : ''}>
               <option value="developer" ${(user.projectRole || user.role) === 'developer' ? 'selected' : ''}>项目开发者</option>
               <option value="project_admin" ${(user.projectRole || user.role) === 'project_admin' ? 'selected' : ''}>项目管理员</option>
@@ -357,7 +326,7 @@ async function renderAccountAdmin() {
               ${user.active === false ? '启用' : '停用'}
             </button>
             <button type="button" data-action="reset-user-password" ${user.role === 'admin' ? 'disabled' : ''}>重置密码</button>
-          </div>
+          </div>` : ''}
         </div>
       `).join('')
       : '<div class="empty-state">当前项目还没有账号。</div>';
@@ -403,6 +372,34 @@ function requestAccountAdminLogin() {
   const usernameInput = document.querySelector('#loginUsername');
   if (usernameInput && !usernameInput.value) usernameInput.value = 'admin';
   setText('#loginHint', '请使用系统管理员账号 admin / 123456 登录后进入账号管理。');
+}
+
+function renderPersonalCenter() {
+  const username = sessionStorage.getItem('cueHubUser') || '未登录';
+  const role = currentSessionRole();
+  const projectName = state.currentProject?.name || getCurrentProjectId();
+  setText('#profileUserName', username);
+  setText('#profileUserMeta', `${roleLabel(role)} · ${projectName || '暂无项目'}`);
+  renderProjectSwitcher();
+}
+
+async function switchProfileProject(event) {
+  const projectId = event.target?.value || '';
+  if (!projectId || projectId === getCurrentProjectId()) return;
+  syncCurrentProject(projectId);
+  await loadState();
+  renderPersonalCenter();
+  setRoute('overview');
+}
+
+function logout() {
+  sessionStorage.removeItem('cueHubSessionToken');
+  sessionStorage.removeItem('cueHubAuthenticated');
+  sessionStorage.removeItem('cueHubUser');
+  sessionStorage.removeItem('cueHubUserRole');
+  sessionStorage.removeItem('cueHubPostLoginRoute');
+  setAuthVisible(false);
+  setText('#loginHint', '已退出登录。');
 }
 
 function getTodayAssignments() {
@@ -2074,6 +2071,7 @@ function renderAll() {
   renderPlanAdjustments();
   renderAiPm();
   renderMeeting();
+  renderPersonalCenter();
 }
 
 // ── 业务逻辑 ─────────────────────────────────────────────────
@@ -2668,7 +2666,8 @@ function setRoute(route) {
     assignment: 'execution',
     'task-detail': 'execution',
     report: 'output',
-    automation: 'output'
+    automation: 'output',
+    'personal-center': 'personal'
   };
   const activeParent = parentByRoute[route] || route;
   document.querySelectorAll('.nav-item').forEach((item) => {
@@ -2685,6 +2684,9 @@ function setRoute(route) {
   });
   if (route === 'account-admin') {
     renderAccountAdmin().catch((error) => toast(error.message));
+  }
+  if (route === 'personal-center') {
+    renderPersonalCenter();
   }
 }
 
@@ -2745,21 +2747,18 @@ function bindEvents() {
       toast(error.message);
     });
   });
-  document.querySelector('#registerUserForm')?.addEventListener('submit', (event) => {
-    registerProjectUser(event).catch((error) => {
-      setText('#registerHint', error.message === 'project admin credentials required' ? '管理员账号或密码不正确。' : error.message);
-      toast(error.message);
-    });
-  });
   document.querySelector('#adminPageRegisterForm')?.addEventListener('submit', (event) => {
     registerProjectUserFromAdminPage(event).catch((error) => {
       setText('#adminPageRegisterHint', error.message === 'project admin credentials required' ? '当前账号没有管理员权限。' : error.message);
       toast(error.message);
     });
   });
-  document.querySelector('[data-action="open-account-admin-login"]')?.addEventListener('click', requestAccountAdminLogin);
   document.querySelector('[data-action="refresh-project-users"]')?.addEventListener('click', () => {
     renderAccountAdmin().catch((error) => toast(error.message));
+  });
+  document.querySelector('[data-action="logout"]')?.addEventListener('click', logout);
+  document.querySelector('#profileProjectSelect')?.addEventListener('change', (event) => {
+    switchProfileProject(event).catch((error) => toast(error.message));
   });
   document.querySelector('#adminPageUserList')?.addEventListener('change', (event) => {
     const target = event.target;

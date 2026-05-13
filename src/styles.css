@@ -230,6 +230,28 @@ body.authenticated .auth-shell {
   font-weight: 700;
 }
 
+.profile-settings {
+  display: grid;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.profile-settings label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-settings select {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
 .topbar {
   position: sticky;
   top: 0;
@@ -728,6 +750,10 @@ h1 {
   display: grid;
   grid-template-columns: minmax(300px, 0.42fr) minmax(0, 1fr);
   gap: 16px;
+}
+
+.workspace-grid-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .review-workbench {

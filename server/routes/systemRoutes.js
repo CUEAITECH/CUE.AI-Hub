@@ -22,6 +22,13 @@ function getSessionUser(req, users, projectId) {
   return user && userCanManageProject(user, projectId) ? user : null;
 }
 
+function getProjectSessionUser(req, users, projectId) {
+  const session = verifySessionToken(getBearerToken(req));
+  if (!session || session.projectId !== projectId) return null;
+  const user = users.find((item) => item.id === session.sub && item.active !== false) || null;
+  return user && findUserForProject(users, user.username, projectId) ? user : null;
+}
+
 function sanitizeUserForProject(user, projectId) {
   return {
     ...sanitizeUser(user),
@@ -78,8 +85,8 @@ export function createSystemRoutes({
       const projectId = url.searchParams.get('projectId') || '';
       const store = await loadStore();
       const targetProjectId = projectId || (store.projects || [])[0]?.id || 'cue_ai_classroom';
-      const adminUser = getSessionUser(req, store.users || [], targetProjectId);
-      if (!adminUser) {
+      const sessionUser = getProjectSessionUser(req, store.users || [], targetProjectId);
+      if (!sessionUser) {
         sendJson(res, 403, { ok: false, error: 'forbidden' });
         return true;
       }
