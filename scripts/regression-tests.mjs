@@ -1384,7 +1384,7 @@ await test('PATCH /api/auth/me changes own password only with correct current pa
   assert.ok(!verifyPassword('oldpass', store.users.find((u) => u.id === 'user_me').passwordHash));
 });
 
-await test('PATCH /api/auth/me binds phone, rejects duplicates, allows login by phone', async () => {
+await test('PATCH /api/auth/me verifies code before binding phone and allows SMS login', async () => {
   const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
   const { createSessionToken, findUserForProject, hashPassword, verifyPassword } = await import('../server/services/auth.js');
   let store = migrateStore({
@@ -1419,14 +1419,112 @@ await test('PATCH /api/auth/me binds phone, rejects duplicates, allows login by 
   await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
   assert.equal(status, 400);
 
-  // 合法手机号 → 200 + 可用手机号登录
-  bodyJson = { phone: '138 1234-5678' }; // 含格式字符，应被 normalize
+  // 合法手机号但无验证码 → 403
+  bodyJson = { phone: '138 1234-5678' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 403);
+
+  // 先发绑定验证码，再提交绑定
+  bodyJson = { phone: '138 1234-5678', purpose: 'bind_phone' };
+  await route({ method: 'POST', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/phone-code'));
+  assert.equal(status, 200);
+  const bindCode = payload.devCode;
+  bodyJson = { phone: '138 1234-5678', phoneCode: bindCode }; // 含格式字符，应被 normalize
   await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
   assert.equal(status, 200);
   assert.equal(payload.user.phone, '13812345678');
   // findUserForProject 可以通过手机号找到 alice
   const found = findUserForProject(store.users, '13812345678', 'cue_ai_classroom');
   assert.equal(found.id, 'user_alice');
+
+  // 手机号验证码登录
+  bodyJson = { phone: '13812345678', purpose: 'login', projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/phone-code'));
+  assert.equal(status, 200);
+  const loginCode = payload.devCode;
+  bodyJson = { username: '13812345678', phoneCode: loginCode, projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
+  assert.equal(status, 200);
+  assert.equal(payload.user.username, 'alice');
+  assert.equal(typeof payload.token, 'string');
+});
+
+await test('PATCH /api/auth/me verifies code before binding email and allows email code login', async () => {
+  const originalSmtp = {
+    SMTP_HOST: process.env.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT,
+    SMTP_USER: process.env.SMTP_USER,
+    SMTP_PASS: process.env.SMTP_PASS,
+    SMTP_FROM: process.env.SMTP_FROM
+  };
+  delete process.env.SMTP_HOST;
+  delete process.env.SMTP_PORT;
+  delete process.env.SMTP_USER;
+  delete process.env.SMTP_PASS;
+  delete process.env.SMTP_FROM;
+
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken, findUserForProject, hashPassword } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_alice' }],
+    users: [
+      { id: 'user_alice', username: 'alice', name: 'A', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('p'), active: true },
+      { id: 'user_bob', username: 'bob', name: 'B', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('p'), email: 'bob@example.com', active: true }
+    ]
+  });
+  const alice = store.users.find((u) => u.id === 'user_alice');
+  const token = createSessionToken(alice, 'cue_ai_classroom');
+  let status = null; let payload = null;
+  let bodyJson = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: bodyJson }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+
+  bodyJson = { email: 'bob@example.com' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 409);
+
+  bodyJson = { email: 'bad-email' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 400);
+
+  bodyJson = { email: 'alice@example.com' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 403);
+
+  bodyJson = { email: 'alice@example.com', purpose: 'bind_email' };
+  await route({ method: 'POST', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/email-code'));
+  assert.equal(status, 200);
+  assert.equal(payload.email, 'alice@example.com');
+  const bindCode = payload.devCode;
+  bodyJson = { email: 'Alice@Example.com', emailCode: bindCode };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 200);
+  assert.equal(payload.user.email, 'alice@example.com');
+  const found = findUserForProject(store.users, 'ALICE@example.com', 'cue_ai_classroom');
+  assert.equal(found.id, 'user_alice');
+
+  bodyJson = { email: 'alice@example.com', purpose: 'login', projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/email-code'));
+  assert.equal(status, 200);
+  const loginCode = payload.devCode;
+  bodyJson = { username: 'alice@example.com', emailCode: loginCode, projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
+  assert.equal(status, 200);
+  assert.equal(payload.user.username, 'alice');
+  assert.equal(typeof payload.token, 'string');
+
+  for (const [key, value] of Object.entries(originalSmtp)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
 await test('cleanup endpoint resets unclaimed task owner to 待认领 and stashes LLM suggestion', async () => {

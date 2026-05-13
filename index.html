@@ -20,13 +20,24 @@
             <select id="loginProjectSelect" aria-label="选择项目"></select>
           </label>
           <label>
-            <span>账号 / 手机号</span>
-            <input id="loginUsername" type="text" autocomplete="username" placeholder="登录账号或已绑定的手机号" required />
+            <span>账号 / 手机号 / 邮箱</span>
+            <input id="loginUsername" type="text" autocomplete="username" placeholder="登录账号、已绑定手机号或邮箱" required />
           </label>
-          <label>
+          <div class="auth-mode-switch" role="group" aria-label="登录方式">
+            <button type="button" class="active" data-login-mode="password">密码登录</button>
+            <button type="button" data-login-mode="email">邮箱验证码</button>
+          </div>
+          <label id="loginPasswordField">
             <span>密码</span>
             <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••" required />
           </label>
+          <div class="auth-code-field" id="loginEmailCodeField" hidden>
+            <label>
+              <span>邮箱验证码</span>
+              <input id="loginEmailCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" />
+            </label>
+            <button type="button" class="auth-secondary-button" data-action="send-login-email-code">获取验证码</button>
+          </div>
           <button type="submit">进入 Hub</button>
           <button class="auth-link-button" type="button" data-action="open-account-admin-login">管理员账号管理入口</button>
           <small id="loginHint">项目列表会从服务器自动读取。</small>
@@ -747,6 +758,7 @@
               <div><dt>姓名</dt><dd id="accountSettingsName">—</dd></div>
               <div><dt>登录账号</dt><dd id="accountSettingsUsername">—</dd></div>
               <div><dt>当前手机号</dt><dd id="accountSettingsPhoneCurrent">未绑定</dd></div>
+              <div><dt>当前邮箱</dt><dd id="accountSettingsEmailCurrent">未绑定</dd></div>
             </dl>
           </section>
 
@@ -778,8 +790,35 @@
                 <span>手机号（留空则清除当前绑定）</span>
                 <input type="tel" id="newPhoneInput" autocomplete="tel" placeholder="例如 13812345678 或 +8613812345678" />
               </label>
+              <div class="account-settings-code-row">
+                <label>
+                  <span>验证码</span>
+                  <input type="text" id="bindPhoneCodeInput" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" />
+                </label>
+                <button type="button" class="modal-secondary" data-action="send-bind-phone-code">获取验证码</button>
+              </div>
               <button type="submit" class="modal-primary">保存手机号</button>
               <p class="account-settings-hint" id="bindPhoneHint"></p>
+            </form>
+          </section>
+
+          <section class="account-settings-section">
+            <h3>绑定邮箱</h3>
+            <p class="account-settings-desc">绑定后可用邮箱验证码登录。邮箱需在所有账号中唯一。</p>
+            <form class="account-settings-form" id="bindEmailForm" autocomplete="off">
+              <label>
+                <span>邮箱（留空则清除当前绑定）</span>
+                <input type="email" id="newEmailInput" autocomplete="email" placeholder="例如 noreply@cueai.top" />
+              </label>
+              <div class="account-settings-code-row">
+                <label>
+                  <span>验证码</span>
+                  <input type="text" id="bindEmailCodeInput" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" />
+                </label>
+                <button type="button" class="modal-secondary" data-action="send-bind-email-code">获取验证码</button>
+              </div>
+              <button type="submit" class="modal-primary">保存邮箱</button>
+              <p class="account-settings-hint" id="bindEmailHint"></p>
             </form>
           </section>
         </div>

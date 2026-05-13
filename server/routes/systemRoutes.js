@@ -2,14 +2,20 @@ import {
   createSessionToken,
   findUserForProject,
   hashPassword,
+  issueEmailCode,
+  issuePhoneCode,
   isProjectFounder,
+  normalizeEmail,
   normalizePhone,
   roleForProject,
   sanitizeUser,
   userCanManageProject,
+  verifyEmailCode,
+  verifyPhoneCode,
   verifyPassword,
   verifySessionToken
 } from '../services/auth.js';
+import { isSmtpConfigured, sendVerificationEmail } from '../services/mailer.js';
 
 function getBearerToken(req) {
   const header = req.headers.authorization || '';
@@ -59,12 +65,31 @@ export function createSystemRoutes({
       const { json } = await readBody(req);
       const username = String(json?.username || '').trim();
       const password = String(json?.password || '');
+      const emailCode = String(json?.emailCode || '').trim();
+      const phoneCode = String(json?.phoneCode || json?.code || '').trim();
       const projectId = String(json?.projectId || '').trim();
       const store = await loadStore();
       const fallbackProjectId = (store.projects || [])[0]?.id || 'cue_ai_classroom';
       const targetProjectId = projectId || fallbackProjectId;
-      const user = findUserForProject(store.users || [], username, targetProjectId);
-      if (!user || !verifyPassword(password, user.passwordHash)) {
+      let user = null;
+      if (emailCode) {
+        const email = normalizeEmail(username);
+        if (!email || !verifyEmailCode(email, emailCode, 'login')) {
+          sendJson(res, 401, { ok: false, error: 'invalid verification code' });
+          return true;
+        }
+        user = findUserForProject(store.users || [], email, targetProjectId);
+      } else if (phoneCode) {
+        const phone = normalizePhone(username);
+        if (!phone || !verifyPhoneCode(phone, phoneCode, 'login')) {
+          sendJson(res, 401, { ok: false, error: 'invalid verification code' });
+          return true;
+        }
+        user = findUserForProject(store.users || [], phone, targetProjectId);
+      } else {
+        user = findUserForProject(store.users || [], username, targetProjectId);
+      }
+      if (!user || (!phoneCode && !emailCode && !verifyPassword(password, user.passwordHash))) {
         sendJson(res, 401, { ok: false, error: 'invalid credentials' });
         return true;
       }
@@ -74,6 +99,113 @@ export function createSystemRoutes({
         user: sanitizeUserForProject(user, targetProjectId, project),
         projectId: targetProjectId,
         token: createSessionToken(user, targetProjectId)
+      });
+      return true;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/email-code') {
+      const { json } = await readBody(req);
+      const purpose = json?.purpose === 'bind_email' ? 'bind_email' : 'login';
+      const email = normalizeEmail(json?.email || json?.username || '');
+      const projectId = String(json?.projectId || '').trim();
+      if (!email) {
+        sendJson(res, 400, { ok: false, error: 'invalid email address' });
+        return true;
+      }
+      const store = await loadStore();
+      if (purpose === 'login') {
+        const fallbackProjectId = (store.projects || [])[0]?.id || 'cue_ai_classroom';
+        const targetProjectId = projectId || fallbackProjectId;
+        const user = findUserForProject(store.users || [], email, targetProjectId);
+        if (!user) {
+          sendJson(res, 404, { ok: false, error: 'email is not bound to an active account' });
+          return true;
+        }
+      } else {
+        const session = verifySessionToken(getBearerToken(req));
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: 'not authenticated' });
+          return true;
+        }
+        const me = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
+        if (!me) {
+          sendJson(res, 401, { ok: false, error: 'session user not found' });
+          return true;
+        }
+        const collision = (store.users || []).some((u) => u.id !== me.id && u.email === email);
+        if (collision) {
+          sendJson(res, 409, { ok: false, error: 'email already bound to another account' });
+          return true;
+        }
+      }
+      const issued = issueEmailCode(email, purpose);
+      if (!issued.ok) {
+        sendJson(res, issued.error === 'email code sent too frequently' ? 429 : 400, issued);
+        return true;
+      }
+      if (isSmtpConfigured()) {
+        try {
+          await sendVerificationEmail(issued.email, issued.code);
+        } catch (error) {
+          sendJson(res, 502, { ok: false, error: 'email delivery failed', details: error.message });
+          return true;
+        }
+      }
+      sendJson(res, 200, {
+        ok: true,
+        email: issued.email,
+        expiresAt: issued.expiresAt,
+        devCode: isSmtpConfigured() ? undefined : issued.code
+      });
+      return true;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/phone-code') {
+      const { json } = await readBody(req);
+      const purpose = json?.purpose === 'bind_phone' ? 'bind_phone' : 'login';
+      const phone = normalizePhone(json?.phone || json?.username || '');
+      const projectId = String(json?.projectId || '').trim();
+      if (!phone) {
+        sendJson(res, 400, { ok: false, error: 'invalid phone number' });
+        return true;
+      }
+      const store = await loadStore();
+      if (purpose === 'login') {
+        const fallbackProjectId = (store.projects || [])[0]?.id || 'cue_ai_classroom';
+        const targetProjectId = projectId || fallbackProjectId;
+        const user = findUserForProject(store.users || [], phone, targetProjectId);
+        if (!user) {
+          sendJson(res, 404, { ok: false, error: 'phone is not bound to an active account' });
+          return true;
+        }
+      } else {
+        const session = verifySessionToken(getBearerToken(req));
+        if (!session) {
+          sendJson(res, 401, { ok: false, error: 'not authenticated' });
+          return true;
+        }
+        const me = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
+        if (!me) {
+          sendJson(res, 401, { ok: false, error: 'session user not found' });
+          return true;
+        }
+        const collision = (store.users || []).some((u) => u.id !== me.id && u.phone === phone);
+        if (collision) {
+          sendJson(res, 409, { ok: false, error: 'phone already bound to another account' });
+          return true;
+        }
+      }
+      const issued = issuePhoneCode(phone, purpose);
+      if (!issued.ok) {
+        sendJson(res, issued.error === 'phone code sent too frequently' ? 429 : 400, issued);
+        return true;
+      }
+      // 当前项目尚未接入短信供应商；开发/内网环境直接返回 devCode 供页面提示，接 SMS 时替换为真实发送即可。
+      sendJson(res, 200, {
+        ok: true,
+        phone: issued.phone,
+        expiresAt: issued.expiresAt,
+        devCode: issued.code
       });
       return true;
     }
@@ -272,8 +404,10 @@ export function createSystemRoutes({
       const currentPassword = String(json?.currentPassword || '');
       const newPassword = String(json?.newPassword || '');
       const newPhoneRaw = json?.phone;
+      const newEmailRaw = json?.email;
       const wantsPasswordChange = Boolean(newPassword);
       const wantsPhoneChange = newPhoneRaw !== undefined;
+      const wantsEmailChange = newEmailRaw !== undefined;
 
       if (wantsPasswordChange) {
         if (newPassword.length < 6) {
@@ -303,6 +437,35 @@ export function createSystemRoutes({
             sendJson(res, 409, { ok: false, error: 'phone already bound to another account' });
             return true;
           }
+          const phoneCode = String(json?.phoneCode || json?.code || '').trim();
+          if (!verifyPhoneCode(normalizedPhone, phoneCode, 'bind_phone')) {
+            sendJson(res, 403, { ok: false, error: 'invalid verification code' });
+            return true;
+          }
+        }
+      }
+
+      let normalizedEmail = null;
+      if (wantsEmailChange) {
+        const raw = String(newEmailRaw || '').trim();
+        if (raw === '') {
+          normalizedEmail = '';
+        } else {
+          normalizedEmail = normalizeEmail(raw);
+          if (!normalizedEmail) {
+            sendJson(res, 400, { ok: false, error: 'invalid email address' });
+            return true;
+          }
+          const collision = (before.users || []).some((u) => u.id !== me.id && u.email === normalizedEmail);
+          if (collision) {
+            sendJson(res, 409, { ok: false, error: 'email already bound to another account' });
+            return true;
+          }
+          const emailCode = String(json?.emailCode || '').trim();
+          if (!verifyEmailCode(normalizedEmail, emailCode, 'bind_email')) {
+            sendJson(res, 403, { ok: false, error: 'invalid verification code' });
+            return true;
+          }
         }
       }
 
@@ -316,6 +479,7 @@ export function createSystemRoutes({
           ...cur,
           passwordHash: wantsPasswordChange ? hashPassword(newPassword) : cur.passwordHash,
           phone: wantsPhoneChange ? normalizedPhone : cur.phone,
+          email: wantsEmailChange ? normalizedEmail : cur.email,
           updatedAt: now
         };
         draft.users[idx] = updated;
@@ -324,7 +488,7 @@ export function createSystemRoutes({
       sendJson(res, 200, {
         ok: true,
         user: sanitizeUser(updated),
-        changed: { password: wantsPasswordChange, phone: wantsPhoneChange }
+        changed: { password: wantsPasswordChange, phone: wantsPhoneChange, email: wantsEmailChange }
       });
       return true;
     }

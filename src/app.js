@@ -36,6 +36,7 @@ const state = {
 let selectedTaskId = '';
 let selectedRiskId = '';
 let activeRiskTab = 'P1';
+let loginMode = 'password';
 const _submitting = new Set();
 
 // 防重复提交：key 相同的调用在前一次完成前直接忽略
@@ -276,10 +277,18 @@ async function openAccountSettings() {
   setText('#accountSettingsName', me?.name || currentSessionUsername() || '—');
   setText('#accountSettingsUsername', me?.username || currentSessionUsername() || '—');
   setText('#accountSettingsPhoneCurrent', me?.phone || '未绑定');
+  setText('#accountSettingsEmailCurrent', me?.email || '未绑定');
   const phoneInput = document.querySelector('#newPhoneInput');
   if (phoneInput) phoneInput.value = me?.phone || '';
+  const phoneCodeInput = document.querySelector('#bindPhoneCodeInput');
+  if (phoneCodeInput) phoneCodeInput.value = '';
+  const emailInput = document.querySelector('#newEmailInput');
+  if (emailInput) emailInput.value = me?.email || '';
+  const emailCodeInput = document.querySelector('#bindEmailCodeInput');
+  if (emailCodeInput) emailCodeInput.value = '';
   setText('#changePasswordHint', '');
   setText('#bindPhoneHint', '');
+  setText('#bindEmailHint', '');
   document.querySelector('#changePasswordForm')?.reset();
   backdrop.style.display = 'flex';
 }
@@ -319,11 +328,16 @@ async function submitChangePassword(event) {
 async function submitBindPhone(event) {
   event.preventDefault();
   const phone = document.querySelector('#newPhoneInput')?.value.trim() || '';
+  const phoneCode = document.querySelector('#bindPhoneCodeInput')?.value.trim() || '';
   const hint = document.querySelector('#bindPhoneHint');
+  if (phone && !phoneCode) {
+    if (hint) hint.textContent = '请先获取并填写验证码';
+    return;
+  }
   try {
     const payload = await api('/api/auth/me', {
       method: 'PATCH',
-      body: JSON.stringify({ phone })
+      body: JSON.stringify({ phone, phoneCode })
     });
     const saved = payload.user?.phone || '';
     if (hint) hint.textContent = saved ? `✅ 已绑定 ${saved}，可用于登录` : '✅ 已清除手机号绑定';
@@ -333,9 +347,115 @@ async function submitBindPhone(event) {
     if (hint) {
       if (error.message === 'invalid phone number') hint.textContent = '手机号格式不正确';
       else if (error.message === 'phone already bound to another account') hint.textContent = '该手机号已被其他账号绑定';
+      else if (error.message === 'invalid verification code') hint.textContent = '验证码不正确或已过期';
       else hint.textContent = `失败：${error.message}`;
     }
   }
+}
+
+async function submitBindEmail(event) {
+  event.preventDefault();
+  const email = document.querySelector('#newEmailInput')?.value.trim() || '';
+  const emailCode = document.querySelector('#bindEmailCodeInput')?.value.trim() || '';
+  const hint = document.querySelector('#bindEmailHint');
+  if (email && !emailCode) {
+    if (hint) hint.textContent = '请先获取并填写验证码';
+    return;
+  }
+  try {
+    const payload = await api('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ email, emailCode })
+    });
+    const saved = payload.user?.email || '';
+    if (hint) hint.textContent = saved ? `✅ 已绑定 ${saved}，可用于邮箱验证码登录` : '✅ 已清除邮箱绑定';
+    setText('#accountSettingsEmailCurrent', saved || '未绑定');
+    toast(saved ? '邮箱已绑定' : '邮箱绑定已清除');
+  } catch (error) {
+    if (hint) {
+      if (error.message === 'invalid email address') hint.textContent = '邮箱格式不正确';
+      else if (error.message === 'email already bound to another account') hint.textContent = '该邮箱已被其他账号绑定';
+      else if (error.message === 'invalid verification code') hint.textContent = '验证码不正确或已过期';
+      else hint.textContent = `失败：${error.message}`;
+    }
+  }
+}
+
+function setLoginMode(mode) {
+  loginMode = mode === 'email' ? 'email' : 'password';
+  document.querySelectorAll('[data-login-mode]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.loginMode === loginMode);
+  });
+  const passwordField = document.querySelector('#loginPasswordField');
+  const passwordInput = document.querySelector('#loginPassword');
+  const emailCodeField = document.querySelector('#loginEmailCodeField');
+  const emailCodeInput = document.querySelector('#loginEmailCode');
+  if (passwordField) passwordField.hidden = loginMode !== 'password';
+  if (passwordInput) passwordInput.required = loginMode === 'password';
+  if (emailCodeField) emailCodeField.hidden = loginMode !== 'email';
+  if (emailCodeInput) emailCodeInput.required = loginMode === 'email';
+  const hintText = loginMode === 'email'
+      ? '请输入已绑定邮箱，获取验证码后登录。'
+      : '项目列表会从服务器自动读取。';
+  setText('#loginHint', hintText);
+}
+
+async function sendLoginPhoneCode() {
+  const projectId = document.querySelector('#loginProjectSelect')?.value || '';
+  const phone = document.querySelector('#loginUsername')?.value.trim() || '';
+  if (!projectId) { toast('请选择项目'); return; }
+  if (!phone) { setText('#loginHint', '请先输入已绑定手机号。'); return; }
+  const payload = await api('/api/auth/phone-code', {
+    method: 'POST',
+    body: JSON.stringify({ phone, projectId, purpose: 'login' })
+  });
+  const suffix = payload.devCode ? ` 验证码：${payload.devCode}` : '';
+  setText('#loginHint', `验证码已发送，10 分钟内有效。${suffix}`);
+  toast('验证码已发送');
+}
+
+async function sendLoginEmailCode() {
+  const projectId = document.querySelector('#loginProjectSelect')?.value || '';
+  const email = document.querySelector('#loginUsername')?.value.trim() || '';
+  if (!projectId) { toast('请选择项目'); return; }
+  if (!email) { setText('#loginHint', '请先输入已绑定邮箱。'); return; }
+  const payload = await api('/api/auth/email-code', {
+    method: 'POST',
+    body: JSON.stringify({ email, projectId, purpose: 'login' })
+  });
+  const suffix = payload.devCode ? ` 验证码：${payload.devCode}` : '';
+  setText('#loginHint', `验证码已发送到邮箱，10 分钟内有效。${suffix}`);
+  toast('邮箱验证码已发送');
+}
+
+async function sendBindPhoneCode() {
+  const phone = document.querySelector('#newPhoneInput')?.value.trim() || '';
+  const hint = document.querySelector('#bindPhoneHint');
+  if (!phone) {
+    if (hint) hint.textContent = '请输入要绑定的手机号';
+    return;
+  }
+  const payload = await api('/api/auth/phone-code', {
+    method: 'POST',
+    body: JSON.stringify({ phone, purpose: 'bind_phone' })
+  });
+  if (hint) hint.textContent = `验证码已发送，10 分钟内有效。${payload.devCode ? `验证码：${payload.devCode}` : ''}`;
+  toast('验证码已发送');
+}
+
+async function sendBindEmailCode() {
+  const email = document.querySelector('#newEmailInput')?.value.trim() || '';
+  const hint = document.querySelector('#bindEmailHint');
+  if (!email) {
+    if (hint) hint.textContent = '请输入要绑定的邮箱';
+    return;
+  }
+  const payload = await api('/api/auth/email-code', {
+    method: 'POST',
+    body: JSON.stringify({ email, purpose: 'bind_email' })
+  });
+  if (hint) hint.textContent = `验证码已发送到邮箱，10 分钟内有效。${payload.devCode ? `验证码：${payload.devCode}` : ''}`;
+  toast('邮箱验证码已发送');
 }
 
 async function loadLoginProjects() {
@@ -350,10 +470,14 @@ async function login(event) {
   const projectId = document.querySelector('#loginProjectSelect')?.value || '';
   const username = document.querySelector('#loginUsername')?.value.trim() || '';
   const password = document.querySelector('#loginPassword')?.value || '';
+  const emailCode = document.querySelector('#loginEmailCode')?.value.trim() || '';
   if (!projectId) { toast('请选择项目'); return; }
+  if (loginMode === 'email' && !emailCode) { setText('#loginHint', '请输入邮箱验证码。'); return; }
   const payload = await api('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password, projectId })
+    body: JSON.stringify(loginMode === 'email'
+        ? { username, emailCode, projectId }
+        : { username, password, projectId })
   });
   sessionStorage.setItem('cueHubSessionToken', payload.token || '');
   sessionStorage.setItem('cueHubAuthenticated', 'true');
@@ -2896,9 +3020,25 @@ function toast(message) {
 // ── 事件绑定 ─────────────────────────────────────────────────
 
 function bindEvents() {
+  setLoginMode(loginMode);
+  document.querySelectorAll('[data-login-mode]').forEach((button) => {
+    button.addEventListener('click', () => setLoginMode(button.dataset.loginMode));
+  });
+  document.querySelector('[data-action="send-login-email-code"]')?.addEventListener('click', () => {
+    sendLoginEmailCode().catch((error) => {
+      if (error.message === 'invalid email address') setText('#loginHint', '请输入有效邮箱。');
+      else if (error.message === 'email is not bound to an active account') setText('#loginHint', '该邮箱尚未绑定当前项目账号。');
+      else if (error.message === 'email code sent too frequently') setText('#loginHint', '验证码发送太频繁，请稍后再试。');
+      else if (error.message === 'email delivery failed') setText('#loginHint', '邮件发送失败，请检查 SMTP 配置。');
+      else setText('#loginHint', error.message);
+      toast(error.message);
+    });
+  });
   document.querySelector('#loginForm')?.addEventListener('submit', (event) => {
     login(event).catch((error) => {
-      setText('#loginHint', error.message === 'invalid credentials' ? '账号或密码不正确。' : error.message);
+      if (error.message === 'invalid credentials') setText('#loginHint', '账号或密码不正确。');
+      else if (error.message === 'invalid verification code') setText('#loginHint', '验证码不正确或已过期。');
+      else setText('#loginHint', error.message);
       toast(error.message);
     });
   });
@@ -2916,6 +3056,32 @@ function bindEvents() {
   });
   document.querySelector('#changePasswordForm')?.addEventListener('submit', submitChangePassword);
   document.querySelector('#bindPhoneForm')?.addEventListener('submit', submitBindPhone);
+  document.querySelector('#bindEmailForm')?.addEventListener('submit', submitBindEmail);
+  document.querySelector('[data-action="send-bind-phone-code"]')?.addEventListener('click', () => {
+    sendBindPhoneCode().catch((error) => {
+      const hint = document.querySelector('#bindPhoneHint');
+      if (hint) {
+        if (error.message === 'invalid phone number') hint.textContent = '手机号格式不正确';
+        else if (error.message === 'phone already bound to another account') hint.textContent = '该手机号已被其他账号绑定';
+        else if (error.message === 'phone code sent too frequently') hint.textContent = '验证码发送太频繁，请稍后再试';
+        else hint.textContent = `失败：${error.message}`;
+      }
+      toast(error.message);
+    });
+  });
+  document.querySelector('[data-action="send-bind-email-code"]')?.addEventListener('click', () => {
+    sendBindEmailCode().catch((error) => {
+      const hint = document.querySelector('#bindEmailHint');
+      if (hint) {
+        if (error.message === 'invalid email address') hint.textContent = '邮箱格式不正确';
+        else if (error.message === 'email already bound to another account') hint.textContent = '该邮箱已被其他账号绑定';
+        else if (error.message === 'email code sent too frequently') hint.textContent = '验证码发送太频繁，请稍后再试';
+        else if (error.message === 'email delivery failed') hint.textContent = '邮件发送失败，请检查 SMTP 配置';
+        else hint.textContent = `失败：${error.message}`;
+      }
+      toast(error.message);
+    });
+  });
   document.querySelector('#adminPageRegisterForm')?.addEventListener('submit', (event) => {
     registerProjectUserFromAdminPage(event).catch((error) => {
       setText('#adminPageRegisterHint', error.message === 'project admin credentials required' ? '当前账号没有管理员权限。' : error.message);

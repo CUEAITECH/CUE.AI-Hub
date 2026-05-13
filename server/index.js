@@ -1060,6 +1060,7 @@ server.listen(port, host, () => {
     GITHUB_TOKEN       ${process.env.GITHUB_TOKEN ? '✅ 已配置（GitHub API 同步）' : '❌ 未配置（限速 60次/小时）'}
     WECOM_WEBHOOK_URL  ${process.env.WECOM_WEBHOOK_URL ? '✅ 已配置（企微推送启用）' : '❌ 未配置（推送不可用）'}
     CUE_API_KEY        ${process.env.CUE_API_KEY ? '✅ 已配置（写接口鉴权）' : '⚪ 未配置（写接口对外开放）'}
+    SMTP               ${process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS ? '✅ 已配置（邮箱验证码启用）' : '⚪ 未配置（页面显示开发验证码）'}
     HUB_URL            ${hubUrl}
     MEETING_HOUR       ${meetingHour}:00（作战包 ${prepHour}:45 自动推送）
     GITHUB_AUTO_SYNC   ${githubSyncIntervalMinutes > 0 ? `✅ 每 ${githubSyncIntervalMinutes} 分钟同步一次` : '⏸️ 已关闭'}

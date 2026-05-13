@@ -14,6 +14,10 @@
   --shadow: none;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -127,6 +131,43 @@ body.authenticated .auth-shell {
   background: transparent;
   color: var(--blue);
   border-color: var(--line);
+}
+
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.auth-mode-switch button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--dim);
+  padding: 9px 10px;
+}
+
+.auth-mode-switch button.active {
+  border-color: #101010;
+  background: #101010;
+  color: #fff;
+}
+
+.auth-code-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.auth-form .auth-secondary-button {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--blue);
+  white-space: nowrap;
 }
 
 .auth-form small {
@@ -892,6 +933,24 @@ h1 {
 .account-settings-form button {
   align-self: flex-start;
   margin-top: 4px;
+}
+
+.account-settings-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.account-settings-form .modal-secondary {
+  height: 36px;
+  margin-top: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--blue);
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .account-settings-desc {
