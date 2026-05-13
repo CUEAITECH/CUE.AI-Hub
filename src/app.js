@@ -263,6 +263,81 @@ function logout() {
   window.location.reload();
 }
 
+async function openAccountSettings() {
+  const backdrop = document.querySelector('#accountSettingsBackdrop');
+  if (!backdrop) return;
+  // 拉当前账号的最新信息（手机号可能在别处改过）
+  const projectId = getCurrentProjectId();
+  let me = null;
+  try {
+    const payload = await api(`/api/auth/users?projectId=${encodeURIComponent(projectId)}`);
+    me = (payload.users || []).find((u) => u.username === currentSessionUsername()) || null;
+  } catch { /* 拉不到也允许打开（用户可能不是管理员看不到列表，但还是要能改自己密码） */ }
+  setText('#accountSettingsName', me?.name || currentSessionUsername() || '—');
+  setText('#accountSettingsUsername', me?.username || currentSessionUsername() || '—');
+  setText('#accountSettingsPhoneCurrent', me?.phone || '未绑定');
+  const phoneInput = document.querySelector('#newPhoneInput');
+  if (phoneInput) phoneInput.value = me?.phone || '';
+  setText('#changePasswordHint', '');
+  setText('#bindPhoneHint', '');
+  document.querySelector('#changePasswordForm')?.reset();
+  backdrop.style.display = 'flex';
+}
+
+function closeAccountSettings() {
+  const backdrop = document.querySelector('#accountSettingsBackdrop');
+  if (backdrop) backdrop.style.display = 'none';
+}
+
+async function submitChangePassword(event) {
+  event.preventDefault();
+  const currentPassword = document.querySelector('#currentPasswordInput')?.value || '';
+  const newPassword = document.querySelector('#newPasswordInput')?.value || '';
+  const confirm = document.querySelector('#newPasswordConfirmInput')?.value || '';
+  const hint = document.querySelector('#changePasswordHint');
+  if (newPassword !== confirm) {
+    if (hint) hint.textContent = '两次新密码不一致';
+    return;
+  }
+  if (newPassword.length < 6) {
+    if (hint) hint.textContent = '新密码至少 6 位';
+    return;
+  }
+  try {
+    await api('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    if (hint) hint.textContent = '✅ 密码已更新';
+    toast('密码已更新，请下次登录使用新密码');
+    document.querySelector('#changePasswordForm')?.reset();
+  } catch (error) {
+    if (hint) hint.textContent = error.message === 'current password is incorrect' ? '当前密码不正确' : `失败：${error.message}`;
+  }
+}
+
+async function submitBindPhone(event) {
+  event.preventDefault();
+  const phone = document.querySelector('#newPhoneInput')?.value.trim() || '';
+  const hint = document.querySelector('#bindPhoneHint');
+  try {
+    const payload = await api('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ phone })
+    });
+    const saved = payload.user?.phone || '';
+    if (hint) hint.textContent = saved ? `✅ 已绑定 ${saved}，可用于登录` : '✅ 已清除手机号绑定';
+    setText('#accountSettingsPhoneCurrent', saved || '未绑定');
+    toast(saved ? '手机号已绑定' : '手机号绑定已清除');
+  } catch (error) {
+    if (hint) {
+      if (error.message === 'invalid phone number') hint.textContent = '手机号格式不正确';
+      else if (error.message === 'phone already bound to another account') hint.textContent = '该手机号已被其他账号绑定';
+      else hint.textContent = `失败：${error.message}`;
+    }
+  }
+}
+
 async function loadLoginProjects() {
   const payload = await api('/api/projects');
   state.projects = payload.projects || [];
@@ -395,7 +470,6 @@ async function renderAccountAdmin() {
                 <button type="button" data-action="toggle-user-active">
                   ${user.active === false ? '启用' : '停用'}
                 </button>`}
-            <button type="button" data-action="reset-user-password" class="admin-user-btn-ghost" ${user.role === 'admin' ? 'disabled' : ''}>重置密码</button>
             ${isSelfFounder ? '<button type="button" data-action="transfer-founder" class="admin-user-btn-danger">转移创始人</button>' : ''}
           </div>
         </div>
@@ -2849,6 +2923,17 @@ function bindEvents() {
   document.querySelector('#logoutBtn')?.addEventListener('click', () => {
     if (window.confirm('确认退出当前账号？将返回登录页面。')) logout();
   });
+  document.querySelector('#accountSettingsBtn')?.addEventListener('click', () => {
+    openAccountSettings().catch((error) => toast(error.message));
+  });
+  // 账号设置 modal 内事件
+  document.querySelector('#accountSettingsBackdrop')?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (target === event.currentTarget) { closeAccountSettings(); return; }
+    if (target instanceof HTMLElement && target.dataset.action === 'close-account-settings') closeAccountSettings();
+  });
+  document.querySelector('#changePasswordForm')?.addEventListener('submit', submitChangePassword);
+  document.querySelector('#bindPhoneForm')?.addEventListener('submit', submitBindPhone);
   document.querySelector('#registerUserForm')?.addEventListener('submit', (event) => {
     registerProjectUser(event).catch((error) => {
       setText('#registerHint', error.message === 'project admin credentials required' ? '管理员账号或密码不正确。' : error.message);
@@ -2874,9 +2959,6 @@ function bindEvents() {
     if (target.dataset.action === 'toggle-user-active') {
       const active = target.textContent?.trim() === '启用';
       updateProjectUserFromAdminPage(userId, { active }).catch((error) => toast(error.message));
-    }
-    if (target.dataset.action === 'reset-user-password') {
-      updateProjectUserFromAdminPage(userId, { password: '123456' }).catch((error) => toast(error.message));
     }
     if (target.dataset.action === 'transfer-founder') {
       transferFounder();

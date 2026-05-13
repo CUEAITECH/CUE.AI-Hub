@@ -3,6 +3,7 @@ import {
   findUserForProject,
   hashPassword,
   isProjectFounder,
+  normalizePhone,
   roleForProject,
   sanitizeUser,
   userCanManageProject,
@@ -226,7 +227,8 @@ export function createSystemRoutes({
 
       const nextRole = ['developer', 'project_admin'].includes(json?.role) ? json.role : undefined;
       const hasActivePatch = typeof json?.active === 'boolean';
-      const nextPassword = typeof json?.password === 'string' && json.password ? json.password : '';
+      // 安全：管理员不能给他人改/重置密码（之前会导致管理员任意覆盖他人凭据）。
+      // 密码只能本人通过 PATCH /api/auth/me 改，必须验证旧密码
       let updatedUser = null;
       const now = new Date().toISOString();
       await updateStore((draft) => {
@@ -242,13 +244,88 @@ export function createSystemRoutes({
             ? projectRoles
             : { ...projectRoles, ...(nextRole ? { [projectId]: nextRole } : {}) },
           active: current.role === 'admin' ? true : (hasActivePatch ? json.active : current.active !== false),
-          passwordHash: nextPassword ? hashPassword(nextPassword) : current.passwordHash,
           updatedAt: now
         };
         draft.users[index] = updatedUser;
         return draft;
       });
       sendJson(res, 200, { ok: true, user: sanitizeUserForProject(updatedUser, projectId, project) });
+      return true;
+    }
+
+    // 本人账号自助：修改密码（须验证旧密码） / 绑定/修改手机号
+    if (req.method === 'PATCH' && url.pathname === '/api/auth/me') {
+      if (typeof updateStore !== 'function') {
+        sendJson(res, 500, { ok: false, error: 'auth store is not writable' });
+        return true;
+      }
+      const headers = req.headers || {};
+      const auth = headers.authorization || '';
+      const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : (headers['x-cue-session-token'] || '');
+      const session = verifySessionToken(token);
+      if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
+      const { json } = await readBody(req);
+      const before = await loadStore();
+      const me = (before.users || []).find((u) => u.id === session.sub && u.active !== false);
+      if (!me) { sendJson(res, 401, { ok: false, error: 'session user not found' }); return true; }
+
+      const currentPassword = String(json?.currentPassword || '');
+      const newPassword = String(json?.newPassword || '');
+      const newPhoneRaw = json?.phone;
+      const wantsPasswordChange = Boolean(newPassword);
+      const wantsPhoneChange = newPhoneRaw !== undefined;
+
+      if (wantsPasswordChange) {
+        if (newPassword.length < 6) {
+          sendJson(res, 400, { ok: false, error: 'new password must be at least 6 characters' });
+          return true;
+        }
+        if (!verifyPassword(currentPassword, me.passwordHash)) {
+          sendJson(res, 403, { ok: false, error: 'current password is incorrect' });
+          return true;
+        }
+      }
+
+      let normalizedPhone = null;
+      if (wantsPhoneChange) {
+        const raw = String(newPhoneRaw || '').trim();
+        if (raw === '') {
+          normalizedPhone = ''; // 显式清空
+        } else {
+          normalizedPhone = normalizePhone(raw);
+          if (!normalizedPhone) {
+            sendJson(res, 400, { ok: false, error: 'invalid phone number' });
+            return true;
+          }
+          // 唯一性：同 phone 不能落到不同账号上
+          const collision = (before.users || []).some((u) => u.id !== me.id && u.phone === normalizedPhone);
+          if (collision) {
+            sendJson(res, 409, { ok: false, error: 'phone already bound to another account' });
+            return true;
+          }
+        }
+      }
+
+      const now = new Date().toISOString();
+      let updated = null;
+      await updateStore((draft) => {
+        const idx = (draft.users || []).findIndex((u) => u.id === me.id);
+        if (idx === -1) return draft;
+        const cur = draft.users[idx];
+        updated = {
+          ...cur,
+          passwordHash: wantsPasswordChange ? hashPassword(newPassword) : cur.passwordHash,
+          phone: wantsPhoneChange ? normalizedPhone : cur.phone,
+          updatedAt: now
+        };
+        draft.users[idx] = updated;
+        return draft;
+      });
+      sendJson(res, 200, {
+        ok: true,
+        user: sanitizeUser(updated),
+        changed: { password: wantsPasswordChange, phone: wantsPhoneChange }
+      });
       return true;
     }
 

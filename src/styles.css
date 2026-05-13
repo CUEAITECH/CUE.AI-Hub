@@ -807,6 +807,127 @@ h1 {
   opacity: 1;
 }
 
+.dashboard-title-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.account-settings-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: all 0.15s ease;
+}
+
+.account-settings-btn:hover {
+  background: var(--panel-2);
+  border-color: rgba(0, 0, 0, 0.28);
+  opacity: 1;
+}
+
+/* 账号设置 Modal */
+.account-settings-modal {
+  max-width: 520px;
+}
+
+.account-settings-body {
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.account-settings-section h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.account-settings-info {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--panel-2);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.account-settings-info > div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.account-settings-info dt {
+  margin: 0;
+  color: var(--muted);
+}
+
+.account-settings-info dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.account-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.account-settings-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.account-settings-form input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.account-settings-form input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.account-settings-form button {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.account-settings-desc {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.account-settings-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  min-height: 16px;
+  color: var(--muted);
+}
+
 .founder-badge {
   display: inline-block;
   margin-left: 8px;

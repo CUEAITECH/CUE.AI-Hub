@@ -71,13 +71,18 @@ export function isProjectFounder(user = {}, project = {}) {
   return Boolean(user?.id && project?.founderId && user.id === project.founderId);
 }
 
-export function findUserForProject(users = [], username = '', projectId = '') {
-  const normalized = String(username || '').trim();
-  return users.find((user) => (
-    user.active !== false
-    && user.username === normalized
-    && userCanAccessProject(user, projectId)
-  )) || null;
+export function findUserForProject(users = [], identifier = '', projectId = '') {
+  const normalized = String(identifier || '').trim();
+  if (!normalized) return null;
+  // 识别手机号：纯数字（可带 +）且长度 6-20 → 走手机号匹配，否则走 username
+  const asPhone = normalizePhone(normalized);
+  return users.find((user) => {
+    if (user.active === false) return false;
+    if (!userCanAccessProject(user, projectId)) return false;
+    if (user.username === normalized) return true;
+    if (asPhone && user.phone && user.phone === asPhone) return true;
+    return false;
+  }) || null;
 }
 
 export function createSessionToken(user, projectId, now = Date.now()) {
@@ -107,6 +112,15 @@ export function verifySessionToken(token) {
   }
 }
 
+// 手机号规范化：去掉空格/横线/括号，保留 +/数字；长度合理才作为有效号
+export function normalizePhone(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const cleaned = raw.replace(/[\s\-()（）]/g, '');
+  if (!/^\+?\d{6,20}$/.test(cleaned)) return '';
+  return cleaned;
+}
+
 export function normalizeUserRecord(user, now = new Date().toISOString()) {
   const projectIds = Array.isArray(user.projectIds) && user.projectIds.length ? user.projectIds : ['cue_ai_classroom'];
   const role = user.role || 'developer';
@@ -117,6 +131,7 @@ export function normalizeUserRecord(user, now = new Date().toISOString()) {
     id: user.id || `user_${String(user.username || 'unknown').replace(/[^a-z0-9_-]/gi, '_')}`,
     username: String(user.username || '').trim(),
     name: String(user.name || user.username || '').trim(),
+    phone: normalizePhone(user.phone || ''),
     role,
     projectIds,
     projectRoles,

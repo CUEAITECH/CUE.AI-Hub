@@ -1344,6 +1344,91 @@ await test('PATCH /api/auth/users blocks role change on project founder', async 
   assert.equal(store.users.find((u) => u.id === 'user_founder').projectRoles.cue_ai_classroom, 'project_admin');
 });
 
+await test('PATCH /api/auth/me changes own password only with correct current password', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken, hashPassword, verifyPassword } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_me' }],
+    users: [
+      { id: 'user_me', username: 'alice', name: 'A', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('oldpass'), active: true }
+    ]
+  });
+  const me = store.users.find((u) => u.id === 'user_me');
+  const token = createSessionToken(me, 'cue_ai_classroom');
+  let status = null; let payload = null;
+  let bodyJson = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: bodyJson }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+
+  // 错误的当前密码 → 403
+  bodyJson = { currentPassword: 'wrong', newPassword: 'newpass1' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 403);
+  assert.match(payload.error, /current password is incorrect/);
+  // 密码未变
+  assert.ok(verifyPassword('oldpass', store.users.find((u) => u.id === 'user_me').passwordHash));
+
+  // 正确的当前密码 → 200，新密码生效
+  bodyJson = { currentPassword: 'oldpass', newPassword: 'newpass1' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 200);
+  assert.ok(verifyPassword('newpass1', store.users.find((u) => u.id === 'user_me').passwordHash));
+  assert.ok(!verifyPassword('oldpass', store.users.find((u) => u.id === 'user_me').passwordHash));
+});
+
+await test('PATCH /api/auth/me binds phone, rejects duplicates, allows login by phone', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken, findUserForProject, hashPassword, verifyPassword } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_alice' }],
+    users: [
+      { id: 'user_alice', username: 'alice', name: 'A', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('p'), active: true },
+      { id: 'user_bob', username: 'bob', name: 'B', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: hashPassword('p'), phone: '13800000001', active: true }
+    ]
+  });
+  const alice = store.users.find((u) => u.id === 'user_alice');
+  const token = createSessionToken(alice, 'cue_ai_classroom');
+  let status = null; let payload = null;
+  let bodyJson = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: bodyJson }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+
+  // 与别人重复 → 409
+  bodyJson = { phone: '13800000001' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 409);
+
+  // 非法格式 → 400
+  bodyJson = { phone: 'abc' };
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 400);
+
+  // 合法手机号 → 200 + 可用手机号登录
+  bodyJson = { phone: '138 1234-5678' }; // 含格式字符，应被 normalize
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/me'));
+  assert.equal(status, 200);
+  assert.equal(payload.user.phone, '13812345678');
+  // findUserForProject 可以通过手机号找到 alice
+  const found = findUserForProject(store.users, '13812345678', 'cue_ai_classroom');
+  assert.equal(found.id, 'user_alice');
+});
+
 await test('cleanup endpoint resets unclaimed task owner to 待认领 and stashes LLM suggestion', async () => {
   const { createPlanningRoutes } = await import('../server/routes/planningRoutes.js');
   let store = migrateStore({
