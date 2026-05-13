@@ -117,8 +117,15 @@ function _hideLoader() {
 
 async function api(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
+  const authSelfServicePaths = new Set([
+    '/api/auth/login',
+    '/api/auth/email-code',
+    '/api/auth/phone-code',
+    '/api/auth/me'
+  ]);
   const needsApiKey = state.config?.apiKeyRequiredForWrites
-    && ['POST', 'PATCH', 'DELETE'].includes(method);
+    && ['POST', 'PATCH', 'DELETE'].includes(method)
+    && !authSelfServicePaths.has(String(path).split('?')[0]);
   const headers = { 'content-type': 'application/json', ...(options.headers || {}) };
   const sessionToken = sessionStorage.getItem('cueHubSessionToken') || '';
   if (sessionToken && !headers.Authorization && !headers['X-CUE-Session-Token']) {
