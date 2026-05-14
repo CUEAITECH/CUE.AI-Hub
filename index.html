@@ -85,7 +85,7 @@
             <span class="status-pill" id="syncStatus">API 未连接</span>
             <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
           </div>
-          <!-- 右侧：主导航 + 同步按钮 -->
+          <!-- 右侧：主导航 -->
           <div class="header-right">
             <nav class="nav" aria-label="主导航">
               <button class="nav-item nav-primary active" type="button" data-route="overview" data-nav-parent="overview">总览</button>
@@ -94,7 +94,6 @@
               <button class="nav-item nav-primary" type="button" data-nav-parent="output">输出</button>
               <button class="nav-item nav-primary" type="button" data-nav-parent="personal">个人中心</button>
             </nav>
-            <button class="primary-action" type="button" data-action="sync">同步信号</button>
           </div>
         </div>
         <!-- 展开式第二行导航（hover 一次性展开所有分组，overlay 不推动页面） -->
@@ -485,10 +484,12 @@
             <!-- Tab: 个人名片 -->
             <div class="pc-tab-panel" data-panel="profile-card">
               <div class="pc-profile-card-page">
-                <div class="pc-biz-card">
+                <!-- 左：名片预览 -->
+                <div class="pc-biz-card" id="bizCard">
                   <div class="pc-biz-avatar" id="bizAvatar">?</div>
                   <div class="pc-biz-name" id="bizName">未登录</div>
                   <div class="pc-biz-role" id="bizRole">—</div>
+                  <div class="pc-biz-bio" id="bizBio"></div>
                   <div class="pc-biz-divider"></div>
                   <div class="pc-biz-meta">
                     <div class="pc-biz-meta-row">
@@ -502,6 +503,35 @@
                   </div>
                   <div class="pc-biz-divider"></div>
                   <div class="pc-biz-stats" id="bizStats"></div>
+                </div>
+                <!-- 右：编辑面板 -->
+                <div class="pc-biz-editor">
+                  <div class="pc-biz-editor-head">
+                    <span class="pc-card-eyebrow">名片定制</span>
+                    <h4 class="pc-card-title">自定义你的个人名片</h4>
+                  </div>
+                  <div class="pc-biz-editor-form">
+                    <label class="pc-biz-editor-label">
+                      <span>头衔 / 职位</span>
+                      <input type="text" id="bizRoleInput" placeholder="例如：全栈工程师 · AI 研发" maxlength="40" />
+                    </label>
+                    <label class="pc-biz-editor-label">
+                      <span>个签</span>
+                      <input type="text" id="bizBioInput" placeholder="一句话介绍自己…" maxlength="60" />
+                    </label>
+                    <div class="pc-biz-editor-label">
+                      <span>头像颜色</span>
+                      <div class="pc-biz-color-row" id="bizColorRow">
+                        <button type="button" class="pc-biz-color-swatch active" data-color="blue" style="background: linear-gradient(135deg,#2563EB,#7C3AED)" title="极光蓝紫"></button>
+                        <button type="button" class="pc-biz-color-swatch" data-color="teal" style="background: linear-gradient(135deg,#0D9488,#2563EB)" title="青海蓝"></button>
+                        <button type="button" class="pc-biz-color-swatch" data-color="rose" style="background: linear-gradient(135deg,#E11D48,#F97316)" title="玫瑰橙"></button>
+                        <button type="button" class="pc-biz-color-swatch" data-color="amber" style="background: linear-gradient(135deg,#D97706,#65A30D)" title="暖金绿"></button>
+                        <button type="button" class="pc-biz-color-swatch" data-color="slate" style="background: linear-gradient(135deg,#475569,#0F172A)" title="深海灰"></button>
+                      </div>
+                    </div>
+                    <button type="button" class="pc-biz-save-btn" id="bizSaveBtn">保存名片</button>
+                    <p class="pc-biz-save-hint" id="bizSaveHint"></p>
+                  </div>
                 </div>
               </div>
             </div>
