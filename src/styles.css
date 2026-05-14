@@ -742,10 +742,14 @@ body.authenticated .auth-shell {
 .header-sub-group {
   position: absolute;
   top: 8px;
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 1px;
   min-width: 96px;
+}
+
+.header-sub-group.active {
+  display: flex;
 }
 
 .header-sub-divider { display: none; }
@@ -5441,6 +5445,16 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   color: var(--blue);
   border-bottom-color: var(--blue);
   font-weight: 600;
+}
+
+.pc-tab-logout {
+  margin-left: auto;
+  color: var(--red);
+}
+
+.pc-tab-logout:hover {
+  color: var(--red);
+  background: var(--danger-subtle);
 }
 
 .pc-tab-panel { display: none; }

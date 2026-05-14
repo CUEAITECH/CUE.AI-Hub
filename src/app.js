@@ -398,10 +398,7 @@ function setLoginMode(mode) {
   if (passwordInput) passwordInput.required = loginMode === 'password';
   if (emailCodeField) emailCodeField.hidden = loginMode !== 'email';
   if (emailCodeInput) emailCodeInput.required = loginMode === 'email';
-  const hintText = loginMode === 'email'
-      ? '??????????????????'
-      : '???????????????????';
-  setText('#loginHint', hintText);
+  setText('#loginHint', '');
 }
 
 async function sendLoginPhoneCode() {
@@ -3365,6 +3362,7 @@ function bindEvents() {
   document.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => {
       setRoute(button.dataset.route);
+      hideHeaderSub();
       // header sub-nav 的 personal 分组带 data-pc-tab，路由后同时切换个人中心 tab
       const pcTab = button.dataset.pcTab;
       if (pcTab) {
@@ -3386,6 +3384,7 @@ function bindEvents() {
 
   // Personal center tab switching
   document.querySelector('#personal-center')?.addEventListener('click', (e) => {
+    if (e.target.closest('#logoutBtn')) return;
     const tab = e.target.closest('.pc-tab');
     if (!tab) return;
     switchPcTab(tab.dataset.tab);
@@ -3416,20 +3415,30 @@ function bindEvents() {
     });
   }
 
-  function showHeaderSub() {
+  function showHeaderSub(parent) {
     positionHeaderSubs();
+    document.querySelectorAll('.header-sub-group').forEach((group) => {
+      group.classList.toggle('active', group.dataset.sub === parent);
+    });
     topbarEl?.classList.add('sub-open');
   }
 
   function hideHeaderSub() {
     topbarEl?.classList.remove('sub-open');
+    document.querySelectorAll('.header-sub-group').forEach((group) => {
+      group.classList.remove('active');
+    });
   }
 
   document.querySelectorAll('.nav .nav-primary:not([data-route])').forEach((btn) => {
-    btn.addEventListener('mouseenter', showHeaderSub);
+    btn.addEventListener('mouseenter', () => showHeaderSub(btn.dataset.navParent));
   });
 
-  document.querySelector('#headerSub')?.addEventListener('mouseenter', showHeaderSub);
+  document.querySelector('#headerSub')?.addEventListener('mouseenter', () => {
+    const activeParent = document.querySelector('.header-sub-group.active')?.dataset.sub
+      || document.querySelector('.nav .nav-primary.active:not([data-route])')?.dataset.navParent;
+    if (activeParent) showHeaderSub(activeParent);
+  });
   topbarEl?.addEventListener('mouseleave', hideHeaderSub);
 
   document.querySelector('#meetingDate')?.addEventListener('change', () => {
