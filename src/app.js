@@ -3302,34 +3302,24 @@ function bindEvents() {
     });
   };
 
-  // 腾讯云式导航：hover 一级按钮展开第二行，鼠标离开整个 topbar 后收起
+  // Mega-bar 导航：hover 任意一级导航项时一次性展开所有子分组
   const topbarEl = document.querySelector('#topbar');
-  const headerSubGroups = document.querySelectorAll('.header-sub-group');
 
-  function showHeaderSub(parent) {
-    let hasGroup = false;
-    headerSubGroups.forEach((g) => {
-      const match = g.dataset.sub === parent;
-      g.classList.toggle('visible', match);
-      if (match) hasGroup = true;
-    });
-    topbarEl?.classList.toggle('sub-open', hasGroup);
+  function showHeaderSub() {
+    topbarEl?.classList.add('sub-open');
   }
 
   function hideHeaderSub() {
-    headerSubGroups.forEach((g) => g.classList.remove('visible'));
     topbarEl?.classList.remove('sub-open');
   }
 
-  // 一级有子菜单的按钮（无自身 route）
+  // hover 任意一级导航项（有子菜单的）→ 展开全部
   document.querySelectorAll('.nav .nav-primary:not([data-route])').forEach((btn) => {
-    btn.addEventListener('mouseenter', () => showHeaderSub(btn.dataset.navParent));
+    btn.addEventListener('mouseenter', showHeaderSub);
   });
 
-  // 鼠标移到 topbar 其他区域（brand、project select、actions）时收起
-  document.querySelectorAll('.brand, .topbar-project-wrap, .topbar-actions').forEach((el) => {
-    el.addEventListener('mouseenter', hideHeaderSub);
-  });
+  // 鼠标移到 header-sub 区域继续保持展开
+  document.querySelector('#headerSub')?.addEventListener('mouseenter', showHeaderSub);
 
   // 鼠标离开整个 topbar 时收起
   topbarEl?.addEventListener('mouseleave', hideHeaderSub);
