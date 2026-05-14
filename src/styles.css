@@ -5102,7 +5102,24 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   justify-content: space-between;
   margin-bottom: 4px;
 }
-.pc-header h2 {
+.pc-header-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pc-header-parent {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--dim);
+}
+
+.pc-header-sep {
+  color: var(--dim);
+  font-size: 14px;
+}
+
+.pc-header-crumb h2 {
   font-size: 22px;
   font-weight: 700;
   margin: 0;
