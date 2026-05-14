@@ -833,11 +833,42 @@ function renderMyEveningCard() {
     .join('');
 }
 
+const BIZ_AVATAR_GRADIENTS = {
+  blue:  'linear-gradient(135deg,#2563EB,#7C3AED)',
+  teal:  'linear-gradient(135deg,#0D9488,#2563EB)',
+  rose:  'linear-gradient(135deg,#E11D48,#F97316)',
+  amber: 'linear-gradient(135deg,#D97706,#65A30D)',
+  slate: 'linear-gradient(135deg,#475569,#0F172A)',
+};
+
+function getBizCustom(username) {
+  try { return JSON.parse(localStorage.getItem(`cue_biz_${username}`) || '{}'); } catch { return {}; }
+}
+
+function saveBizCustom(username, data) {
+  localStorage.setItem(`cue_biz_${username}`, JSON.stringify(data));
+}
+
+function applyBizCard(me, roleStr, projectName, custom) {
+  const color = custom.color || 'blue';
+  const gradient = BIZ_AVATAR_GRADIENTS[color] || BIZ_AVATAR_GRADIENTS.blue;
+  const bizAvatar = document.querySelector('#bizAvatar');
+  if (bizAvatar) {
+    bizAvatar.textContent = me ? me.slice(0, 1) : '?';
+    bizAvatar.style.background = gradient;
+  }
+  setText('#bizName', me);
+  setText('#bizRole', custom.role || roleStr);
+  setText('#bizBio', custom.bio || '');
+  setText('#bizProject', projectName || '—');
+}
+
 function renderPersonalCenter() {
   const me = sessionStorage.getItem('cueHubUser') || '???';
   const role = currentSessionRole();
   const projectName = state.currentProject?.name || getCurrentProjectId();
   const roleStr = roleLabel(role);
+  const custom = getBizCustom(me);
 
   // Workspace tab
   setText('#profileUserName', me);
@@ -849,12 +880,8 @@ function renderPersonalCenter() {
   renderMyReviewsCard();
   renderMyEveningCard();
 
-  // Business card tab
-  const bizAvatar = document.querySelector('#bizAvatar');
-  if (bizAvatar) bizAvatar.textContent = me ? me.slice(0, 1) : '?';
-  setText('#bizName', me);
-  setText('#bizRole', roleStr);
-  setText('#bizProject', projectName || '—');
+  // Business card tab — apply saved customization
+  applyBizCard(me, roleStr, projectName, custom);
 
   const myTasks = getMyTasks();
   const bizStats = document.querySelector('#bizStats');
@@ -869,11 +896,49 @@ function renderPersonalCenter() {
     `;
   }
 
+  // Populate editor inputs with saved values
+  const roleInput = document.querySelector('#bizRoleInput');
+  if (roleInput) roleInput.value = custom.role || '';
+  const bioInput = document.querySelector('#bizBioInput');
+  if (bioInput) bioInput.value = custom.bio || '';
+
+  // Sync color swatch selection
+  const activeColor = custom.color || 'blue';
+  document.querySelectorAll('.pc-biz-color-swatch').forEach((sw) => {
+    sw.classList.toggle('active', sw.dataset.color === activeColor);
+  });
+
+  // Color swatch clicks → live preview
+  document.querySelectorAll('.pc-biz-color-swatch').forEach((sw) => {
+    sw.addEventListener('click', () => {
+      document.querySelectorAll('.pc-biz-color-swatch').forEach((s) => s.classList.remove('active'));
+      sw.classList.add('active');
+      const c = getBizCustom(me);
+      const bizAvatar = document.querySelector('#bizAvatar');
+      if (bizAvatar) bizAvatar.style.background = BIZ_AVATAR_GRADIENTS[sw.dataset.color] || BIZ_AVATAR_GRADIENTS.blue;
+      c.color = sw.dataset.color;
+      saveBizCustom(me, c);
+    });
+  });
+
+  // Save button
+  const saveBtn = document.querySelector('#bizSaveBtn');
+  const saveHint = document.querySelector('#bizSaveHint');
+  if (saveBtn) {
+    saveBtn.onclick = () => {
+      const c = getBizCustom(me);
+      c.role = (document.querySelector('#bizRoleInput')?.value || '').trim();
+      c.bio  = (document.querySelector('#bizBioInput')?.value  || '').trim();
+      saveBizCustom(me, c);
+      applyBizCard(me, roleStr, projectName, c);
+      if (saveHint) { saveHint.textContent = '✅ 已保存'; setTimeout(() => { saveHint.textContent = ''; }, 2000); }
+    };
+  }
+
   // Bind route buttons
   document.querySelectorAll('#personal-center .pc-route-btn').forEach((btn) => {
     btn.addEventListener('click', () => setRoute(btn.dataset.route));
   });
-
 }
 
 function switchToProject(projectId) {

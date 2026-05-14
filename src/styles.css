@@ -675,7 +675,7 @@ body.authenticated .auth-shell {
 .nav {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex: 1 1 auto;
   min-height: 44px;
 }
@@ -700,6 +700,7 @@ body.authenticated .auth-shell {
 .nav-primary {
   min-width: 56px;
   font-weight: 600;
+  padding: 8px 16px;
 }
 
 .nav-item:hover {
@@ -720,7 +721,7 @@ body.authenticated .auth-shell {
   top: 100%;
   left: 0;
   right: 0;
-  background: rgba(255, 255, 255, 0.97);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--line);
@@ -5448,9 +5449,11 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 
 /* ─── 个人名片 ────────────────────────────────────────────────────────────── */
 .pc-profile-card-page {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 32px;
   padding: 20px 0 40px;
+  align-items: start;
 }
 
 .pc-biz-card {
@@ -5550,6 +5553,106 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   color: var(--dim);
   margin-top: 3px;
   font-weight: 500;
+}
+
+.pc-biz-bio {
+  font-size: 12px;
+  color: var(--dim);
+  text-align: center;
+  min-height: 0;
+  line-height: 1.5;
+}
+
+.pc-biz-bio:not(:empty) {
+  margin-bottom: 4px;
+}
+
+/* 名片编辑面板 */
+.pc-biz-editor {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 28px 28px 24px;
+}
+
+.pc-biz-editor-head {
+  margin-bottom: 20px;
+}
+
+.pc-biz-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pc-biz-editor-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.pc-biz-editor-label input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.pc-biz-editor-label input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+.pc-biz-color-row {
+  display: flex;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.pc-biz-color-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+  outline: none;
+}
+
+.pc-biz-color-swatch:hover { transform: scale(1.12); }
+.pc-biz-color-swatch.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--text);
+}
+
+.pc-biz-save-btn {
+  align-self: flex-start;
+  padding: 9px 20px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.pc-biz-save-btn:hover { opacity: 0.88; }
+
+.pc-biz-save-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 16px;
 }
 
 /* ─── 账号设置子页面 ──────────────────────────────────────────────────────── */
