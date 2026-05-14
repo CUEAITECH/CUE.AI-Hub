@@ -9,10 +9,33 @@
   <body>
     <section class="auth-shell" id="authShell">
       <div class="auth-panel">
-        <div>
-          <span class="eyebrow">CUE AI Project Hub</span>
-          <h1>进入项目中枢</h1>
-          <p>???????????????????????????????????</p>
+        <div class="auth-hero">
+          <div class="auth-brand-mark">
+            <div class="auth-brand-icon">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+                <rect x="2" y="3" width="18" height="10" rx="2" fill="rgba(255,255,255,0.9)"/>
+                <path d="M3 16h6m4 0h6" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="6" y="17" width="10" height="2" rx="1" fill="rgba(255,255,255,0.25)"/>
+              </svg>
+            </div>
+            <span class="auth-brand-name">CUE AI</span>
+          </div>
+          <h1>进入项目<em>中枢</em></h1>
+          <p>AI 研发交付指挥系统，聚合任务分工、Git 追踪、代码审阅和晚会闭环，让整个研发流程可见、可控。</p>
+          <ul class="auth-features">
+            <li>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="rgba(96,165,250,0.7)" stroke-width="1.2"/><path d="M5 8.2l2 2 4-4.2" stroke="rgba(96,165,250,0.9)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              GitHub Webhook 实时信号接入与 Commit 追踪
+            </li>
+            <li>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="rgba(96,165,250,0.7)" stroke-width="1.2"/><path d="M5 8.2l2 2 4-4.2" stroke="rgba(96,165,250,0.9)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Claude AI 代码审阅 · 风险识别 · 任务排期
+            </li>
+            <li>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="7" stroke="rgba(96,165,250,0.7)" stroke-width="1.2"/><path d="M5 8.2l2 2 4-4.2" stroke="rgba(96,165,250,0.9)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              自动晚会对账 · 交付闭环 · 企微推送
+            </li>
+          </ul>
         </div>
         <form class="auth-form" id="loginForm">
           <label>
@@ -99,8 +122,14 @@
             </article>
 
             <article class="health-card dashboard-health">
-              <span>团队交付健康度</span>
-              <strong id="healthScore">72</strong>
+              <span>交付健康度</span>
+              <div class="health-ring-wrap">
+                <svg class="health-ring" viewBox="0 0 90 90" fill="none" aria-hidden="true">
+                  <circle class="health-ring-bg" cx="45" cy="45" r="37"/>
+                  <circle class="health-ring-bar" id="healthRingBar" cx="45" cy="45" r="37"/>
+                </svg>
+                <strong id="healthScore">—</strong>
+              </div>
             </article>
 
             <article class="panel stage-panel dashboard-stage" data-route="roadmap" tabindex="0" role="button" aria-label="查看完整阶段路线">

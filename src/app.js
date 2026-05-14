@@ -799,7 +799,14 @@ function getFocusedAssignmentTasks(limit = 8) {
 
 function renderMetrics() {
   const metrics = state.metrics || {};
-  setText('#healthScore', metrics.healthScore ?? 0);
+  const score = metrics.healthScore ?? 0;
+  setText('#healthScore', score);
+  const ring = document.querySelector('#healthRingBar');
+  if (ring) {
+    const pct = Math.max(0, Math.min(100, Number(score)));
+    ring.style.strokeDashoffset = 233 - (pct / 100) * 233;
+    ring.style.stroke = pct >= 80 ? '#0f7a55' : pct >= 60 ? '#9a6400' : '#b42318';
+  }
   setText('#metricHighRisk', metrics.highRiskTasks ?? 0);
   setText('#metricUrgentAlerts', `${metrics.urgentAlerts ?? 0} 个需要管理者处理`);
   setText('#metricCommits', metrics.commitsToday ?? 0);
