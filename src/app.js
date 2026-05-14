@@ -661,13 +661,180 @@ async function updateProjectUserFromAdminPage(userId, patch) {
   await renderAccountAdmin();
 }
 
+// ─── 个人中心 Helper ──────────────────────────────────────────────────────────
+
+function getMyTasks() {
+  const me = sessionStorage.getItem('cueHubUser') || '';
+  if (!me) return [];
+  const pid = getCurrentProjectId();
+  return state.tasks.filter((t) => {
+    if (t.projectId !== pid) return false;
+    if (t.owner === me) return true;
+    return (state.assignments || []).some((a) => a.taskId === t.id && a.owner === me);
+  });
+}
+
+function getMyReviews() {
+  const me = sessionStorage.getItem('cueHubUser') || '';
+  if (!me) return [];
+  const pid = getCurrentProjectId();
+  return (state.reviews || []).filter((r) => r.owner === me && r.projectId === pid);
+}
+
+function getMyReconciliationRows() {
+  const me = sessionStorage.getItem('cueHubUser') || '';
+  if (!me) return [];
+  const rows = [];
+  for (const [date, entry] of Object.entries(state.eveningReports || {})) {
+    if (!Array.isArray(entry?.reconciliation)) continue;
+    entry.reconciliation
+      .filter((row) => row.owner === me)
+      .forEach((row) => rows.push({ ...row, date }));
+  }
+  return rows.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 14);
+}
+
+// ─── 个人中心 Render ──────────────────────────────────────────────────────────
+
+function renderMyHealthCard() {
+  const el = document.querySelector('#myHealthBody');
+  if (!el) return;
+  const myTasks = getMyTasks();
+  const total = myTasks.length;
+  const done = myTasks.filter((t) => t.status === '已完成').length;
+  const inProgress = myTasks.filter((t) => t.status === '进行中').length;
+  const overdue = myTasks.filter(
+    (t) => t.due && new Date(t.due) < new Date() && t.status !== '已完成'
+  ).length;
+  const withDeliverable = myTasks.filter((t) => t.deliverableId).length;
+  const bindingRate = total > 0 ? Math.round((withDeliverable / total) * 100) : 0;
+
+  el.innerHTML = `
+    <div class="health-metrics">
+      <div class="health-metric">
+        <strong>${inProgress}</strong><span>进行中</span>
+      </div>
+      <div class="health-metric">
+        <strong>${done}</strong><span>已完成</span>
+      </div>
+      <div class="health-metric${overdue > 0 ? ' health-metric-warn' : ''}">
+        <strong>${overdue}</strong><span>逾期</span>
+      </div>
+      <div class="health-metric">
+        <strong>${bindingRate}%</strong><span>交付绑定率</span>
+      </div>
+    </div>
+    ${total === 0 ? '<p class="muted-line" style="margin-top:12px">当前项目没有分配给你的任务。</p>' : ''}
+  `;
+}
+
+function renderMyTasksCard() {
+  const el = document.querySelector('#myTasksList');
+  if (!el) return;
+  const myTasks = getMyTasks();
+  if (!myTasks.length) {
+    el.innerHTML = '<p class="muted-line">当前项目下没有分配给你的任务。</p>';
+    return;
+  }
+  const statusOrder = { 进行中: 0, 待确认: 1, 已完成: 2 };
+  const today = new Date();
+  const sorted = [...myTasks].sort((a, b) => {
+    const sa = statusOrder[a.status] ?? 3;
+    const sb = statusOrder[b.status] ?? 3;
+    if (sa !== sb) return sa - sb;
+    if (a.due && b.due) return a.due.localeCompare(b.due);
+    return 0;
+  });
+  el.innerHTML = sorted
+    .map((task) => {
+      const isOverdue = task.due && new Date(task.due) < today && task.status !== '已完成';
+      return `
+        <div class="task-row my-task-row">
+          <div class="my-task-main">
+            <strong class="${isOverdue ? 'overdue-text' : ''}">${escapeHtml(task.title)}</strong>
+            <span class="muted-line">${escapeHtml(task.due ? `截止 ${task.due}` : '未设截止日')}</span>
+          </div>
+          <div class="my-task-meta">
+            <span class="risk-badge risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
+            <span class="status-pill status-pill-${escapeHtml(task.status)}">${escapeHtml(task.status)}</span>
+            ${task.progress > 0 ? `<span class="muted-line">${task.progress}%</span>` : ''}
+          </div>
+          <button class="icon-btn detail-btn" data-task-id="${escapeHtml(task.id)}" aria-label="查看详情">↗</button>
+        </div>
+      `;
+    })
+    .join('');
+  el.querySelectorAll('.detail-btn').forEach((btn) => {
+    btn.addEventListener('click', () => openTaskDetail(btn.dataset.taskId));
+  });
+}
+
+function renderMyReviewsCard() {
+  const el = document.querySelector('#myReviewsList');
+  if (!el) return;
+  const myReviews = getMyReviews()
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+    .slice(0, 8);
+  if (!myReviews.length) {
+    el.innerHTML = '<p class="muted-line">暂无 AI 代码审阅记录。</p>';
+    return;
+  }
+  const levelClass = { Pass: 'risk-低', Warning: 'risk-中', Block: 'risk-高', Escalate: 'risk-高' };
+  el.innerHTML = myReviews
+    .map(
+      (r) => `
+      <div class="review-summary-row">
+        <span class="risk-badge ${levelClass[r.level] || ''}">${escapeHtml(r.level || '-')}</span>
+        <span class="review-summary-title">${escapeHtml((r.title || '').slice(0, 36))}</span>
+        <span class="muted-line review-summary-meta">${r.score ?? '-'}分 · ${escapeHtml((r.createdAt || '').slice(0, 10))}</span>
+      </div>
+    `
+    )
+    .join('');
+}
+
+function renderMyEveningCard() {
+  const el = document.querySelector('#myEveningList');
+  if (!el) return;
+  const rows = getMyReconciliationRows();
+  if (!rows.length) {
+    el.innerHTML = '<p class="muted-line">暂无晚会对账记录。</p>';
+    return;
+  }
+  el.innerHTML = rows
+    .slice(0, 10)
+    .map((row) => {
+      const badgeClass = row.completed ? 'risk-低' : row.commitCount > 0 ? 'risk-中' : 'risk-高';
+      const badgeText = row.completed
+        ? '✓ 完成'
+        : row.commitCount > 0
+          ? `${row.commitCount} 条提交`
+          : '无提交';
+      return `
+        <div class="evening-reconcile-row">
+          <span class="muted-line evening-date">${escapeHtml(row.date)}</span>
+          <span class="evening-task">${escapeHtml(row.taskTitle || row.taskId || '未知任务')}</span>
+          <span class="risk-badge ${badgeClass}">${badgeText}</span>
+        </div>
+      `;
+    })
+    .join('');
+}
+
 function renderPersonalCenter() {
-  const username = sessionStorage.getItem('cueHubUser') || '???';
+  const me = sessionStorage.getItem('cueHubUser') || '???';
   const role = currentSessionRole();
   const projectName = state.currentProject?.name || getCurrentProjectId();
-  setText('#profileUserName', username);
-  setText('#profileUserMeta', `${roleLabel(role)} ? ${projectName || '????'}`);
+  setText('#profileUserName', me);
+  setText('#profileUserMeta', `${roleLabel(role)} · ${projectName || '????'}`);
   renderProjectSwitcher();
+  renderMyHealthCard();
+  renderMyTasksCard();
+  renderMyReviewsCard();
+  renderMyEveningCard();
+  document.querySelectorAll('#personal-center .pc-route-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setRoute(btn.dataset.route));
+  });
 }
 
 async function switchProfileProject(event) {

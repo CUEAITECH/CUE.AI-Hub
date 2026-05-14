@@ -4934,3 +4934,134 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   text-align: center;
   line-height: 1.6;
 }
+
+/* ─── 个人中心：交付健康度 ───────────────────────────────────────────────────── */
+.health-metrics {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 0 4px;
+}
+.health-metric {
+  flex: 1 1 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 8px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.health-metric strong {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
+}
+.health-metric span {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.health-metric-warn strong {
+  color: #e53e3e;
+}
+
+/* ─── 个人中心：我的任务行 ───────────────────────────────────────────────────── */
+.my-task-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.my-task-row:last-child {
+  border-bottom: none;
+}
+.my-task-main {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.my-task-main strong {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.my-task-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.overdue-text {
+  color: #e53e3e;
+}
+.status-pill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.status-pill-进行中 {
+  background: #ebf8f0;
+  color: #276749;
+}
+.status-pill-已完成 {
+  background: #e8f4fd;
+  color: #2b6cb0;
+}
+
+/* ─── 个人中心：AI 审阅历史行 ───────────────────────────────────────────────── */
+.review-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.review-summary-row:last-child {
+  border-bottom: none;
+}
+.review-summary-title {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.review-summary-meta {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+/* ─── 个人中心：晚会对账行 ───────────────────────────────────────────────────── */
+.evening-reconcile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.evening-reconcile-row:last-child {
+  border-bottom: none;
+}
+.evening-date {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.evening-task {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
