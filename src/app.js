@@ -223,13 +223,33 @@ function syncCurrentProject(projectId = '') {
 }
 
 function renderProjectSwitcher() {
-  const options = (state.projects || []).map((project) => `
-    <option value="${escapeHtml(project.id)}">${escapeHtml(project.name || project.id)}</option>
-  `).join('');
-  document.querySelectorAll('[data-project-switcher]').forEach((select) => {
-    select.innerHTML = options;
-    select.value = getCurrentProjectId();
-  });
+  const projects = state.projects || [];
+  const currentId = getCurrentProjectId();
+  const current = projects.find((p) => p.id === currentId);
+
+  // Update button label
+  const nameEl = document.querySelector('#topbarProjectName');
+  if (nameEl) nameEl.textContent = current?.name || currentId || '选择项目';
+
+  // Populate dropdown list
+  const dropdown = document.querySelector('#topbarProjectDropdown');
+  if (dropdown) {
+    dropdown.innerHTML = projects.map((p) => `
+      <button type="button" class="topbar-project-option${p.id === currentId ? ' active' : ''}" data-project-id="${escapeHtml(p.id)}">
+        <span>${escapeHtml(p.name || p.id)}</span>
+        ${p.id === currentId ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>' : ''}
+      </button>
+    `).join('');
+    dropdown.querySelectorAll('.topbar-project-option').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pid = btn.dataset.projectId;
+        if (pid && pid !== getCurrentProjectId()) {
+          closeProjectDropdown();
+          switchToProject(pid);
+        }
+      });
+    });
+  }
 }
 
 function getApiScopeLabel() {
@@ -821,17 +841,76 @@ function renderPersonalCenter() {
   const me = sessionStorage.getItem('cueHubUser') || '???';
   const role = currentSessionRole();
   const projectName = state.currentProject?.name || getCurrentProjectId();
+  const roleStr = roleLabel(role);
+
+  // Workspace tab
   setText('#profileUserName', me);
   const avatarEl = document.querySelector('#profileAvatar');
   if (avatarEl) avatarEl.textContent = me ? me.slice(0, 1) : '?';
-  setText('#profileUserMeta', `${roleLabel(role)} · ${projectName || '????'}`);
+  setText('#profileUserMeta', `${roleStr} · ${projectName || '????'}`);
   renderMyHealthCard();
   renderMyTasksCard();
   renderMyReviewsCard();
   renderMyEveningCard();
+
+  // Business card tab
+  const bizAvatar = document.querySelector('#bizAvatar');
+  if (bizAvatar) bizAvatar.textContent = me ? me.slice(0, 1) : '?';
+  setText('#bizName', me);
+  setText('#bizRole', roleStr);
+  setText('#bizProject', projectName || '—');
+
+  const myTasks = getMyTasks();
+  const bizStats = document.querySelector('#bizStats');
+  if (bizStats) {
+    const done = myTasks.filter((t) => t.status === '已完成').length;
+    const inProgress = myTasks.filter((t) => t.status === '进行中').length;
+    const reviews = getMyReviews().length;
+    bizStats.innerHTML = `
+      <div class="pc-biz-stat"><strong>${done}</strong><span>已完成</span></div>
+      <div class="pc-biz-stat"><strong>${inProgress}</strong><span>进行中</span></div>
+      <div class="pc-biz-stat"><strong>${reviews}</strong><span>审阅记录</span></div>
+    `;
+  }
+
+  // Bind route buttons
   document.querySelectorAll('#personal-center .pc-route-btn').forEach((btn) => {
     btn.addEventListener('click', () => setRoute(btn.dataset.route));
   });
+
+  // Account settings inline button
+  document.querySelector('#accountSettingsBtnInline')?.addEventListener('click', () => {
+    document.querySelector('#accountSettingsBtn')?.click();
+  });
+}
+
+function switchToProject(projectId) {
+  if (!projectId || projectId === getCurrentProjectId()) return;
+  syncCurrentProject(projectId);
+  loadState().then(() => {
+    if (document.querySelector('#personal-center')?.classList.contains('active')) {
+      renderPersonalCenter();
+    }
+    setRoute('overview');
+  }).catch((e) => toast(e.message));
+}
+
+function openProjectDropdown() {
+  const wrap = document.querySelector('#topbarProjectWrap');
+  const dropdown = document.querySelector('#topbarProjectDropdown');
+  if (!wrap || !dropdown) return;
+  wrap.classList.add('open');
+  dropdown.hidden = false;
+  document.querySelector('#topbarProjectBtn')?.setAttribute('aria-expanded', 'true');
+}
+
+function closeProjectDropdown() {
+  const wrap = document.querySelector('#topbarProjectWrap');
+  const dropdown = document.querySelector('#topbarProjectDropdown');
+  if (!wrap || !dropdown) return;
+  wrap.classList.remove('open');
+  dropdown.hidden = true;
+  document.querySelector('#topbarProjectBtn')?.setAttribute('aria-expanded', 'false');
 }
 
 async function switchProfileProject(event) {
@@ -3254,8 +3333,19 @@ function bindEvents() {
   document.querySelector('[data-action="refresh-project-users"]')?.addEventListener('click', () => {
     renderAccountAdmin().catch((error) => toast(error.message));
   });
-  document.querySelector('#topbarProjectSelect')?.addEventListener('change', (event) => {
-    switchProfileProject(event).catch((error) => toast(error.message));
+  document.querySelector('#topbarProjectBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const wrap = document.querySelector('#topbarProjectWrap');
+    if (wrap?.classList.contains('open')) {
+      closeProjectDropdown();
+    } else {
+      renderProjectSwitcher();
+      openProjectDropdown();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#topbarProjectWrap')) closeProjectDropdown();
   });
   document.querySelector('#adminPageUserList')?.addEventListener('click', (event) => {
     const target = event.target;
@@ -3292,6 +3382,20 @@ function bindEvents() {
     button.addEventListener('click', () => setRoute(button.dataset.route));
   });
 
+  // Personal center tab switching
+  document.querySelector('#personal-center')?.addEventListener('click', (e) => {
+    const tab = e.target.closest('.pc-tab');
+    if (!tab) return;
+    const panel = tab.dataset.tab;
+    document.querySelectorAll('.pc-tab').forEach((t) => {
+      t.classList.toggle('active', t.dataset.tab === panel);
+      t.setAttribute('aria-selected', String(t.dataset.tab === panel));
+    });
+    document.querySelectorAll('.pc-tab-panel').forEach((p) => {
+      p.classList.toggle('active', p.dataset.panel === panel);
+    });
+  });
+
   // 挂到 window，供动态渲染的 onclick 内联调用
   window.__briefRetry = (assignmentId) => {
     console.log('[Brief] Step 1 ✅ onclick 触发，assignmentId =', assignmentId);
@@ -3302,10 +3406,23 @@ function bindEvents() {
     });
   };
 
-  // Mega-bar 导航：hover 任意一级导航项时一次性展开所有子分组
+  // Mega-bar 导航：hover 一级导航项展开所有子分组（overlay，不推动页面）
   const topbarEl = document.querySelector('#topbar');
 
+  function positionHeaderSubs() {
+    const topbarRect = topbarEl?.getBoundingClientRect();
+    if (!topbarRect) return;
+    document.querySelectorAll('.nav .nav-primary:not([data-route])').forEach((btn) => {
+      const parent = btn.dataset.navParent;
+      const group = document.querySelector(`.header-sub-group[data-sub="${parent}"]`);
+      if (!group) return;
+      const btnRect = btn.getBoundingClientRect();
+      group.style.left = (btnRect.left - topbarRect.left) + 'px';
+    });
+  }
+
   function showHeaderSub() {
+    positionHeaderSubs();
     topbarEl?.classList.add('sub-open');
   }
 
@@ -3313,15 +3430,11 @@ function bindEvents() {
     topbarEl?.classList.remove('sub-open');
   }
 
-  // hover 任意一级导航项（有子菜单的）→ 展开全部
   document.querySelectorAll('.nav .nav-primary:not([data-route])').forEach((btn) => {
     btn.addEventListener('mouseenter', showHeaderSub);
   });
 
-  // 鼠标移到 header-sub 区域继续保持展开
   document.querySelector('#headerSub')?.addEventListener('mouseenter', showHeaderSub);
-
-  // 鼠标离开整个 topbar 时收起
   topbarEl?.addEventListener('mouseleave', hideHeaderSub);
 
   document.querySelector('#meetingDate')?.addEventListener('change', () => {

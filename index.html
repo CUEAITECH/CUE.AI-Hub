@@ -72,8 +72,13 @@
             <span>CUE</span>
             <small>项目中枢</small>
           </button>
-          <div class="topbar-project-wrap">
-            <select id="topbarProjectSelect" class="topbar-project-select" data-project-switcher></select>
+          <div class="topbar-project-wrap" id="topbarProjectWrap">
+            <button type="button" class="topbar-project-btn" id="topbarProjectBtn" aria-haspopup="true" aria-expanded="false">
+              <svg class="topbar-project-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              <span id="topbarProjectName">项目</span>
+              <svg class="topbar-project-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="topbar-project-dropdown" id="topbarProjectDropdown" hidden></div>
           </div>
           <nav class="nav" aria-label="主导航">
             <button class="nav-item nav-primary active" type="button" data-route="overview" data-nav-parent="overview">总览</button>
@@ -96,7 +101,6 @@
             <button class="nav-item" type="button" data-route="meeting">晚会闭环</button>
             <button class="nav-item" type="button" data-route="account-admin">账号管理</button>
           </div>
-          <div class="header-sub-divider"></div>
           <div class="header-sub-group" data-sub="execution">
             <button class="nav-item" type="button" data-route="planning">AI 排期</button>
             <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
@@ -104,7 +108,6 @@
             <button class="nav-item" type="button" data-route="assignment">分工领取</button>
             <button class="nav-item nav-item-hidden" type="button" data-route="task-detail">任务详情</button>
           </div>
-          <div class="header-sub-divider"></div>
           <div class="header-sub-group" data-sub="output">
             <button class="nav-item" type="button" data-route="report">日报&amp;晚报</button>
             <button class="nav-item" type="button" data-route="automation">自动提醒</button>
@@ -402,65 +405,112 @@
           <div class="pc-shell">
             <!-- Header -->
             <div class="pc-header">
-              <h2>我的工作台</h2>
+              <h2>个人中心</h2>
               <div class="pc-header-actions">
-                <button type="button" id="accountSettingsBtn" class="pc-btn-ghost">账号设置</button>
+                <button type="button" id="accountSettingsBtn" class="pc-btn-ghost" style="display:none">账号设置</button>
                 <button type="button" id="logoutBtn" class="pc-btn-danger-ghost">退出登录</button>
               </div>
             </div>
 
-            <!-- Row 1: Profile + Health metrics -->
-            <div class="pc-row pc-row-2col">
-              <!-- Profile card -->
-              <article class="pc-card pc-profile-card">
-                <div class="pc-avatar-row">
-                  <div class="pc-avatar" id="profileAvatar">?</div>
-                  <div class="pc-identity">
-                    <h3 id="profileUserName">未登录</h3>
-                    <p id="profileUserMeta">暂无账号信息</p>
-                  </div>
-                </div>
-              </article>
-
-              <!-- Health bento -->
-              <article class="pc-card pc-health-card">
-                <div class="pc-card-eyebrow">交付健康度</div>
-                <div id="myHealthBody" class="pc-metrics-grid"></div>
-              </article>
+            <!-- Tab navigation -->
+            <div class="pc-tabs" role="tablist">
+              <button class="pc-tab active" role="tab" data-tab="workspace" aria-selected="true">我的工作台</button>
+              <button class="pc-tab" role="tab" data-tab="profile-card" aria-selected="false">个人名片</button>
+              <button class="pc-tab" role="tab" data-tab="account" aria-selected="false">账号设置</button>
             </div>
 
-            <!-- Row 2: My tasks -->
-            <article class="pc-card pc-card-full">
-              <div class="pc-card-header">
-                <div>
-                  <span class="pc-card-eyebrow">我的任务</span>
-                  <h4 class="pc-card-title">当前工作项</h4>
-                </div>
-                <button type="button" class="pc-btn-link pc-route-btn" data-route="assignment">全部任务 →</button>
+            <!-- Tab: 我的工作台 -->
+            <div class="pc-tab-panel active" data-panel="workspace">
+              <!-- Row 1: Profile summary + Health metrics -->
+              <div class="pc-row pc-row-2col">
+                <article class="pc-card pc-profile-card">
+                  <div class="pc-avatar-row">
+                    <div class="pc-avatar" id="profileAvatar">?</div>
+                    <div class="pc-identity">
+                      <h3 id="profileUserName">未登录</h3>
+                      <p id="profileUserMeta">暂无账号信息</p>
+                    </div>
+                  </div>
+                </article>
+                <article class="pc-card pc-health-card">
+                  <div class="pc-card-eyebrow">交付健康度</div>
+                  <div id="myHealthBody" class="pc-metrics-grid"></div>
+                </article>
               </div>
-              <div id="myTasksList"></div>
-            </article>
 
-            <!-- Row 3: Reviews + Evening -->
-            <div class="pc-row pc-row-2col">
-              <article class="pc-card">
+              <!-- Row 2: My tasks -->
+              <article class="pc-card pc-card-full">
                 <div class="pc-card-header">
                   <div>
-                    <span class="pc-card-eyebrow">AI 审阅历史</span>
-                    <h4 class="pc-card-title">代码质量趋势</h4>
+                    <span class="pc-card-eyebrow">我的任务</span>
+                    <h4 class="pc-card-title">当前工作项</h4>
                   </div>
+                  <button type="button" class="pc-btn-link pc-route-btn" data-route="assignment">全部任务 →</button>
                 </div>
-                <div id="myReviewsList"></div>
+                <div id="myTasksList"></div>
               </article>
-              <article class="pc-card">
-                <div class="pc-card-header">
-                  <div>
-                    <span class="pc-card-eyebrow">晚会对账</span>
-                    <h4 class="pc-card-title">承诺兑现情况</h4>
+
+              <!-- Row 3: Reviews + Evening -->
+              <div class="pc-row pc-row-2col">
+                <article class="pc-card">
+                  <div class="pc-card-header">
+                    <div>
+                      <span class="pc-card-eyebrow">AI 审阅历史</span>
+                      <h4 class="pc-card-title">代码质量趋势</h4>
+                    </div>
                   </div>
+                  <div id="myReviewsList"></div>
+                </article>
+                <article class="pc-card">
+                  <div class="pc-card-header">
+                    <div>
+                      <span class="pc-card-eyebrow">晚会对账</span>
+                      <h4 class="pc-card-title">承诺兑现情况</h4>
+                    </div>
+                  </div>
+                  <div id="myEveningList"></div>
+                </article>
+              </div>
+            </div>
+
+            <!-- Tab: 个人名片 -->
+            <div class="pc-tab-panel" data-panel="profile-card">
+              <div class="pc-profile-card-page">
+                <div class="pc-biz-card">
+                  <div class="pc-biz-avatar" id="bizAvatar">?</div>
+                  <div class="pc-biz-name" id="bizName">未登录</div>
+                  <div class="pc-biz-role" id="bizRole">—</div>
+                  <div class="pc-biz-divider"></div>
+                  <div class="pc-biz-meta">
+                    <div class="pc-biz-meta-row">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                      <span id="bizProject">—</span>
+                    </div>
+                    <div class="pc-biz-meta-row">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                      <span>CUE AI 研发团队</span>
+                    </div>
+                  </div>
+                  <div class="pc-biz-divider"></div>
+                  <div class="pc-biz-stats" id="bizStats"></div>
                 </div>
-                <div id="myEveningList"></div>
-              </article>
+              </div>
+            </div>
+
+            <!-- Tab: 账号设置 -->
+            <div class="pc-tab-panel" data-panel="account">
+              <div class="pc-account-page">
+                <article class="pc-card pc-card-full">
+                  <div class="pc-card-header" style="margin-bottom:8px">
+                    <div>
+                      <span class="pc-card-eyebrow">账号设置</span>
+                      <h4 class="pc-card-title">修改密码 / 绑定联系方式</h4>
+                    </div>
+                  </div>
+                  <p class="muted-line" style="margin:0 0 20px">点击下方按钮打开账号设置面板，管理密码、手机号和邮箱。</p>
+                  <button type="button" id="accountSettingsBtnInline" class="pc-settings-open-btn">打开账号设置</button>
+                </article>
+              </div>
             </div>
           </div>
         </section>
