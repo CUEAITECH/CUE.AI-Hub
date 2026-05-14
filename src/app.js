@@ -27,6 +27,10 @@ const state = {
   stageChecklist: null,
   deliverableProgress: null,
   reviewQueue: [],
+  scoring: { date: '', rows: [] },
+  weeklyScoring: { rows: [] },
+  scoreRankingTab: 'daily',
+  myScoring: null,
   currentProjectId: localStorage.getItem('cue_currentProjectId') || '',
   currentProject: null,
   isAuthenticated: Boolean(sessionStorage.getItem('cueHubSessionToken')),
@@ -500,16 +504,25 @@ function currentSessionRole() {
 }
 
 function currentUserCanManageAccounts() {
-  return ['admin', 'project_admin'].includes(currentSessionRole());
+  return ['admin', 'project_admin', 'hr_manager'].includes(currentSessionRole());
+}
+
+function currentUserCanManageAttendance() {
+  return ['admin', 'hr_manager'].includes(currentSessionRole());
 }
 
 function roleLabel(role) {
   if (role === 'admin') return '系统管理员';
   if (role === 'project_admin') return '项目管理员';
+  if (role === 'hr_manager') return '人事管理';
   return '项目开发者';
 }
 
 function currentSessionUsername() {
+  return sessionStorage.getItem('cueHubUser') || '';
+}
+
+function currentSessionName() {
   return sessionStorage.getItem('cueHubUser') || '';
 }
 
@@ -537,6 +550,8 @@ async function renderAccountAdmin() {
     const callerUsername = currentSessionUsername();
     // 当前调用者是否为本项目创始人——决定他能否看到「权限调整」按钮
     const callerIsFounder = isAdmin && users.some((u) => u.username === callerUsername && u.isFounder);
+    const callerCanChangeRoles = currentSessionRole() === 'admin' || callerIsFounder;
+    const callerCanToggleUsers = currentSessionRole() === 'admin' || currentSessionRole() === 'hr_manager' || callerIsFounder;
     // 创始人排在最前面，剩下按角色排：项目管理员 > 开发者
     const sortedUsers = [...users].sort((a, b) => {
       if (a.isFounder !== b.isFounder) return a.isFounder ? -1 : 1;
@@ -552,7 +567,7 @@ async function renderAccountAdmin() {
         const role = user.projectRole || user.role;
         // 创始人是独立的最高权限等级：UI 上不再展示"项目管理员"角色，直接显示"创始人"
         const displayRole = isFounder ? '创始人' : roleLabel(role);
-        const roleTone = isFounder ? 'founder' : role === 'project_admin' ? 'admin' : 'developer';
+        const roleTone = isFounder ? 'founder' : role === 'project_admin' ? 'admin' : role === 'hr_manager' ? 'hr' : 'developer';
         return `
         <div class="admin-user-card ${user.active === false ? 'is-disabled' : ''} ${isFounder ? 'is-founder' : ''}" data-user-id="${escapeHtml(user.id)}">
           <div class="admin-user-card-head">
@@ -566,15 +581,15 @@ async function renderAccountAdmin() {
             <span class="admin-user-status-dot admin-user-status-${user.active === false ? 'off' : 'on'}"></span>
             <span>${user.active === false ? '已停用' : '已启用'}</span>
           </div>
-          ${isAdmin ? `<div class="admin-user-card-actions">
+          ${(isAdmin || callerCanToggleUsers) ? `<div class="admin-user-card-actions">
             ${isFounder
               ? `<span class="admin-user-locked-hint">创始人角色受保护，调整请使用「转移创始人」</span>`
-              : `${callerIsFounder
+              : `${callerCanChangeRoles
                   ? `<button type="button" data-action="open-role-change" data-target-name="${escapeHtml(user.name || user.username)}" data-target-handle="${escapeHtml(user.username)}" data-current-role="${escapeHtml(role)}">权限调整</button>`
                   : ''}
-                <button type="button" data-action="toggle-user-active">
+                ${callerCanToggleUsers ? `<button type="button" data-action="toggle-user-active" data-next-active="${user.active === false ? 'true' : 'false'}" data-target-name="${escapeHtml(user.name || user.username)}">
                   ${user.active === false ? '启用' : '停用'}
-                </button>`}
+                </button>` : ''}`}
             ${isSelfFounder ? '<button type="button" data-action="transfer-founder" class="admin-user-btn-danger">转移创始人</button>' : ''}
           </div>` : ''}
         </div>
@@ -843,6 +858,7 @@ function renderPersonalCenter() {
   setText('#profileUserMeta', `${roleStr} · ${projectName || '????'}`);
   renderMyHealthCard();
   renderMyTasksCard();
+  renderMyScoreBreakdown();
   renderMyReviewsCard();
   renderMyEveningCard();
 
@@ -1044,6 +1060,69 @@ function renderMetrics() {
   setText('#metricCommits', metrics.commitsToday ?? 0);
   setText('#metricReviews', metrics.pendingReviews ?? 0);
   setText('#metricStandup', metrics.standupResponseRate || '0%');
+  renderScoreRanking();
+}
+
+function componentScore(value, max) {
+  const n = Number(value) || 0;
+  return `${Math.round(n)}/${max}`;
+}
+
+function renderScoreRanking() {
+  const list = document.querySelector('#scoreRankingList');
+  if (!list) return;
+  document.querySelectorAll('[data-score-ranking-tab]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.scoreRankingTab === state.scoreRankingTab);
+  });
+  const weekly = state.scoreRankingTab === 'weekly';
+  const source = weekly ? state.weeklyScoring : state.scoring;
+  const rows = (source?.rows || []).slice(0, 6);
+  const label = weekly
+    ? `${source?.weekStart || ''} - ${source?.weekEnd || ''}`.trim()
+    : source?.date || getTodayText();
+  setText('#scoreRankingDate', label || getTodayText());
+  if (!rows.length) {
+    const emptyText = source?.note || '暂无评分数据，等待 GitHub 同步和考勤记录。';
+    list.innerHTML = `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+    return;
+  }
+  list.innerHTML = rows.map((row, index) => `
+    <div class="score-ranking-row">
+      <b>${index + 1}</b>
+      <span>${escapeHtml(row.owner)}</span>
+      <strong>${Math.round(weekly ? row.weeklyScore || 0 : row.dailyScore || 0)}</strong>
+      <small>${weekly
+        ? `贡献 ${Math.round(row.contributionScore || 0)} · 出勤 ${Math.round(row.attendancePoints || 0)} · ${row.workdays || 0} 个工作日`
+        : `贡献 ${Math.round(row.contributionScore || 0)} · 出勤 +${Math.round(row.attendancePoints || 0)}`
+      }</small>
+    </div>
+  `).join('');
+}
+
+function renderMyScoreBreakdown() {
+  const el = document.querySelector('#myScoreBreakdown');
+  if (!el) return;
+  const row = state.myScoring || (state.scoring?.rows || []).find((item) => item.owner === currentSessionName());
+  if (!row) {
+    el.innerHTML = '<p class="muted-line">暂无今日评分。GitHub 同步、任务领取、Review 和考勤记录会自动刷新这里。</p>';
+    return;
+  }
+  const c = row.components || {};
+  el.innerHTML = `
+    <div class="score-breakdown-head">
+      <strong>${Math.round(row.dailyScore || 0)}</strong>
+      <span>今日总分 = 贡献 ${Math.round(row.contributionScore || 0)} + 出勤 ${Math.round(row.attendancePoints || 0)}</span>
+    </div>
+    <div class="score-breakdown-grid">
+      <div><b>${componentScore(c.taskDelivery?.score, 40)}</b><span>任务交付贡献</span><small>${escapeHtml(c.taskDelivery?.detail || '')}</small></div>
+      <div><b>${componentScore(c.effectiveCommits?.score, 25)}</b><span>有效 Commit 贡献</span><small>${escapeHtml(c.effectiveCommits?.detail || '')}</small></div>
+      <div><b>${componentScore(c.reviewQuality?.score, 20)}</b><span>Review 质量</span><small>${escapeHtml(c.reviewQuality?.detail || '')}</small></div>
+      <div><b>${componentScore(c.closure?.score, 15)}</b><span>闭环表现</span><small>${escapeHtml(c.closure?.detail || '')}</small></div>
+      <div><b>+${Math.round(row.attendancePoints || 0)}</b><span>出勤分</span><small>${escapeHtml(c.attendance?.detail || '')}</small></div>
+      <div><b>${row.carryoverDates?.length || 1} 天</b><span>延期完成窗口</span><small>${escapeHtml((row.carryoverDates || [row.date]).join(' / '))}</small></div>
+    </div>
+    <p class="score-bonus-note">基础奖金按月评分百分比乘总额计算；全勤奖单独核算，不并入基础奖金。</p>
+  `;
 }
 
 function renderStage() {
@@ -2620,18 +2699,23 @@ async function loadState() {
 
   // 并行加载站会、配置、计划调整建议（assignments 已在 /api/state 全量返回，不重复拉）
   const projectQuery = getCurrentProjectId() ? `?projectId=${encodeURIComponent(getCurrentProjectId())}` : '';
-  const [standupPayload, config, adjustPayload, eveningPayload, checklistPayload] = await Promise.all([
+  const [standupPayload, config, adjustPayload, eveningPayload, checklistPayload, scoringPayload, weeklyScoringPayload] = await Promise.all([
     api('/api/standups').catch(() => ({ standups: [] })),
     api('/api/config').catch(() => ({})),
     api('/api/plan-adjustments').catch(() => ({ adjustments: [] })),
     api('/api/reports/evening').catch(() => ({ report: null })),
-    api(`/api/stage/checklist${projectQuery}`).catch(() => null)
+    api(`/api/stage/checklist${projectQuery}`).catch(() => null),
+    api(`/api/scoring/daily${projectQuery}`).catch(() => ({ rows: [] })),
+    api(`/api/scoring/weekly${projectQuery}`).catch(() => ({ rows: [] }))
   ]);
 
   state.standups = standupPayload.standups || [];
   state.config = config;
   state.planAdjustments = adjustPayload.adjustments || [];
   state.stageChecklist = checklistPayload || state.stageChecklist;
+  state.scoring = scoringPayload || { rows: [] };
+  state.weeklyScoring = weeklyScoringPayload || { rows: [] };
+  state.myScoring = (state.scoring.rows || []).find((row) => row.owner === currentSessionName()) || null;
   if (eveningPayload.report) {
     state.eveningReports = {
       ...state.eveningReports,
@@ -3111,6 +3195,9 @@ async function syncCueAiGit(options = {}) {
   state.planAdjustments = nextState.planAdjustments || state.planAdjustments;
   state.stageChecklist = nextState.stageChecklist || state.stageChecklist;
   state.deliverableProgress = nextState.deliverableProgress || state.deliverableProgress;
+  state.scoring = await api(`/api/scoring/daily?projectId=${encodeURIComponent(projectId)}`).catch(() => state.scoring);
+  state.weeklyScoring = await api(`/api/scoring/weekly?projectId=${encodeURIComponent(projectId)}`).catch(() => state.weeklyScoring);
+  state.myScoring = (state.scoring.rows || []).find((row) => row.owner === currentSessionName()) || null;
   renderAll();
   const srcLabel = payload.source === 'github-api' ? 'GitHub 远端' : '本地 Git';
   setText('#syncStatus', `已同步 (${srcLabel}) · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`);
@@ -3276,6 +3363,12 @@ function bindEvents() {
   document.querySelector('#logoutBtn')?.addEventListener('click', () => {
     if (window.confirm('确认退出当前账号？将返回登录页面。')) logout();
   });
+  document.querySelectorAll('[data-score-ranking-tab]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.scoreRankingTab = button.dataset.scoreRankingTab || 'daily';
+      renderScoreRanking();
+    });
+  });
   // 账号设置已内联至个人中心 tab，无需单独绑定按钮事件
   document.querySelector('#changePasswordForm')?.addEventListener('submit', submitChangePassword);
   document.querySelector('#bindPhoneForm')?.addEventListener('submit', submitBindPhone);
@@ -3335,6 +3428,14 @@ function bindEvents() {
     const userId = row?.dataset.userId || '';
     if (!userId) return;
     if (target.dataset.action === 'toggle-user-active') {
+      const requestedActive = target.dataset.nextActive === 'true';
+      const targetName = target.dataset.targetName || '该账号';
+      const message = requestedActive
+        ? `确认启用 ${targetName} 的账号？`
+        : `确认禁用 ${targetName} 的账号？禁用后该成员将无法登录当前项目。`;
+      if (!window.confirm(message)) return;
+      updateProjectUserFromAdminPage(userId, { active: requestedActive }).catch((error) => toast(error.message));
+      return;
       const active = target.textContent?.trim() === '启用';
       updateProjectUserFromAdminPage(userId, { active }).catch((error) => toast(error.message));
     }

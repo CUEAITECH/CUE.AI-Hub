@@ -78,6 +78,7 @@ import { createStandupRoutes } from './routes/standupRoutes.js';
 import { createReportRoutes } from './routes/reportRoutes.js';
 import { createPlanningRoutes } from './routes/planningRoutes.js';
 import { createWebhookRoutes } from './routes/webhookRoutes.js';
+import { createScoringRoutes } from './routes/scoringRoutes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -199,6 +200,13 @@ function addDaysText(dateText, days) {
   return date.toISOString().slice(0, 10);
 }
 
+function isCompanyWorkday(dateText = todayText()) {
+  const [year, month, day] = String(dateText).split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = date.getUTCDay();
+  return dayOfWeek !== 3 && dayOfWeek !== 6;
+}
+
 const routeModules = [
   createSystemRoutes({
     loadStore,
@@ -284,6 +292,14 @@ const routeModules = [
     normalizeStandup,
     normalizeTask,
     generateAssignmentBrief
+  }),
+  createScoringRoutes({
+    loadStore,
+    updateStore,
+    readBody,
+    sendJson,
+    sendError,
+    todayText
   }),
   createTaskRoutes({
     loadStore,
@@ -915,6 +931,9 @@ const server = createServer(async (req, res) => {
 function startScheduler() {
   let lastEveningReportDate = '';
   let lastReviewQueueDate = '';
+  let lastTaskCompletionPromptDate = '';
+  let lastMeetingAttendancePromptDate = '';
+  let lastMeetingAbsenceCloseDate = '';
   let githubSyncRunning = false;
   const prepHour = meetingHour === 0 ? 23 : meetingHour - 1; // 前一小时
   const prepMinute = 45;
@@ -963,8 +982,83 @@ function startScheduler() {
     const sh = Number(shanghaiParts.find((p) => p.type === 'hour')?.value ?? -1);
     const sm = Number(shanghaiParts.find((p) => p.type === 'minute')?.value ?? -1);
     const today = todayText();
+    const isWorkday = isCompanyWorkday(today);
 
-    if (sh === prepHour && sm === prepMinute && lastEveningReportDate !== today) {
+    if (isWorkday && sh === 17 && sm === 0 && lastTaskCompletionPromptDate !== today) {
+      lastTaskCompletionPromptDate = today;
+      if (isWeComAvailable()) {
+        await sendWeComMarkdown([
+          `## ${today} 今日任务完成确认`,
+          '',
+          '请在 17:00-18:00 之间 @bot 回复：',
+          '- 姓名正常完成',
+          '- 姓名延迟完成',
+          '',
+          '延迟完成默认要求第二个工作日补齐；如果后续请假，系统会把连续工作日作为一个评分窗口取平均。'
+        ].join('\n')).catch((err) =>
+          console.error('[Scheduler] 任务完成确认推送失败', err.message)
+        );
+      }
+    }
+
+    if (isWorkday && sh === 18 && sm === 0 && lastMeetingAttendancePromptDate !== today) {
+      lastMeetingAttendancePromptDate = today;
+      if (isWeComAvailable()) {
+        await sendWeComMarkdown([
+          `## ${today} 晚会出席确认`,
+          '',
+          '请在 18:25 前 @bot 回复：',
+          '- 姓名正常出席',
+          '- 姓名延迟出席',
+          '',
+          '18:25-18:35 回复按临时请假/迟到处理；18:35 后仍无记录默认缺勤，可由人事管理补录。'
+        ].join('\n')).catch((err) =>
+          console.error('[Scheduler] 晚会出席确认推送失败', err.message)
+        );
+      }
+    }
+
+    if (isWorkday && sh === 18 && sm === 35 && lastMeetingAbsenceCloseDate !== today) {
+      lastMeetingAbsenceCloseDate = today;
+      await updateStore((draft) => {
+        const projectIds = (draft.projects || []).map((project) => project.id || 'cue_ai_classroom');
+        const existing = new Set((draft.attendanceRecords || [])
+          .filter((item) => item.date === today && item.kind === 'meeting')
+          .map((item) => `${item.projectId || 'cue_ai_classroom'}|${item.owner}`));
+        draft.attendanceRecords = draft.attendanceRecords || [];
+        for (const projectId of projectIds) {
+          const members = new Set([
+            ...(draft.members || []).map((member) => member.name).filter(Boolean),
+            ...(draft.users || [])
+              .filter((user) => user.role !== 'admin' && user.active !== false && ((user.projectIds || []).includes('*') || (user.projectIds || []).includes(projectId)))
+              .map((user) => user.name || user.username)
+              .filter(Boolean)
+          ]);
+          for (const owner of members) {
+            const key = `${projectId}|${owner}`;
+            if (existing.has(key)) continue;
+            draft.attendanceRecords.unshift({
+              id: createId('attendance'),
+              projectId,
+              date: today,
+              owner,
+              kind: 'meeting',
+              status: 'absent',
+              source: 'auto',
+              editedBy: 'system',
+              rawMessage: '',
+              note: '18:35 前无有效晚会出席确认',
+              recordedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+        draft.attendanceRecords = draft.attendanceRecords.slice(0, 2000);
+        return draft;
+      }).catch((err) => console.error('[Scheduler] 晚会缺勤自动收口失败', err.message));
+    }
+
+    if (isWorkday && sh === prepHour && sm === prepMinute && lastEveningReportDate !== today) {
       lastEveningReportDate = today;
       console.log(`[Scheduler] ${prepHour}:${String(prepMinute).padStart(2,'0')} 触发晚会前作战包生成...`);
       await generateEveningReport(today).catch((err) =>
@@ -973,7 +1067,7 @@ function startScheduler() {
     }
 
     // 晚会前 2h（reviewHour:00）推送人工审阅待办提醒
-    if (sh === reviewHour && sm === 0 && lastReviewQueueDate !== today) {
+    if (isWorkday && sh === reviewHour && sm === 0 && lastReviewQueueDate !== today) {
       lastReviewQueueDate = today;
       if (isWeComAvailable()) {
         const store = await loadStore();

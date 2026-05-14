@@ -149,6 +149,21 @@
               </div>
             </article>
 
+            <article class="panel score-ranking-card">
+              <div class="panel-head">
+                <div>
+                  <span>每日评分</span>
+                  <h2>成员贡献健康度排行</h2>
+                </div>
+                <small id="scoreRankingDate">今日</small>
+              </div>
+              <div class="score-ranking-tabs" role="tablist">
+                <button type="button" class="active" data-score-ranking-tab="daily">每日排行</button>
+                <button type="button" data-score-ranking-tab="weekly">每周排行</button>
+              </div>
+              <div class="score-ranking-list" id="scoreRankingList"></div>
+            </article>
+
             <article class="panel stage-panel dashboard-stage" data-route="roadmap" tabindex="0" role="button" aria-label="查看完整阶段路线">
               <div class="panel-head">
                 <div>
@@ -390,6 +405,7 @@
                     <span>角色</span>
                     <select id="adminPageRegisterRole">
                       <option value="developer">项目开发者</option>
+                      <option value="hr_manager">人事管理</option>
                       <option value="project_admin">项目管理员</option>
                     </select>
                   </label>
@@ -457,6 +473,16 @@
                   <button type="button" class="pc-btn-link pc-route-btn" data-route="assignment">全部任务 →</button>
                 </div>
                 <div id="myTasksList"></div>
+              </article>
+
+              <article class="pc-card pc-card-full">
+                <div class="pc-card-header">
+                  <div>
+                    <span class="pc-card-eyebrow">成员评分 / 贡献健康度</span>
+                    <h4 class="pc-card-title">今日评分构成</h4>
+                  </div>
+                </div>
+                <div id="myScoreBreakdown" class="score-breakdown"></div>
               </article>
 
               <!-- Row 3: Reviews + Evening -->
@@ -978,6 +1004,13 @@
               <div>
                 <strong>项目开发者</strong>
                 <p>普通成员，可领取任务、提交代码、参与晚会闭环，无账号管理权限。新加入项目的人默认是此等级。</p>
+              </div>
+            </label>
+            <label class="role-choice" data-role="hr_manager">
+              <input type="radio" name="roleChoice" value="hr_manager" />
+              <div>
+                <strong>人事管理</strong>
+                <p>可以编辑考勤、请假和缺勤记录，用于评分与全勤奖核算；不能停用账号或调整项目权限。</p>
               </div>
             </label>
           </div>

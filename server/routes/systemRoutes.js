@@ -247,14 +247,14 @@ export function createSystemRoutes({
       const username = String(json?.username || '').trim();
       const password = String(json?.password || '');
       const name = String(json?.name || username).trim();
-      const role = ['developer', 'project_admin'].includes(json?.role) ? json.role : 'developer';
+      const role = ['developer', 'project_admin', 'hr_manager'].includes(json?.role) ? json.role : 'developer';
       if (!projectId || !username || !password) {
         sendJson(res, 400, { ok: false, error: 'projectId, username and password are required' });
         return true;
       }
 
       const before = await loadStore();
-      const tokenAdmin = getSessionUser(req, before.users || [], projectId);
+      const tokenAdmin = getProjectSessionUser(req, before.users || [], projectId);
       const credentialAdmin = (() => {
         const adminUsername = String(json?.adminUsername || '').trim();
         const adminPassword = String(json?.adminPassword || '');
@@ -264,7 +264,8 @@ export function createSystemRoutes({
           : null;
       })();
       const adminUser = tokenAdmin || credentialAdmin;
-      if (!adminUser) {
+      const adminRole = adminUser ? roleForProject(adminUser, projectId) : '';
+      if (!adminUser || !['admin', 'project_admin', 'hr_manager'].includes(adminRole)) {
         sendJson(res, 403, { ok: false, error: 'project admin credentials required' });
         return true;
       }
@@ -328,7 +329,7 @@ export function createSystemRoutes({
       }
 
       const before = await loadStore();
-      const adminUser = getSessionUser(req, before.users || [], projectId);
+      const adminUser = getProjectSessionUser(req, before.users || [], projectId);
       if (!adminUser) {
         sendJson(res, 403, { ok: false, error: 'forbidden' });
         return true;
@@ -349,7 +350,11 @@ export function createSystemRoutes({
       const targetIsFounder = isProjectFounder(target, project);
       const callerIsFounder = isProjectFounder(adminUser, project);
       const callerIsSystemAdmin = adminUser.role === 'admin';
+      const callerProjectRole = roleForProject(adminUser, projectId);
+      const callerIsHrManager = callerProjectRole === 'hr_manager';
       const wantsRoleChange = json?.role && json.role !== roleForProject(target, projectId);
+      const hasActivePatch = typeof json?.active === 'boolean';
+      const wantsActiveChange = hasActivePatch && json.active !== (target.active !== false);
       if (targetIsFounder && !callerIsSystemAdmin && !callerIsFounder) {
         const wantsDeactivate = json?.active === false;
         if (wantsRoleChange || wantsDeactivate) {
@@ -363,9 +368,12 @@ export function createSystemRoutes({
         sendJson(res, 403, { ok: false, error: 'only project founder can change role' });
         return true;
       }
+      if (wantsActiveChange && !callerIsFounder && !callerIsSystemAdmin && !callerIsHrManager) {
+        sendJson(res, 403, { ok: false, error: 'only project founder, system admin or hr manager can change account status' });
+        return true;
+      }
 
-      const nextRole = ['developer', 'project_admin'].includes(json?.role) ? json.role : undefined;
-      const hasActivePatch = typeof json?.active === 'boolean';
+      const nextRole = ['developer', 'project_admin', 'hr_manager'].includes(json?.role) ? json.role : undefined;
       // 安全：管理员不能给他人改/重置密码（之前会导致管理员任意覆盖他人凭据）。
       // 密码只能本人通过 PATCH /api/auth/me 改，必须验证旧密码
       let updatedUser = null;

@@ -10,6 +10,7 @@ import { createTaskRoutes } from '../server/routes/taskRoutes.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
 import { normalizeAssignment, normalizeStandup } from '../server/services/dailyBrief.js';
 import { generateAssignmentBrief } from '../server/services/assignmentBrief.js';
+import { buildDailyScores, buildWeeklyScores, parseAttendanceMessage } from '../server/services/scoring.js';
 import { buildProgressMarkdown, parseDocsForTasks, parseProgressDoc, extractJsonArray, repairLLMJson } from '../server/services/docsManager.js';
 import { createSessionToken } from '../server/services/auth.js';
 
@@ -82,6 +83,91 @@ await test('phase1 migration creates top-level phases and deliverables without b
   assert.equal(migrated.activities[0].taskId, 'task_1');
   assert.equal(Object.hasOwn(migrated.activities[0], 'diff'), false);
   assert.equal(migrated.assignments[0].deliverableId, 'deliverable_alpha');
+});
+
+await test('scoring combines contribution score and separate attendance points', async () => {
+  const store = {
+    members: [{ name: 'Alice' }],
+    users: [],
+    tasks: [{ id: 'task_1', title: 'Core task', projectId: 'cue_ai_classroom', priority: 'P1', status: '已完成', progress: 100 }],
+    assignments: [{ id: 'assign_1', date: '2026-05-15', owner: 'Alice', taskId: 'task_1', taskTitle: 'Core task', projectId: 'cue_ai_classroom', status: '已完成' }],
+    activities: [{ id: 'commit_1', type: 'commit', date: '2026-05-15', createdAt: '2026-05-15T09:00:00+08:00', owner: 'Alice', taskId: 'task_1', projectId: 'cue_ai_classroom' }],
+    reviews: [{ id: 'review_1', createdAt: '2026-05-15T10:00:00+08:00', owner: 'Alice', score: 90, level: 'Pass', projectId: 'cue_ai_classroom' }],
+    standups: [{ id: 'standup_1', date: '2026-05-15', owner: 'Alice', projectId: 'cue_ai_classroom' }],
+    attendanceRecords: [
+      { id: 'att_1', date: '2026-05-15', owner: 'Alice', kind: 'meeting', status: 'normal', projectId: 'cue_ai_classroom' },
+      { id: 'att_2', date: '2026-05-15', owner: 'Alice', kind: 'task_completion', status: 'normal', projectId: 'cue_ai_classroom' }
+    ]
+  };
+  const result = buildDailyScores(store, { projectId: 'cue_ai_classroom', date: '2026-05-15', totalBonus: 10000, attendanceBonusBase: 500 });
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].attendancePoints, 10);
+  assert.equal(result.rows[0].attendanceBonusEstimate, 500);
+  assert.ok(result.rows[0].baseBonusEstimate > 0);
+});
+
+await test('scoring skips Wednesday and Saturday work requirements', async () => {
+  const store = {
+    members: [{ name: 'Alice' }],
+    users: [],
+    tasks: [],
+    assignments: [],
+    activities: [{ id: 'commit_1', type: 'commit', date: '2026-05-16', createdAt: '2026-05-16T09:00:00+08:00', owner: 'Alice', projectId: 'cue_ai_classroom' }],
+    reviews: [],
+    standups: [],
+    attendanceRecords: []
+  };
+  const wednesday = buildDailyScores(store, { projectId: 'cue_ai_classroom', date: '2026-05-13' });
+  const saturday = buildDailyScores(store, { projectId: 'cue_ai_classroom', date: '2026-05-16' });
+  assert.equal(wednesday.isWorkday, false);
+  assert.equal(saturday.isWorkday, false);
+  assert.equal(wednesday.rows.length, 0);
+  assert.equal(saturday.rows.length, 0);
+});
+
+await test('Saturday commits roll into the next company workday score', async () => {
+  const store = {
+    members: [{ name: 'Alice' }],
+    users: [],
+    tasks: [{ id: 'task_1', title: 'Weekend commit task', projectId: 'cue_ai_classroom', priority: 'P1', status: 'done', progress: 100 }],
+    assignments: [{ id: 'assign_1', date: '2026-05-17', owner: 'Alice', taskId: 'task_1', projectId: 'cue_ai_classroom', status: 'done' }],
+    activities: [{ id: 'commit_1', type: 'commit', date: '2026-05-16', createdAt: '2026-05-16T09:00:00+08:00', owner: 'Alice', taskId: 'task_1', projectId: 'cue_ai_classroom' }],
+    reviews: [],
+    standups: [],
+    attendanceRecords: []
+  };
+  const result = buildDailyScores(store, { projectId: 'cue_ai_classroom', date: '2026-05-17' });
+  const alice = result.rows.find((row) => row.owner === 'Alice');
+  assert.equal(result.isWorkday, true);
+  assert.equal(alice.components.effectiveCommits.commits, 1);
+  assert.equal(alice.components.effectiveCommits.linked, 1);
+  assert.equal(alice.components.closure.score, 11);
+});
+
+await test('weekly scoring averages only company workdays', async () => {
+  const store = {
+    members: [{ name: 'Alice' }],
+    users: [],
+    tasks: [],
+    assignments: [],
+    activities: [],
+    reviews: [],
+    standups: [],
+    attendanceRecords: []
+  };
+  const result = buildWeeklyScores(store, { projectId: 'cue_ai_classroom', date: '2026-05-15' });
+  assert.deepEqual(result.workdays, ['2026-05-11', '2026-05-12', '2026-05-14', '2026-05-15']);
+  assert.equal(result.rows[0].workdays, 4);
+});
+
+await test('attendance parser recognizes task and meeting bot replies', async () => {
+  const task = parseAttendanceMessage('Alice正常完成', new Date('2026-05-15T17:20:00+08:00'));
+  assert.equal(task.owner, 'Alice');
+  assert.equal(task.kind, 'task_completion');
+  assert.equal(task.status, 'normal');
+  const meeting = parseAttendanceMessage('Alice延迟出席', new Date('2026-05-15T18:30:00+08:00'));
+  assert.equal(meeting.kind, 'meeting');
+  assert.equal(meeting.status, 'temporary_leave');
 });
 
 await test('phase0 compatibility keeps buildStageChecklist reading currentStage checklist', () => {
@@ -650,6 +736,50 @@ await test('phase4 auth route lets project admin register project developer acco
   else process.env.HUB_ADMIN_PASSWORD = originalPassword;
 });
 
+await test('phase4 auth route lets hr manager create project accounts', async () => {
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_founder' }],
+    users: [
+      { id: 'user_founder', username: 'founder', name: 'Founder', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_hr', username: 'hr', name: 'HR', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'hr_manager' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const hr = store.users.find((user) => user.id === 'user_hr');
+  const token = createSessionToken(hr, 'cue_ai_classroom');
+  let responsePayload = null;
+  let responseStatus = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (mutator) => {
+      store = await mutator(structuredClone(store));
+      return store;
+    },
+    readBody: async () => ({ json: {
+      projectId: 'cue_ai_classroom',
+      username: 'new_dev',
+      password: '123456',
+      name: 'New Dev',
+      role: 'developer'
+    } }),
+    scanRisks: () => [],
+    normalizeStageName: (stage) => stage,
+    buildMetrics: () => ({}),
+    buildStageChecklist,
+    aggregateDeliverableProgress,
+    buildOpenApiSpec: () => ({}),
+    sendJson: (_res, status, payload) => { responseStatus = status; responsePayload = payload; },
+    port: 0,
+    cueApiKey: '',
+    isWeComAvailable: () => false,
+    meetingHour: 18,
+    hubUrl: ''
+  });
+  await route({ method: 'POST', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/users'));
+  assert.equal(responseStatus, 201);
+  assert.equal(responsePayload.user.username, 'new_dev');
+  assert.equal(responsePayload.user.projectRole, 'developer');
+});
+
 await test('phase4 project routes create, update, and guard deletion of linked projects', async () => {
   let requestJson = {};
   let store = migrateStore({
@@ -756,6 +886,59 @@ await test('phase4 wecom routes respect project context for tasks and claims', a
   assert.match(responsePayload.result, /已认领/);
   assert.equal(store.assignments[0].projectId, 'project_two');
   assert.equal(store.assignments[0].taskId, 'task_two');
+});
+
+await test('wecom command returns daily and weekly score rankings', async () => {
+  let requestJson = {};
+  const store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'Cue Classroom' }],
+    members: [{ name: 'Alice' }, { name: 'Bob' }],
+    users: [],
+    tasks: [
+      { id: 'task_1', title: 'Core task', projectId: 'cue_ai_classroom', priority: 'P1', status: 'done', progress: 100 }
+    ],
+    assignments: [
+      { id: 'assign_1', date: '2026-05-15', owner: 'Alice', taskId: 'task_1', projectId: 'cue_ai_classroom', status: 'done' }
+    ],
+    activities: [
+      { id: 'commit_1', type: 'commit', date: '2026-05-15', createdAt: '2026-05-15T09:00:00+08:00', owner: 'Alice', taskId: 'task_1', projectId: 'cue_ai_classroom' }
+    ],
+    reviews: [],
+    standups: [],
+    attendanceRecords: [
+      { id: 'att_1', date: '2026-05-15', owner: 'Alice', kind: 'meeting', status: 'normal', projectId: 'cue_ai_classroom' },
+      { id: 'att_2', date: '2026-05-15', owner: 'Alice', kind: 'task_completion', status: 'normal', projectId: 'cue_ai_classroom' }
+    ]
+  });
+  let responsePayload = null;
+  const route = createWeComRoutes({
+    createId: (prefix) => `${prefix}_fixed`,
+    loadStore: async () => store,
+    updateStore: async (mutator) => mutator(structuredClone(store)),
+    readBody: async () => ({ json: requestJson }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    isWeComAvailable: () => true,
+    sendWeComMarkdown: async () => true,
+    scanRisks: () => [],
+    buildMetrics: () => ({}),
+    todayText: () => '2026-05-15',
+    normalizeStandup,
+    normalizeTask: (task) => task,
+    generateAssignmentBrief: async () => ({ generatedBy: 'test' })
+  });
+
+  requestJson = { text: '@cue项目中枢 每日排名', projectId: 'cue_ai_classroom', date: '2026-05-15' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.equal(responsePayload.type, 'daily');
+  assert.match(responsePayload.result, /每日评分排行/);
+  assert.match(responsePayload.result, /Alice/);
+
+  requestJson = { text: '@cue项目中枢 每周排名', projectId: 'cue_ai_classroom', date: '2026-05-15' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.equal(responsePayload.type, 'weekly');
+  assert.match(responsePayload.result, /每周评分排行/);
+  assert.match(responsePayload.result, /个工作日/);
 });
 
 // ===== Phase 5：reset 后行为 + 防幽灵 deliverable + 模糊去重 =====
@@ -1342,6 +1525,65 @@ await test('PATCH /api/auth/users blocks role change on project founder', async 
   assert.match(payload.error, /founder is protected/);
   // 创始人角色没变
   assert.equal(store.users.find((u) => u.id === 'user_founder').projectRoles.cue_ai_classroom, 'project_admin');
+});
+
+await test('PATCH /api/auth/users blocks account disable by non-founder project admin', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_founder' }],
+    users: [
+      { id: 'user_founder', username: 'founder', name: 'Founder', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_admin2', username: 'admin2', name: 'Admin2', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_dev', username: 'dev', name: 'Dev', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const admin2 = store.users.find((u) => u.id === 'user_admin2');
+  const token = createSessionToken(admin2, 'cue_ai_classroom');
+  let status = null; let payload = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom', active: false } }),
+    sendJson: (_r, s, p) => { status = s; payload = p; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/users/user_dev'));
+  assert.equal(status, 403);
+  assert.match(payload.error, /founder, system admin or hr manager/);
+  assert.equal(store.users.find((u) => u.id === 'user_dev').active, true);
+});
+
+await test('PATCH /api/auth/users allows account disable by hr manager', async () => {
+  const { createSystemRoutes } = await import('../server/routes/systemRoutes.js');
+  const { createSessionToken } = await import('../server/services/auth.js');
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'C', founderId: 'user_founder' }],
+    users: [
+      { id: 'user_founder', username: 'founder', name: 'Founder', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'project_admin' }, passwordHash: 'x', active: true },
+      { id: 'user_hr', username: 'hr', name: 'HR', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'hr_manager' }, passwordHash: 'x', active: true },
+      { id: 'user_dev', username: 'dev', name: 'Dev', role: 'developer', projectIds: ['*'], projectRoles: { cue_ai_classroom: 'developer' }, passwordHash: 'x', active: true }
+    ]
+  });
+  const hr = store.users.find((u) => u.id === 'user_hr');
+  const token = createSessionToken(hr, 'cue_ai_classroom');
+  let status = null;
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (m) => { store = await m(structuredClone(store)); return store; },
+    readBody: async () => ({ json: { projectId: 'cue_ai_classroom', active: false } }),
+    sendJson: (_r, s) => { status = s; },
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist: () => ({}), aggregateDeliverableProgress: () => ({}),
+    buildOpenApiSpec: () => ({}), port: 0, cueApiKey: '', isWeComAvailable: () => false,
+    meetingHour: 18, hubUrl: ''
+  });
+  await route({ method: 'PATCH', headers: { authorization: `Bearer ${token}` } }, {}, new URL('http://localhost/api/auth/users/user_dev'));
+  assert.equal(status, 200);
+  assert.equal(store.users.find((u) => u.id === 'user_dev').active, false);
 });
 
 await test('PATCH /api/auth/me changes own password only with correct current password', async () => {

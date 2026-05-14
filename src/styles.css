@@ -5460,6 +5460,146 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 .pc-tab-panel { display: none; }
 .pc-tab-panel.active { display: block; }
 
+.score-ranking-card {
+  min-height: 190px;
+}
+
+.score-ranking-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.score-ranking-tabs button {
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.score-ranking-tabs button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.score-ranking-list,
+.score-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.score-ranking-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.score-ranking-row:last-child {
+  border-bottom: 0;
+}
+
+.score-ranking-row b {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.score-ranking-row span {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.score-ranking-row strong {
+  font-size: 24px;
+  color: var(--blue);
+}
+
+.score-ranking-row small {
+  grid-column: 2 / 4;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.score-breakdown-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.score-breakdown-head strong {
+  font-size: 44px;
+  line-height: 1;
+  color: var(--blue);
+}
+
+.score-breakdown-head span,
+.score-bonus-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.score-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.score-breakdown-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--panel-2);
+  min-height: 104px;
+}
+
+.score-breakdown-grid b,
+.score-breakdown-grid span,
+.score-breakdown-grid small {
+  display: block;
+}
+
+.score-breakdown-grid b {
+  font-size: 20px;
+  color: var(--text);
+}
+
+.score-breakdown-grid span {
+  margin-top: 4px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.score-breakdown-grid small {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 860px) {
+  .score-breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ─── 个人名片 ────────────────────────────────────────────────────────────── */
 .pc-profile-card-page {
   display: flex;

@@ -180,6 +180,7 @@ export function migrateStore(store) {
     activities: [],
     standups: [],
     assignments: [],
+    attendanceRecords: [],
     alerts: [],
     projects: [],
     eveningReports: {},

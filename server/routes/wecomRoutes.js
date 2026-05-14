@@ -1,4 +1,5 @@
 import { bindAssignmentToExplicitRefs } from '../services/bindingEngine.js';
+import { buildDailyScores, buildWeeklyScores } from '../services/scoring.js';
 
 function formatShanghaiTime(value) {
   if (!value) return '暂无';
@@ -18,6 +19,48 @@ function formatList(items, formatter, emptyText, limit = 3) {
   const picked = (items || []).slice(0, limit);
   if (!picked.length) return emptyText;
   return picked.map((item, index) => `${index + 1}. ${formatter(item)}`).join('\n');
+}
+
+function resolveRankingType(input = '') {
+  const text = String(input || '').toLowerCase();
+  if (/weekly|week|每周|本周|周榜|周排名/.test(text)) return 'weekly';
+  if (/daily|today|每日|今日|日榜|日排名|排名/.test(text)) return 'daily';
+  return '';
+}
+
+function buildWeComScoreRanking(store, { projectId, type = 'daily', date, todayText }) {
+  const rankingDate = date || todayText();
+  const payload = type === 'weekly'
+    ? buildWeeklyScores(store, { projectId, date: rankingDate })
+    : buildDailyScores(store, { projectId, date: rankingDate });
+  const rows = (payload.rows || []).slice(0, 10);
+  const project = (store.projects || []).find((item) => item.id === projectId) || {};
+  const title = type === 'weekly'
+    ? `${payload.weekStart || rankingDate} - ${payload.weekEnd || rankingDate} 每周评分排行`
+    : `${payload.date || rankingDate} 每日评分排行`;
+  const lines = [
+    `# ${project.name || 'CUE 项目'} ${title}`,
+    ''
+  ];
+  if (!rows.length) {
+    lines.push(payload.note || '暂无评分数据，等待 GitHub 同步和考勤记录。');
+  } else {
+    lines.push(...rows.map((row, index) => {
+      const score = type === 'weekly' ? row.weeklyScore : row.dailyScore;
+      const detail = type === 'weekly'
+        ? `贡献 ${Math.round(row.contributionScore || 0)} · 出勤 ${Math.round(row.attendancePoints || 0)} · ${row.workdays || 0} 个工作日`
+        : `贡献 ${Math.round(row.contributionScore || 0)} · 出勤 +${Math.round(row.attendancePoints || 0)}`;
+      return `${index + 1}. ${row.owner} ${Math.round(score || 0)} 分\n   ${detail}`;
+    }));
+  }
+  return {
+    projectId,
+    type,
+    date: rankingDate,
+    ranking: payload,
+    summary: lines.join('\n'),
+    generatedAt: new Date().toISOString()
+  };
 }
 
 function buildWeComProjectSummary(store, alerts, buildMetrics) {
@@ -191,6 +234,41 @@ export function createWeComRoutes({
         metrics: buildMetrics(scopedStore, alerts),
         alertCount: alerts.length,
         generatedAt: new Date().toISOString()
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/wecom/ranking' && (req.method === 'GET' || req.method === 'POST')) {
+      const { json = {} } = req.method === 'POST' ? await readBody(req) : {};
+      const store = await loadStore();
+      const { projectId } = resolveProjectContext(store, url, json);
+      const type = resolveRankingType(json?.type || url.searchParams.get('type') || 'daily') || 'daily';
+      const date = String(json?.date || url.searchParams.get('date') || '').trim();
+      const payload = buildWeComScoreRanking(store, { projectId, type, date, todayText });
+      if ((json?.push || url.searchParams.get('push') === 'true') && isWeComAvailable()) {
+        await sendWeComMarkdown(payload.summary);
+      }
+      sendJson(res, 200, { ...payload, result: payload.summary });
+      return true;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/wecom/command') {
+      const { json } = await readBody(req);
+      const text = String(json?.text || json?.content || json?.message || '').trim();
+      const type = resolveRankingType(text);
+      if (type) {
+        const store = await loadStore();
+        const { projectId } = resolveProjectContext(store, url, json);
+        const date = String(json?.date || '').trim();
+        const payload = buildWeComScoreRanking(store, { projectId, type, date, todayText });
+        if (json?.push && isWeComAvailable()) {
+          await sendWeComMarkdown(payload.summary);
+        }
+        sendJson(res, 200, { ...payload, result: payload.summary });
+        return true;
+      }
+      sendJson(res, 200, {
+        result: '未识别指令。可发送：每日排名 / 每周排名 / 今日评分 / 周榜。'
       });
       return true;
     }
