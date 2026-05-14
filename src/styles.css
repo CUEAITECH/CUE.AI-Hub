@@ -537,19 +537,25 @@ body.authenticated .auth-shell {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 100;
   padding: 0 28px;
   border-bottom: 1px solid var(--line);
-  background: rgba(247, 247, 242, 0.88);
-  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: box-shadow 0.2s ease;
+}
+
+.topbar.sub-open {
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
 }
 
 .header-main {
-  min-height: 64px;
+  min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 14px;
 }
 
 .brand {
@@ -564,7 +570,8 @@ body.authenticated .auth-shell {
 
 .brand span {
   font-size: 20px;
-  font-weight: 650;
+  font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .brand small {
@@ -572,18 +579,49 @@ body.authenticated .auth-shell {
   font-size: 13px;
 }
 
+/* 顶栏项目切换器 */
+.topbar-project-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.topbar-project-select {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 28px 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: border-color 0.15s, background 0.15s;
+  max-width: 160px;
+}
+
+.topbar-project-select:hover {
+  border-color: var(--blue);
+  background-color: var(--panel);
+}
+
+.topbar-project-select:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+/* 一级导航 */
 .nav {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   flex: 1 1 auto;
   min-height: 44px;
-  overflow: visible;
-}
-
-.nav-menu {
-  position: relative;
-  flex: 0 0 auto;
 }
 
 .nav-item-hidden {
@@ -598,67 +636,61 @@ body.authenticated .auth-shell {
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
-  padding: 9px 12px;
+  padding: 8px 12px;
   transition: 140ms ease;
+  font-size: 14px;
 }
 
 .nav-primary {
-  min-width: 64px;
-  font-weight: 650;
+  min-width: 56px;
+  font-weight: 600;
 }
 
-.nav-item:hover,
+.nav-item:hover {
+  color: var(--text);
+  background: rgba(15, 23, 42, 0.05);
+}
+
 .nav-item.active {
   color: var(--text);
-  background: rgba(16, 16, 16, 0.06);
-  border-color: rgba(16, 16, 16, 0.08);
+  background: rgba(15, 23, 42, 0.06);
+  border-color: rgba(15, 23, 42, 0.08);
+  font-weight: 600;
 }
 
-.nav-menu:hover > .nav-primary,
-.nav-menu.expanded > .nav-primary {
-  color: var(--text);
-  background: rgba(16, 16, 16, 0.06);
-  border-color: rgba(16, 16, 16, 0.08);
-}
-
-.nav-submenu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  min-width: 148px;
-  display: grid;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(247, 247, 242, 0.96);
-  box-shadow: 0 14px 36px rgba(16, 16, 16, 0.12);
+/* 展开式第二行导航 */
+.header-sub {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  max-height: 0;
   opacity: 0;
-  pointer-events: none;
-  transform: translateY(-4px);
-  transition: 140ms ease;
+  border-top: 0px solid var(--line);
+  transition: max-height 0.2s ease, opacity 0.18s ease, border-top-width 0.2s ease;
+  padding: 0 0;
 }
 
-.nav-submenu::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -9px;
-  height: 9px;
-}
-
-.nav-menu:hover .nav-submenu,
-.nav-menu.expanded .nav-submenu {
+.topbar.sub-open .header-sub {
+  max-height: 44px;
   opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
+  border-top-width: 1px;
+  padding: 4px 0;
 }
 
-.nav-submenu .nav-item {
-  width: 100%;
-  text-align: left;
-  white-space: nowrap;
+.header-sub-group {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.header-sub-group.visible {
+  display: flex;
+}
+
+.header-sub .nav-item {
+  font-size: 13px;
+  padding: 6px 12px;
+  font-weight: 500;
 }
 
 .topbar-actions {
