@@ -397,29 +397,68 @@
           <section class="workspace-shell">
             <div class="workspace-header">
               <div>
-                <span class="workspace-kicker">&#20010;&#20154;&#20013;&#24515;</span>
-                <h2>&#36134;&#21495;&#35774;&#32622;</h2>
-                <p>&#26597;&#30475;&#24403;&#21069;&#30331;&#24405;&#36523;&#20221;&#12289;&#39033;&#30446;&#26435;&#38480;&#65292;&#24182;&#31649;&#29702;&#23494;&#30721;&#12289;&#25163;&#26426;&#21495;&#12289;&#37038;&#31665;&#21644;&#30331;&#24405;&#29366;&#24577;&#12290;</p>
+                <span class="workspace-kicker">个人中心</span>
+                <h2>我的工作台</h2>
+                <p>你的任务、代码审阅、晚会对账和交付健康度一览。</p>
               </div>
               <div class="workspace-actions">
-                <button type="button" id="accountSettingsBtn" class="account-settings-btn">&#36134;&#21495;&#35774;&#32622;</button>
-                <button type="button" id="logoutBtn" class="logout-btn">&#36864;&#20986;&#30331;&#24405;</button>
+                <button type="button" id="accountSettingsBtn" class="account-settings-btn">账号设置</button>
+                <button type="button" id="logoutBtn" class="logout-btn">退出登录</button>
               </div>
             </div>
-            <div class="workspace-grid workspace-grid-single">
+
+            <!-- Row 1: 账号信息 + 交付健康度 -->
+            <div class="workspace-grid">
               <article class="workspace-card">
                 <div class="workspace-card-head">
-                  <span>&#24403;&#21069;&#36134;&#21495;</span>
-                  <strong id="profileUserName">&#26410;&#30331;&#24405;</strong>
-                  <small id="profileUserMeta">&#26242;&#26080;&#36134;&#21495;&#20449;&#24687;</small>
+                  <span>当前账号</span>
+                  <strong id="profileUserName">未登录</strong>
+                  <small id="profileUserMeta">暂无账号信息</small>
                 </div>
                 <div class="profile-settings">
                   <label>
-                    <span>&#24403;&#21069;&#39033;&#30446;</span>
+                    <span>当前项目</span>
                     <select id="profileProjectSelect" data-project-switcher></select>
                   </label>
-                  <p class="muted-line">&#20999;&#25442;&#39033;&#30446;&#21518;&#65292;&#20219;&#21153;&#12289;&#20998;&#24037;&#12289;&#36134;&#21495;&#21517;&#21333;&#37117;&#20250;&#21047;&#26032;&#21040;&#23545;&#24212;&#39033;&#30446;&#12290;</p>
+                  <p class="muted-line">切换项目后，任务、分工、账号名单都会刷新到对应项目。</p>
                 </div>
+              </article>
+              <article class="workspace-card" id="myHealthCard">
+                <div class="workspace-card-head">
+                  <span>交付健康度</span>
+                  <strong>我的任务概览</strong>
+                </div>
+                <div id="myHealthBody"></div>
+              </article>
+            </div>
+
+            <!-- Row 2: 我的任务看板 -->
+            <div class="workspace-grid workspace-grid-single">
+              <article class="workspace-card workspace-card-wide">
+                <div class="workspace-card-head">
+                  <span>我的任务</span>
+                  <strong>进行中 / 待确认 / 逾期</strong>
+                  <button type="button" class="text-link-btn pc-route-btn" data-route="assignment">全部任务 →</button>
+                </div>
+                <div id="myTasksList"></div>
+              </article>
+            </div>
+
+            <!-- Row 3: AI 审阅历史 + 晚会对账 -->
+            <div class="workspace-grid">
+              <article class="workspace-card">
+                <div class="workspace-card-head">
+                  <span>AI 审阅历史</span>
+                  <strong>代码质量趋势</strong>
+                </div>
+                <div id="myReviewsList"></div>
+              </article>
+              <article class="workspace-card">
+                <div class="workspace-card-head">
+                  <span>晚会对账</span>
+                  <strong>近期承诺兑现情况</strong>
+                </div>
+                <div id="myEveningList"></div>
               </article>
             </div>
           </section>
