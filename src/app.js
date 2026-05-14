@@ -273,15 +273,13 @@ function logout() {
 }
 
 async function openAccountSettings() {
-  const backdrop = document.querySelector('#accountSettingsBackdrop');
-  if (!backdrop) return;
-  // 拉当前账号的最新信息（手机号可能在别处改过）
+  // 填充内联账号设置字段（账号设置已移至个人中心 tab，无弹窗）
   const projectId = getCurrentProjectId();
   let me = null;
   try {
     const payload = await api(`/api/auth/users?projectId=${encodeURIComponent(projectId)}`);
     me = (payload.users || []).find((u) => u.username === currentSessionUsername()) || null;
-  } catch { /* 拉不到也允许打开（用户可能不是管理员看不到列表，但还是要能改自己密码） */ }
+  } catch { /* 看不到用户列表时也允许填充自己可见的字段 */ }
   setText('#accountSettingsName', me?.name || currentSessionUsername() || '—');
   setText('#accountSettingsUsername', me?.username || currentSessionUsername() || '—');
   setText('#accountSettingsPhoneCurrent', me?.phone || '未绑定');
@@ -298,12 +296,10 @@ async function openAccountSettings() {
   setText('#bindPhoneHint', '');
   setText('#bindEmailHint', '');
   document.querySelector('#changePasswordForm')?.reset();
-  backdrop.style.display = 'flex';
 }
 
 function closeAccountSettings() {
-  const backdrop = document.querySelector('#accountSettingsBackdrop');
-  if (backdrop) backdrop.style.display = 'none';
+  // 账号设置已内联，无需关闭弹窗
 }
 
 async function submitChangePassword(event) {
@@ -878,10 +874,6 @@ function renderPersonalCenter() {
     btn.addEventListener('click', () => setRoute(btn.dataset.route));
   });
 
-  // Account settings inline button
-  document.querySelector('#accountSettingsBtnInline')?.addEventListener('click', () => {
-    document.querySelector('#accountSettingsBtn')?.click();
-  });
 }
 
 function switchToProject(projectId) {
@@ -3287,15 +3279,7 @@ function bindEvents() {
   document.querySelector('#logoutBtn')?.addEventListener('click', () => {
     if (window.confirm('确认退出当前账号？将返回登录页面。')) logout();
   });
-  document.querySelector('#accountSettingsBtn')?.addEventListener('click', () => {
-    openAccountSettings().catch((error) => toast(error.message));
-  });
-  // 账号设置 modal 内事件
-  document.querySelector('#accountSettingsBackdrop')?.addEventListener('click', (event) => {
-    const target = event.target;
-    if (target === event.currentTarget) { closeAccountSettings(); return; }
-    if (target instanceof HTMLElement && target.dataset.action === 'close-account-settings') closeAccountSettings();
-  });
+  // 账号设置已内联至个人中心 tab，无需单独绑定按钮事件
   document.querySelector('#changePasswordForm')?.addEventListener('submit', submitChangePassword);
   document.querySelector('#bindPhoneForm')?.addEventListener('submit', submitBindPhone);
   document.querySelector('#bindEmailForm')?.addEventListener('submit', submitBindEmail);
@@ -3379,14 +3363,17 @@ function bindEvents() {
   });
 
   document.querySelectorAll('[data-route]').forEach((button) => {
-    button.addEventListener('click', () => setRoute(button.dataset.route));
+    button.addEventListener('click', () => {
+      setRoute(button.dataset.route);
+      // header sub-nav 的 personal 分组带 data-pc-tab，路由后同时切换个人中心 tab
+      const pcTab = button.dataset.pcTab;
+      if (pcTab) {
+        switchPcTab(pcTab);
+      }
+    });
   });
 
-  // Personal center tab switching
-  document.querySelector('#personal-center')?.addEventListener('click', (e) => {
-    const tab = e.target.closest('.pc-tab');
-    if (!tab) return;
-    const panel = tab.dataset.tab;
+  function switchPcTab(panel) {
     document.querySelectorAll('.pc-tab').forEach((t) => {
       t.classList.toggle('active', t.dataset.tab === panel);
       t.setAttribute('aria-selected', String(t.dataset.tab === panel));
@@ -3394,6 +3381,14 @@ function bindEvents() {
     document.querySelectorAll('.pc-tab-panel').forEach((p) => {
       p.classList.toggle('active', p.dataset.panel === panel);
     });
+    if (panel === 'account') openAccountSettings();
+  }
+
+  // Personal center tab switching
+  document.querySelector('#personal-center')?.addEventListener('click', (e) => {
+    const tab = e.target.closest('.pc-tab');
+    if (!tab) return;
+    switchPcTab(tab.dataset.tab);
   });
 
   // 挂到 window，供动态渲染的 onclick 内联调用
