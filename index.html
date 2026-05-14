@@ -66,46 +66,46 @@
       </div>
     </section>
     <div class="app-shell">
-      <header class="topbar">
+      <header class="topbar" id="topbar">
         <div class="header-main">
           <button class="brand" type="button" data-route="overview">
             <span>CUE</span>
             <small>项目中枢</small>
           </button>
+          <div class="topbar-project-wrap">
+            <select id="topbarProjectSelect" class="topbar-project-select" data-project-switcher></select>
+          </div>
           <nav class="nav" aria-label="主导航">
             <button class="nav-item nav-primary active" type="button" data-route="overview" data-nav-parent="overview">总览</button>
-            <div class="nav-menu" data-nav-parent="command">
-              <button class="nav-item nav-primary" type="button" aria-haspopup="true" aria-expanded="false">指挥</button>
-              <div class="nav-submenu" role="menu">
-                <button class="nav-item" type="button" data-route="roadmap" role="menuitem">路径图</button>
-                <button class="nav-item" type="button" data-route="ai-pm" role="menuitem">AI PM</button>
-                <button class="nav-item" type="button" data-route="meeting" role="menuitem">晚会闭环</button>
-                <button class="nav-item" type="button" data-route="account-admin" role="menuitem">账号管理</button>
-              </div>
-            </div>
-            <div class="nav-menu" data-nav-parent="execution">
-              <button class="nav-item nav-primary" type="button" aria-haspopup="true" aria-expanded="false">执行</button>
-              <div class="nav-submenu" role="menu">
-                <button class="nav-item" type="button" data-route="planning" role="menuitem">AI 排期</button>
-                <button class="nav-item" type="button" data-route="reviews" role="menuitem">AI 审阅</button>
-                <button class="nav-item" type="button" data-route="standup" role="menuitem">异步站会</button>
-                <button class="nav-item" type="button" data-route="assignment" role="menuitem">分工领取</button>
-                <button class="nav-item nav-item-hidden" type="button" data-route="task-detail" role="menuitem">任务详情</button>
-              </div>
-            </div>
-            <div class="nav-menu" data-nav-parent="output">
-              <button class="nav-item nav-primary" type="button" aria-haspopup="true" aria-expanded="false">输出</button>
-              <div class="nav-submenu" role="menu">
-                <button class="nav-item" type="button" data-route="report" role="menuitem">日报&amp;晚报</button>
-                <button class="nav-item" type="button" data-route="automation" role="menuitem">自动提醒</button>
-              </div>
-            </div>
-            <button class="nav-item nav-primary" type="button" data-route="personal-center" data-nav-parent="personal">&#20010;&#20154;&#20013;&#24515;</button>
+            <button class="nav-item nav-primary" type="button" data-nav-parent="command">指挥</button>
+            <button class="nav-item nav-primary" type="button" data-nav-parent="execution">执行</button>
+            <button class="nav-item nav-primary" type="button" data-nav-parent="output">输出</button>
+            <button class="nav-item nav-primary" type="button" data-route="personal-center" data-nav-parent="personal">个人中心</button>
           </nav>
           <div class="topbar-actions">
             <span class="status-pill" id="syncStatus">API 未连接</span>
             <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
             <button class="primary-action" type="button" data-action="sync">同步信号</button>
+          </div>
+        </div>
+        <!-- 展开式第二行导航 -->
+        <div class="header-sub" id="headerSub">
+          <div class="header-sub-group" data-sub="command">
+            <button class="nav-item" type="button" data-route="roadmap">路径图</button>
+            <button class="nav-item" type="button" data-route="ai-pm">AI PM</button>
+            <button class="nav-item" type="button" data-route="meeting">晚会闭环</button>
+            <button class="nav-item" type="button" data-route="account-admin">账号管理</button>
+          </div>
+          <div class="header-sub-group" data-sub="execution">
+            <button class="nav-item" type="button" data-route="planning">AI 排期</button>
+            <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
+            <button class="nav-item" type="button" data-route="standup">异步站会</button>
+            <button class="nav-item" type="button" data-route="assignment">分工领取</button>
+            <button class="nav-item nav-item-hidden" type="button" data-route="task-detail">任务详情</button>
+          </div>
+          <div class="header-sub-group" data-sub="output">
+            <button class="nav-item" type="button" data-route="report">日报&amp;晚报</button>
+            <button class="nav-item" type="button" data-route="automation">自动提醒</button>
           </div>
         </div>
       </header>
@@ -417,11 +417,6 @@
                     <h3 id="profileUserName">未登录</h3>
                     <p id="profileUserMeta">暂无账号信息</p>
                   </div>
-                </div>
-                <div class="pc-divider"></div>
-                <div class="pc-project-row">
-                  <span class="pc-label">当前项目</span>
-                  <select id="profileProjectSelect" data-project-switcher class="pc-select"></select>
                 </div>
               </article>
 

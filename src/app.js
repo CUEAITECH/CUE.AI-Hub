@@ -825,7 +825,6 @@ function renderPersonalCenter() {
   const avatarEl = document.querySelector('#profileAvatar');
   if (avatarEl) avatarEl.textContent = me ? me.slice(0, 1) : '?';
   setText('#profileUserMeta', `${roleLabel(role)} · ${projectName || '????'}`);
-  renderProjectSwitcher();
   renderMyHealthCard();
   renderMyTasksCard();
   renderMyReviewsCard();
@@ -3121,15 +3120,9 @@ function setRoute(route) {
   const activeParent = parentByRoute[route] || route;
   document.querySelectorAll('.nav-item').forEach((item) => {
     const isRouteActive = item.dataset.route === route;
-    const isParentActive = item.classList.contains('nav-primary') && item.closest('[data-nav-parent]')?.dataset.navParent === activeParent;
+    // 一级导航按钮（无自身 route 的分组按钮）通过 data-nav-parent 匹配
+    const isParentActive = item.classList.contains('nav-primary') && !item.dataset.route && item.dataset.navParent === activeParent;
     item.classList.toggle('active', isRouteActive || isParentActive);
-    if (item.classList.contains('nav-primary') && item.hasAttribute('aria-expanded')) {
-      item.setAttribute('aria-expanded', String(isParentActive));
-    }
-  });
-  // 自动展开当前页面所在分组的子菜单
-  document.querySelectorAll('.nav-menu').forEach((menu) => {
-    menu.classList.toggle('expanded', menu.dataset.navParent === activeParent);
   });
   if (route === 'account-admin') {
     renderAccountAdmin().catch((error) => toast(error.message));
@@ -3261,7 +3254,7 @@ function bindEvents() {
   document.querySelector('[data-action="refresh-project-users"]')?.addEventListener('click', () => {
     renderAccountAdmin().catch((error) => toast(error.message));
   });
-  document.querySelector('#profileProjectSelect')?.addEventListener('change', (event) => {
+  document.querySelector('#topbarProjectSelect')?.addEventListener('change', (event) => {
     switchProfileProject(event).catch((error) => toast(error.message));
   });
   document.querySelector('#adminPageUserList')?.addEventListener('click', (event) => {
@@ -3309,23 +3302,37 @@ function bindEvents() {
     });
   };
 
-  // 顶级导航组按钮点击：切换子菜单展开（不含总览）
-  document.querySelectorAll('.nav-menu .nav-primary').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const menu = btn.closest('.nav-menu');
-      if (!menu) return;
-      const isExpanded = menu.classList.contains('expanded');
-      document.querySelectorAll('.nav-menu').forEach((m) => m.classList.remove('expanded'));
-      if (!isExpanded) menu.classList.add('expanded');
+  // 腾讯云式导航：hover 一级按钮展开第二行，鼠标离开整个 topbar 后收起
+  const topbarEl = document.querySelector('#topbar');
+  const headerSubGroups = document.querySelectorAll('.header-sub-group');
+
+  function showHeaderSub(parent) {
+    let hasGroup = false;
+    headerSubGroups.forEach((g) => {
+      const match = g.dataset.sub === parent;
+      g.classList.toggle('visible', match);
+      if (match) hasGroup = true;
     });
+    topbarEl?.classList.toggle('sub-open', hasGroup);
+  }
+
+  function hideHeaderSub() {
+    headerSubGroups.forEach((g) => g.classList.remove('visible'));
+    topbarEl?.classList.remove('sub-open');
+  }
+
+  // 一级有子菜单的按钮（无自身 route）
+  document.querySelectorAll('.nav .nav-primary:not([data-route])').forEach((btn) => {
+    btn.addEventListener('mouseenter', () => showHeaderSub(btn.dataset.navParent));
   });
 
-  // 点击页面其他区域收起手动展开的子菜单（setRoute 会在导航时重建展开状态）
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.nav-menu')) {
-      document.querySelectorAll('.nav-menu').forEach((m) => m.classList.remove('expanded'));
-    }
+  // 鼠标移到 topbar 其他区域（brand、project select、actions）时收起
+  document.querySelectorAll('.brand, .topbar-project-wrap, .topbar-actions').forEach((el) => {
+    el.addEventListener('mouseenter', hideHeaderSub);
   });
+
+  // 鼠标离开整个 topbar 时收起
+  topbarEl?.addEventListener('mouseleave', hideHeaderSub);
 
   document.querySelector('#meetingDate')?.addEventListener('change', () => {
     renderMeeting();
