@@ -558,6 +558,24 @@ body.authenticated .auth-shell {
   gap: 14px;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.header-right .nav {
+  flex: 0 0 auto;
+}
+
 .brand {
   display: inline-flex;
   align-items: baseline;
@@ -706,9 +724,9 @@ body.authenticated .auth-shell {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--line);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
-  padding: 10px 0 14px;
-  min-height: 120px;
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+  padding: 16px 0 22px;
+  min-height: 160px;
   z-index: 99;
   opacity: 0;
   pointer-events: none;
@@ -970,6 +988,20 @@ h1 {
   gap: 22px;
   max-height: 70vh;
   overflow-y: auto;
+}
+
+/* 内联版账号设置（个人中心 tab 内，无弹窗限高） */
+.pc-account-body {
+  max-height: none;
+  overflow-y: visible;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.pc-account-body .account-settings-section:first-child {
+  grid-column: 1 / -1;
 }
 
 .account-settings-section h3 {
