@@ -556,6 +556,7 @@ async function renderAccountAdmin() {
         return `
         <div class="admin-user-card ${user.active === false ? 'is-disabled' : ''} ${isFounder ? 'is-founder' : ''}" data-user-id="${escapeHtml(user.id)}">
           <div class="admin-user-card-head">
+            <div class="admin-user-avatar admin-user-avatar-${roleTone}">${escapeHtml((user.name || user.username).slice(0, 1).toUpperCase())}</div>
             <div class="admin-user-identity">
               <strong>${escapeHtml(user.name || user.username)}</strong>
               <span class="admin-user-handle">@${escapeHtml(user.username)}</span>
