@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>CUE 项目中枢</title>
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
@@ -394,74 +397,75 @@
         <!-- 晚会闭环 -->
         
         <section class="view" id="personal-center">
-          <section class="workspace-shell">
-            <div class="workspace-header">
-              <div>
-                <span class="workspace-kicker">个人中心</span>
-                <h2>我的工作台</h2>
-                <p>你的任务、代码审阅、晚会对账和交付健康度一览。</p>
-              </div>
-              <div class="workspace-actions">
-                <button type="button" id="accountSettingsBtn" class="account-settings-btn">账号设置</button>
-                <button type="button" id="logoutBtn" class="logout-btn">退出登录</button>
+          <div class="pc-shell">
+            <!-- Header -->
+            <div class="pc-header">
+              <h2>我的工作台</h2>
+              <div class="pc-header-actions">
+                <button type="button" id="accountSettingsBtn" class="pc-btn-ghost">账号设置</button>
+                <button type="button" id="logoutBtn" class="pc-btn-danger-ghost">退出登录</button>
               </div>
             </div>
 
-            <!-- Row 1: 账号信息 + 交付健康度 -->
-            <div class="workspace-grid">
-              <article class="workspace-card">
-                <div class="workspace-card-head">
-                  <span>当前账号</span>
-                  <strong id="profileUserName">未登录</strong>
-                  <small id="profileUserMeta">暂无账号信息</small>
+            <!-- Row 1: Profile + Health metrics -->
+            <div class="pc-row pc-row-2col">
+              <!-- Profile card -->
+              <article class="pc-card pc-profile-card">
+                <div class="pc-avatar-row">
+                  <div class="pc-avatar" id="profileAvatar">?</div>
+                  <div class="pc-identity">
+                    <h3 id="profileUserName">未登录</h3>
+                    <p id="profileUserMeta">暂无账号信息</p>
+                  </div>
                 </div>
-                <div class="profile-settings">
-                  <label>
-                    <span>当前项目</span>
-                    <select id="profileProjectSelect" data-project-switcher></select>
-                  </label>
-                  <p class="muted-line">切换项目后，任务、分工、账号名单都会刷新到对应项目。</p>
+                <div class="pc-divider"></div>
+                <div class="pc-project-row">
+                  <span class="pc-label">当前项目</span>
+                  <select id="profileProjectSelect" data-project-switcher class="pc-select"></select>
                 </div>
               </article>
-              <article class="workspace-card" id="myHealthCard">
-                <div class="workspace-card-head">
-                  <span>交付健康度</span>
-                  <strong>我的任务概览</strong>
-                </div>
-                <div id="myHealthBody"></div>
+
+              <!-- Health bento -->
+              <article class="pc-card pc-health-card">
+                <div class="pc-card-eyebrow">交付健康度</div>
+                <div id="myHealthBody" class="pc-metrics-grid"></div>
               </article>
             </div>
 
-            <!-- Row 2: 我的任务看板 -->
-            <div class="workspace-grid workspace-grid-single">
-              <article class="workspace-card workspace-card-wide">
-                <div class="workspace-card-head">
-                  <span>我的任务</span>
-                  <strong>进行中 / 待确认 / 逾期</strong>
-                  <button type="button" class="text-link-btn pc-route-btn" data-route="assignment">全部任务 →</button>
+            <!-- Row 2: My tasks -->
+            <article class="pc-card pc-card-full">
+              <div class="pc-card-header">
+                <div>
+                  <span class="pc-card-eyebrow">我的任务</span>
+                  <h4 class="pc-card-title">当前工作项</h4>
                 </div>
-                <div id="myTasksList"></div>
-              </article>
-            </div>
+                <button type="button" class="pc-btn-link pc-route-btn" data-route="assignment">全部任务 →</button>
+              </div>
+              <div id="myTasksList"></div>
+            </article>
 
-            <!-- Row 3: AI 审阅历史 + 晚会对账 -->
-            <div class="workspace-grid">
-              <article class="workspace-card">
-                <div class="workspace-card-head">
-                  <span>AI 审阅历史</span>
-                  <strong>代码质量趋势</strong>
+            <!-- Row 3: Reviews + Evening -->
+            <div class="pc-row pc-row-2col">
+              <article class="pc-card">
+                <div class="pc-card-header">
+                  <div>
+                    <span class="pc-card-eyebrow">AI 审阅历史</span>
+                    <h4 class="pc-card-title">代码质量趋势</h4>
+                  </div>
                 </div>
                 <div id="myReviewsList"></div>
               </article>
-              <article class="workspace-card">
-                <div class="workspace-card-head">
-                  <span>晚会对账</span>
-                  <strong>近期承诺兑现情况</strong>
+              <article class="pc-card">
+                <div class="pc-card-header">
+                  <div>
+                    <span class="pc-card-eyebrow">晚会对账</span>
+                    <h4 class="pc-card-title">承诺兑现情况</h4>
+                  </div>
                 </div>
                 <div id="myEveningList"></div>
               </article>
             </div>
-          </section>
+          </div>
         </section>
 
         <section class="view" id="meeting">
