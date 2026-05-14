@@ -658,33 +658,39 @@ body.authenticated .auth-shell {
   font-weight: 600;
 }
 
-/* 展开式第二行导航 */
+/* 展开式第二行导航（mega-bar：一次展开所有分组） */
 .header-sub {
   display: flex;
   align-items: center;
+  gap: 0;
   overflow: hidden;
   max-height: 0;
   opacity: 0;
-  border-top: 0px solid var(--line);
-  transition: max-height 0.2s ease, opacity 0.18s ease, border-top-width 0.2s ease;
+  border-top: 1px solid transparent;
+  transition: max-height 0.22s ease, opacity 0.18s ease, border-top-color 0.22s ease;
   padding: 0 0;
 }
 
 .topbar.sub-open .header-sub {
   max-height: 44px;
   opacity: 1;
-  border-top-width: 1px;
+  border-top-color: var(--line);
   padding: 4px 0;
 }
 
+/* 所有分组同时显示 */
 .header-sub-group {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 2px;
 }
 
-.header-sub-group.visible {
-  display: flex;
+.header-sub-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--line);
+  margin: 0 10px;
+  flex-shrink: 0;
 }
 
 .header-sub .nav-item {
