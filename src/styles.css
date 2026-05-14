@@ -1,17 +1,22 @@
 :root {
-  --bg: #f7f7f2;
-  --panel: #ffffff;
-  --panel-2: #f2f2ec;
-  --line: rgba(18, 18, 18, 0.12);
-  --text: #101010;
-  --muted: #5f5f58;
-  --dim: #8a8a82;
-  --blue: #0f62fe;
-  --cyan: #087f6f;
-  --green: #0f7a55;
-  --amber: #9a6400;
-  --red: #b42318;
-  --shadow: none;
+  --bg: #F1F5F9;
+  --panel: #FFFFFF;
+  --panel-2: #E8EDF5;
+  --line: rgba(15, 23, 42, 0.1);
+  --text: #0F172A;
+  --muted: #475569;
+  --dim: #94A3B8;
+  --blue: #2563EB;
+  --cyan: #0891B2;
+  --green: #059669;
+  --amber: #D97706;
+  --red: #DC2626;
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --accent: #2563EB;
+  --accent-subtle: rgba(37, 99, 235, 0.08);
+  --success-subtle: rgba(5, 150, 105, 0.1);
+  --danger-subtle: rgba(220, 38, 38, 0.1);
+  --warning-subtle: rgba(215, 119, 6, 0.1);
 }
 
 [hidden] {
@@ -27,7 +32,7 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   letter-spacing: 0;
 }
 
@@ -4935,132 +4940,363 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   line-height: 1.6;
 }
 
-/* ─── 个人中心：交付健康度 ───────────────────────────────────────────────────── */
-.health-metrics {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 12px 0 4px;
-}
-.health-metric {
-  flex: 1 1 60px;
+/* ═══════════════════════════════════════════════════════════════════════════
+   个人中心 (Personal Center) — Premium Bento Design
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.pc-shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 28px 48px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 14px 8px 10px;
-  border-radius: 8px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  text-align: center;
+  gap: 20px;
 }
-.health-metric strong {
-  font-size: 24px;
+
+/* Header */
+.pc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.pc-header h2 {
+  font-size: 22px;
   font-weight: 700;
-  line-height: 1.1;
+  margin: 0;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+.pc-header-actions {
+  display: flex;
+  gap: 8px;
+}
+.pc-btn-ghost {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.pc-btn-ghost:hover {
+  background: var(--panel-2);
   color: var(--text);
 }
-.health-metric span {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 5px;
+.pc-btn-danger-ghost {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  background: transparent;
+  color: var(--red);
+  cursor: pointer;
+  transition: background 0.15s;
 }
-.health-metric-warn strong {
-  color: #e53e3e;
+.pc-btn-danger-ghost:hover {
+  background: var(--danger-subtle);
 }
 
-/* ─── 个人中心：我的任务行 ───────────────────────────────────────────────────── */
-.my-task-row {
+/* Layout */
+.pc-row {
+  display: grid;
+  gap: 16px;
+}
+.pc-row-2col {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+@media (max-width: 768px) {
+  .pc-row-2col { grid-template-columns: 1fr; }
+  .pc-shell { padding: 20px 16px 40px; }
+}
+
+/* Cards */
+.pc-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+}
+.pc-card-full {
+  width: 100%;
+}
+.pc-card-eyebrow,
+.pc-card-header .pc-card-eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+.pc-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 16px;
+  letter-spacing: -0.2px;
+}
+.pc-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.pc-card-header > div { flex: 1; }
+.pc-btn-link {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--blue);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  white-space: nowrap;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+.pc-btn-link:hover { opacity: 1; }
+
+/* Profile card */
+.pc-profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.pc-avatar-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 0;
+  gap: 14px;
+}
+.pc-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563EB, #7C3AED);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: -0.5px;
+}
+.pc-identity h3 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 2px;
+  color: var(--text);
+  letter-spacing: -0.2px;
+}
+.pc-identity p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.pc-divider {
+  height: 1px;
+  background: var(--line);
+}
+.pc-project-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pc-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+}
+.pc-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Health metrics bento */
+.pc-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+.pc-metric {
+  border-radius: 10px;
+  padding: 14px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid transparent;
+}
+.pc-metric strong {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+.pc-metric span {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+.pc-metric-blue   { background: rgba(37,99,235,0.07);   color: #1D4ED8; border-color: rgba(37,99,235,0.12); }
+.pc-metric-green  { background: rgba(5,150,105,0.07);   color: #047857; border-color: rgba(5,150,105,0.12); }
+.pc-metric-red    { background: rgba(220,38,38,0.07);   color: #B91C1C; border-color: rgba(220,38,38,0.12); }
+.pc-metric-gray   { background: var(--panel-2);         color: var(--muted); }
+.pc-metric-indigo { background: rgba(99,102,241,0.07);  color: #4338CA; border-color: rgba(99,102,241,0.12); }
+
+/* Task rows */
+.pc-task-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 11px 0;
   border-bottom: 1px solid var(--line);
+  transition: background 0.1s;
 }
-.my-task-row:last-child {
-  border-bottom: none;
+.pc-task-row:last-child { border-bottom: none; }
+.pc-task-row:hover { background: var(--panel-2); margin: 0 -22px; padding-left: 22px; padding-right: 22px; border-radius: 0; }
+.pc-task-status-bar {
+  width: 3px;
+  height: 32px;
+  border-radius: 2px;
+  margin-right: 14px;
+  flex-shrink: 0;
+  background: var(--dim);
 }
-.my-task-main {
-  flex: 1 1 0;
+.pc-task-status-bar.status-进行中 { background: var(--blue); }
+.pc-task-status-bar.status-已完成 { background: var(--green); }
+.pc-task-status-bar.status-待确认 { background: var(--amber); }
+.pc-task-body {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
-.my-task-main strong {
-  font-size: 14px;
+.pc-task-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.my-task-meta {
+.pc-task-overdue .pc-task-title { color: var(--red); }
+.pc-task-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  gap: 5px;
+  flex-wrap: wrap;
 }
-.overdue-text {
-  color: #e53e3e;
-}
-.status-pill {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: var(--line);
+.pc-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: transparent;
   color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.pc-icon-btn:hover { background: var(--panel-2); color: var(--text); }
+
+/* Tags / pills */
+.pc-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 5px;
   white-space: nowrap;
 }
-.status-pill-进行中 {
-  background: #ebf8f0;
-  color: #276749;
-}
-.status-pill-已完成 {
-  background: #e8f4fd;
-  color: #2b6cb0;
-}
+.pc-tag-neutral { background: var(--panel-2); color: var(--muted); }
+.pc-tag-red     { background: var(--danger-subtle); color: var(--red); }
+.pc-tag-green   { background: var(--success-subtle); color: var(--green); }
+.pc-tag-amber   { background: var(--warning-subtle); color: var(--amber); }
+.pc-tag-risk-高  { background: rgba(220,38,38,0.08); color: #B91C1C; }
+.pc-tag-risk-中  { background: rgba(215,119,6,0.08); color: #92400E; }
+.pc-tag-risk-低  { background: rgba(5,150,105,0.08); color: #065F46; }
 
-/* ─── 个人中心：AI 审阅历史行 ───────────────────────────────────────────────── */
-.review-summary-row {
+/* Review rows */
+.pc-review-row {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 9px 0;
   border-bottom: 1px solid var(--line);
 }
-.review-summary-row:last-child {
-  border-bottom: none;
+.pc-review-row:last-child { border-bottom: none; }
+.pc-level-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
-.review-summary-title {
-  flex: 1 1 0;
+.pc-level-badge.level-pass     { background: rgba(5,150,105,0.1);  color: #047857; }
+.pc-level-badge.level-warning  { background: rgba(215,119,6,0.1);  color: #92400E; }
+.pc-level-badge.level-block    { background: rgba(220,38,38,0.1);  color: #B91C1C; }
+.pc-level-badge.level-escalate { background: rgba(220,38,38,0.15); color: #991B1B; }
+.pc-review-title {
+  flex: 1;
   min-width: 0;
   font-size: 13px;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.review-summary-meta {
+.pc-review-meta {
+  font-size: 11px;
+  color: var(--dim);
   flex-shrink: 0;
-  font-size: 12px;
+  white-space: nowrap;
 }
 
-/* ─── 个人中心：晚会对账行 ───────────────────────────────────────────────────── */
-.evening-reconcile-row {
+/* Evening rows */
+.pc-evening-row {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 9px 0;
   border-bottom: 1px solid var(--line);
 }
-.evening-reconcile-row:last-child {
-  border-bottom: none;
-}
-.evening-date {
+.pc-evening-row:last-child { border-bottom: none; }
+.pc-evening-date {
+  font-size: 11px;
+  color: var(--dim);
   flex-shrink: 0;
-  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 76px;
 }
-.evening-task {
-  flex: 1 1 0;
+.pc-evening-task {
+  flex: 1;
   min-width: 0;
   font-size: 13px;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

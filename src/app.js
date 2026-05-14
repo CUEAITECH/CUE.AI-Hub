@@ -710,21 +710,18 @@ function renderMyHealthCard() {
   const bindingRate = total > 0 ? Math.round((withDeliverable / total) * 100) : 0;
 
   el.innerHTML = `
-    <div class="health-metrics">
-      <div class="health-metric">
-        <strong>${inProgress}</strong><span>进行中</span>
-      </div>
-      <div class="health-metric">
-        <strong>${done}</strong><span>已完成</span>
-      </div>
-      <div class="health-metric${overdue > 0 ? ' health-metric-warn' : ''}">
-        <strong>${overdue}</strong><span>逾期</span>
-      </div>
-      <div class="health-metric">
-        <strong>${bindingRate}%</strong><span>交付绑定率</span>
-      </div>
+    <div class="pc-metric pc-metric-blue">
+      <strong>${inProgress}</strong><span>进行中</span>
     </div>
-    ${total === 0 ? '<p class="muted-line" style="margin-top:12px">当前项目没有分配给你的任务。</p>' : ''}
+    <div class="pc-metric pc-metric-green">
+      <strong>${done}</strong><span>已完成</span>
+    </div>
+    <div class="pc-metric${overdue > 0 ? ' pc-metric-red' : ' pc-metric-gray'}">
+      <strong>${overdue}</strong><span>逾期</span>
+    </div>
+    <div class="pc-metric pc-metric-indigo">
+      <strong>${bindingRate}%</strong><span>交付绑定</span>
+    </div>
   `;
 }
 
@@ -749,17 +746,20 @@ function renderMyTasksCard() {
     .map((task) => {
       const isOverdue = task.due && new Date(task.due) < today && task.status !== '已完成';
       return `
-        <div class="task-row my-task-row">
-          <div class="my-task-main">
-            <strong class="${isOverdue ? 'overdue-text' : ''}">${escapeHtml(task.title)}</strong>
-            <span class="muted-line">${escapeHtml(task.due ? `截止 ${task.due}` : '未设截止日')}</span>
+        <div class="pc-task-row${isOverdue ? ' pc-task-overdue' : ''}">
+          <div class="pc-task-status-bar status-${escapeHtml(task.status)}"></div>
+          <div class="pc-task-body">
+            <span class="pc-task-title">${escapeHtml(task.title)}</span>
+            <span class="pc-task-meta">
+              ${isOverdue ? '<span class="pc-tag pc-tag-red">逾期</span>' : ''}
+              <span class="pc-tag pc-tag-neutral">${escapeHtml(task.due ? task.due : '未设截止')}</span>
+              <span class="pc-tag pc-tag-risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
+              ${task.progress > 0 ? `<span class="pc-tag pc-tag-neutral">${task.progress}%</span>` : ''}
+            </span>
           </div>
-          <div class="my-task-meta">
-            <span class="risk-badge risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
-            <span class="status-pill status-pill-${escapeHtml(task.status)}">${escapeHtml(task.status)}</span>
-            ${task.progress > 0 ? `<span class="muted-line">${task.progress}%</span>` : ''}
-          </div>
-          <button class="icon-btn detail-btn" data-task-id="${escapeHtml(task.id)}" aria-label="查看详情">↗</button>
+          <button class="pc-icon-btn detail-btn" data-task-id="${escapeHtml(task.id)}" aria-label="查看详情">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+          </button>
         </div>
       `;
     })
@@ -783,10 +783,10 @@ function renderMyReviewsCard() {
   el.innerHTML = myReviews
     .map(
       (r) => `
-      <div class="review-summary-row">
-        <span class="risk-badge ${levelClass[r.level] || ''}">${escapeHtml(r.level || '-')}</span>
-        <span class="review-summary-title">${escapeHtml((r.title || '').slice(0, 36))}</span>
-        <span class="muted-line review-summary-meta">${r.score ?? '-'}分 · ${escapeHtml((r.createdAt || '').slice(0, 10))}</span>
+      <div class="pc-review-row">
+        <span class="pc-level-badge level-${(r.level || 'pass').toLowerCase()}">${escapeHtml(r.level || '-')}</span>
+        <span class="pc-review-title">${escapeHtml((r.title || '').slice(0, 40))}</span>
+        <span class="pc-review-meta">${r.score ?? '-'}分 · ${escapeHtml((r.createdAt || '').slice(0, 10))}</span>
       </div>
     `
     )
@@ -804,17 +804,13 @@ function renderMyEveningCard() {
   el.innerHTML = rows
     .slice(0, 10)
     .map((row) => {
-      const badgeClass = row.completed ? 'risk-低' : row.commitCount > 0 ? 'risk-中' : 'risk-高';
-      const badgeText = row.completed
-        ? '✓ 完成'
-        : row.commitCount > 0
-          ? `${row.commitCount} 条提交`
-          : '无提交';
+      const badgeClass = row.completed ? 'pc-tag-green' : row.commitCount > 0 ? 'pc-tag-amber' : 'pc-tag-red';
+      const badgeText = row.completed ? '✓ 完成' : row.commitCount > 0 ? `${row.commitCount} commits` : '无提交';
       return `
-        <div class="evening-reconcile-row">
-          <span class="muted-line evening-date">${escapeHtml(row.date)}</span>
-          <span class="evening-task">${escapeHtml(row.taskTitle || row.taskId || '未知任务')}</span>
-          <span class="risk-badge ${badgeClass}">${badgeText}</span>
+        <div class="pc-evening-row">
+          <span class="pc-evening-date">${escapeHtml(row.date)}</span>
+          <span class="pc-evening-task">${escapeHtml(row.taskTitle || row.taskId || '未知任务')}</span>
+          <span class="pc-tag ${badgeClass}">${badgeText}</span>
         </div>
       `;
     })
@@ -826,6 +822,8 @@ function renderPersonalCenter() {
   const role = currentSessionRole();
   const projectName = state.currentProject?.name || getCurrentProjectId();
   setText('#profileUserName', me);
+  const avatarEl = document.querySelector('#profileAvatar');
+  if (avatarEl) avatarEl.textContent = me ? me.slice(0, 1) : '?';
   setText('#profileUserMeta', `${roleLabel(role)} · ${projectName || '????'}`);
   renderProjectSwitcher();
   renderMyHealthCard();
