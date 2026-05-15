@@ -461,6 +461,30 @@ export function createProjectRoutes({
             return sameDoc && isLikelyDuplicate(item.title, task.title);
           }
         );
+        // 兜底：docs 来的任务必须有 deliverableId，不允许孤儿状态
+        if (!deliverable && task.sourceDoc) {
+          const fallbackTitle = task.deliverableTitle || task.title;
+          deliverable = {
+            id: slugId('deliverable', fallbackTitle),
+            projectId,
+            phaseId: findPhaseForDeliverable(fallbackTitle, parsedPhasesResult),
+            title: fallbackTitle,
+            owner: task.owner || '',
+            acceptance: task.acceptance || task.description || '',
+            keywords: [task.title, task.deliverableTitle, task.sourceDoc].filter(Boolean),
+            status: task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '推进中' : '待补证据',
+            progress: 0,
+            sourceDocPath: task.sourceDoc || '',
+            docSuggestComplete: false,
+            manualOverride: null,
+            taskIds: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          draft.deliverables.push(deliverable);
+          createdDeliverables++;
+        }
+
         if (!duplicate) {
           const taskId = createId('task');
           existing.unshift({
@@ -484,9 +508,16 @@ export function createProjectRoutes({
             deliverable.taskIds = [...(deliverable.taskIds || []), taskId];
           }
           imported++;
-        } else if (deliverable) {
-          // 可信度校验通过才更新 FK
-          if (isBindingPlausible(duplicate.title, deliverable, parsedPhasesResult)) {
+        } else {
+          // 重复任务：只要有 deliverable 且原任务未绑定，就补上 deliverableId
+          if (deliverable && !duplicate.deliverableId) {
+            duplicate.deliverableId = deliverable.id;
+            if (!deliverable.taskIds?.includes(duplicate.id)) {
+              deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
+            }
+          }
+          // 可信度校验通过时进一步更新 acceptance 等字段
+          if (deliverable && isBindingPlausible(duplicate.title, deliverable, parsedPhasesResult)) {
             duplicate.deliverableId = deliverable.id;
             if (isPlaceholderAcceptance(duplicate.acceptance)) {
               duplicate.acceptance = task.acceptance || deliverable.acceptance || task.description || duplicate.acceptance || '';
@@ -496,7 +527,7 @@ export function createProjectRoutes({
             }
           }
         }
-      }
+      } // end for (const task of importCandidates)
       // 第二遍：只把存量任务重绑到第一遍已经创建的 deliverable，不创建新的
       // 防止幽灵 deliverable（LLM 解析出 40 个任务但只导入 8 个时，剩下 32 个会创建空 deliverable 污染路径图）
       let rebound = 0;
