@@ -805,8 +805,7 @@ body.authenticated .auth-shell {
 }
 
 .primary-action,
-.panel-head button,
-.workspace-actions button {
+.panel-head button {
   border-color: #101010;
   background: #101010;
   color: #fff;
@@ -3805,54 +3804,95 @@ select:focus {
 }
 
 /* Assignment tab layout */
-.assign-tab-wrap { margin-top: 20px; display: flex; flex-direction: column; gap: 16px; }
-
-.assign-tab-bar {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 0;
-}
-.assign-tab-btn {
-  position: relative;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  padding: 8px 18px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+/* 分工领取 — 页面头部（对齐个人中心风格） */
+.assign-page-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  padding: 8px 0 20px;
 }
-.assign-tab-btn:hover { color: var(--text); }
-.assign-tab-btn.active { color: var(--text); border-bottom-color: var(--blue); }
-.assign-tab-badge {
-  background: var(--blue);
-  color: #fff;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 700;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+
+/* 分工领取 — 双栏布局 */
+.assign-split {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0;
+  margin-top: 20px;
+  min-height: 320px;
+}
+
+.assign-split-divider {
+  width: 1px;
+  background: var(--line);
+  margin: 0 24px;
+  align-self: stretch;
+}
+
+.assign-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.assign-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.assign-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.assign-panel-title svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.assign-count-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
 }
-.assign-tab-badge:empty { display: none; }
 
-.assign-tab-panels { min-height: 200px; }
-.assign-tab-panel { display: none; }
-.assign-tab-panel.active { display: block; }
+.assign-count-chip:empty { display: none; }
 
-/* Tab 2: 已认领/未完成 — full width, slightly more spacious */
-#tabClaimed .assignment-summary { max-width: 100%; }
-#tabClaimed .assign-group { max-width: 700px; }
+.assign-count-chip-active {
+  background: rgba(15, 98, 254, 0.1);
+  border-color: rgba(15, 98, 254, 0.25);
+  color: var(--blue);
+}
+
+.assign-count-chip-active:empty { display: none; }
+
+@media (max-width: 900px) {
+  .assign-split {
+    grid-template-columns: 1fr;
+  }
+  .assign-split-divider {
+    width: auto;
+    height: 1px;
+    margin: 20px 0;
+  }
+}
 
 /* AI 计划调整建议 — collapsed at bottom */
 .plan-adjust-collapse {
@@ -3934,19 +3974,30 @@ select:focus {
 .claim-btn:hover { background: #2b2b2b; }
 
 /* 认领情况 */
-.assign-group { margin-bottom: 12px; }
-.assign-owner { display: block; font-size: 13px; color: var(--text); margin-bottom: 6px; }
+.assign-group { margin-bottom: 14px; }
+.assign-owner {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
 .assign-item {
   display: flex;
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   font-size: 13px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
   background: var(--panel);
-  margin-bottom: 4px;
+  border: 1px solid var(--line);
+  margin-bottom: 6px;
+  transition: border-color 0.15s;
 }
+.assign-item:hover { border-color: rgba(15, 98, 254, 0.25); }
 .assign-item.assign-已完成 { opacity: 0.55; }
 .assign-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .assign-task-link {
@@ -5160,6 +5211,22 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   background: var(--danger-subtle);
 }
 
+.pc-btn-primary {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--blue);
+  background: var(--blue);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.pc-btn-primary:hover {
+  background: #0050d8;
+  border-color: #0050d8;
+}
+
 /* Layout */
 .pc-row {
   display: grid;
@@ -5871,3 +5938,237 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 }
 
 .pc-settings-open-btn:hover { opacity: 0.85; }
+
+/* ═══════════════════════════════════════════════════════════════
+   移动端适配 — 总览 / 分工领取 / 个人中心
+   Breakpoint: ≤767px (iPhone 375-430, Android 360-428)
+   Rules: touch-target ≥44px, no horizontal scroll, mobile-first
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── 全局 main 容器 ── */
+  main {
+    width: calc(100% - 24px);
+    padding: 16px 0 48px;
+  }
+
+  /* ── Topbar：水平滚动导航，紧凑左侧 ── */
+  .topbar { padding: 0 14px; }
+
+  .header-left { gap: 6px; flex: 1 1 auto; min-width: 0; }
+  .header-right { flex: 0 0 auto; }
+
+  /* 项目切换器：隐藏名字只留图标+箭头 */
+  #topbarProjectName { display: none; }
+  .topbar-project-btn { padding: 6px 8px; min-width: 36px; }
+
+  /* 状态 pill 全隐藏（已在 980px 隐藏，此处加固） */
+  .status-pill { display: none !important; }
+
+  /* 导航栏水平滚动，保持可达性 */
+  .header-right .nav {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    max-width: calc(100vw - 120px);
+  }
+  .header-right .nav::-webkit-scrollbar { display: none; }
+
+  .nav-item {
+    padding: 8px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* ── 面包屑 header（所有子页面通用） ── */
+  .assign-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 4px 0 16px;
+  }
+
+  .pc-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .pc-btn-ghost,
+  .pc-btn-primary,
+  .pc-btn-danger-ghost {
+    min-height: 44px;
+    padding: 10px 16px;
+    font-size: 14px;
+    flex: 1 1 auto;
+    justify-content: center;
+    display: inline-flex;
+    align-items: center;
+    touch-action: manipulation;
+  }
+
+  /* ── 总览页 ── */
+  .dashboard-title-card {
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 20px 18px;
+  }
+
+  .dashboard-title-card h1 { font-size: 28px; }
+
+  .dashboard-health,
+  .dashboard-stage,
+  .dashboard-repo,
+  .dashboard-activity,
+  .dashboard-tasks,
+  .dashboard-risks {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .metric-card { padding: 16px; }
+  .metric-card .metric-value { font-size: 36px; }
+
+  /* overview task rows */
+  .overview-task-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    height: auto;
+    padding: 10px 0;
+  }
+  .overview-task-meta { gap: 6px; flex-wrap: wrap; }
+  .task-row-actions { display: flex; gap: 6px; }
+
+  /* ── 分工领取页 ── */
+
+  /* 建议任务行：竖向布局 */
+  .assignable-task-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  /* 认领按钮：全宽，触控高度 */
+  .claim-member-btns {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 8px;
+  }
+
+  .claim-member-btn {
+    min-height: 44px;
+    padding: 10px 8px;
+    font-size: 13px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    text-align: center;
+    white-space: normal;
+  }
+
+  /* 已认领/完成操作按钮 */
+  .assign-done-btn,
+  .assign-cancel-btn,
+  .assign-ai-done-btn {
+    min-height: 40px;
+    min-width: 40px;
+    padding: 8px 12px;
+    font-size: 13px;
+    touch-action: manipulation;
+  }
+
+  /* 分工项条目 */
+  .assign-item {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  /* 双栏 → 已由 900px 规则处理；确保面板内边距收窄 */
+  .assign-panel { width: 100%; }
+  .assign-split { margin-top: 12px; }
+
+  /* ── 个人中心 ── */
+  .pc-shell { padding: 16px 14px 48px; gap: 14px; }
+
+  .pc-card { padding: 16px; border-radius: 12px; }
+
+  /* 账号设置：2列→1列 */
+  .pc-account-body {
+    grid-template-columns: 1fr !important;
+    gap: 14px;
+  }
+
+  /* 健康度指标：保持2×2但更紧凑 */
+  .pc-metrics-grid { gap: 8px; margin-top: 8px; }
+  .pc-metric { padding: 12px 10px 10px; }
+  .pc-metric strong { font-size: 24px; }
+
+  /* 任务列表行 */
+  .pc-task-row {
+    padding: 10px 0;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .pc-task-title { font-size: 14px; }
+
+  /* 名片页布局 */
+  .pc-profile-card-page {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .pc-biz-card {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* 名片编辑器 */
+  .pc-biz-editor { width: 100%; }
+  .pc-biz-editor input,
+  .pc-biz-editor textarea {
+    min-height: 44px;
+    font-size: 16px; /* 防止 iOS 自动缩放 */
+  }
+
+  /* 个人中心路由按钮 */
+  .pc-route-btn {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  /* 晚会对账头部 */
+  .meeting-hero .assign-page-header {
+    gap: 10px;
+  }
+
+  .meeting-date-inline input {
+    min-height: 44px;
+    font-size: 16px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    width: 100%;
+  }
+}
+
+/* ── 超小屏 (≤390px) 微调 ── */
+@media (max-width: 390px) {
+  .nav-item { padding: 8px 8px; font-size: 12px; }
+  .pc-header-crumb h2 { font-size: 18px; }
+  .pc-btn-ghost,
+  .pc-btn-primary { font-size: 13px; padding: 10px 12px; }
+}

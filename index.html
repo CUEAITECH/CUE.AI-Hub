@@ -259,15 +259,15 @@
         <!-- 风险详情 -->
         <section class="view" id="risk-detail">
           <section class="workspace-shell">
-            <div class="workspace-header">
-              <div>
-                <span class="workspace-kicker">风险详情</span>
-                <h2 id="riskDetailTitle">选择一个风险</h2>
-                <p id="riskDetailSubtitle">从总览风险队列进入，查看原因、影响范围和下一步处理动作。</p>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">指挥</span>
+                <span class="pc-header-sep">/</span>
+                <h2 id="riskDetailTitle">风险详情</h2>
               </div>
-              <div class="workspace-actions">
-                <button type="button" data-route="overview">返回总览</button>
-                <button type="button" data-action="scan-risks">重新扫描</button>
+              <div class="pc-header-actions">
+                <button type="button" class="pc-btn-ghost" data-route="overview">← 返回总览</button>
+                <button type="button" class="pc-btn-ghost" data-action="scan-risks">重新扫描</button>
               </div>
             </div>
             <div class="risk-detail-grid" id="riskDetailContent"></div>
@@ -371,14 +371,14 @@
         <!-- 账号管理 -->
         <section class="view" id="account-admin">
           <section class="workspace-shell">
-            <div class="workspace-header">
-              <div>
-                <span class="workspace-kicker">指挥 / 账号</span>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">指挥</span>
+                <span class="pc-header-sep">/</span>
                 <h2>账号管理</h2>
-                <p>系统管理员或项目管理员可以在当前项目下创建账号、调整角色，并停用不再参与项目的账号。</p>
               </div>
-              <div class="workspace-actions">
-                <button type="button" data-action="refresh-project-users">刷新账号</button>
+              <div class="pc-header-actions">
+                <button type="button" class="pc-btn-ghost" data-action="refresh-project-users">刷新账号</button>
               </div>
             </div>
             <div class="workspace-grid planning-workbench">
@@ -610,18 +610,20 @@
         <section class="view" id="meeting">
           <section class="meeting-command">
             <div class="meeting-hero">
-              <div>
-                <span class="workspace-kicker">晚会闭环</span>
-                <h2>自动对账昨晚 18:00 至当前交付信号</h2>
-                <p id="meetingWindowText">系统按 GitHub 提交、AI Review、企微打卡和任务领取生成会后跟进建议。</p>
-              </div>
-              <div class="meeting-actions">
-                <label class="meeting-date-inline">
-                  <input id="meetingDate" type="date" aria-label="晚会日期" />
-                </label>
-                <button type="button" data-action="sync-cue-ai">同步仓库</button>
-                <button type="button" data-action="generate-evening-report">生成晚会对账</button>
-                <button type="button" data-action="meeting-summary" class="btn-meeting-summary">会后总结 →企微</button>
+              <div class="assign-page-header">
+                <div class="pc-header-crumb">
+                  <span class="pc-header-parent">输出</span>
+                  <span class="pc-header-sep">/</span>
+                  <h2>晚会闭环</h2>
+                </div>
+                <div class="pc-header-actions">
+                  <label class="meeting-date-inline">
+                    <input id="meetingDate" type="date" aria-label="晚会日期" />
+                  </label>
+                  <button type="button" class="pc-btn-ghost" data-action="sync-cue-ai">同步仓库</button>
+                  <button type="button" class="pc-btn-ghost" data-action="generate-evening-report">生成对账</button>
+                  <button type="button" class="pc-btn-primary" data-action="meeting-summary">会后总结 →企微</button>
+                </div>
               </div>
             </div>
 
@@ -709,15 +711,15 @@
         <!-- AI 排期 -->
         <section class="view" id="planning">
           <section class="workspace-shell">
-            <div class="workspace-header">
-              <div>
-                <span class="workspace-kicker">AI 排期</span>
-                <h2>把阶段目标拆成可执行的今日任务</h2>
-                <p>输入当前阶段目标，AI 先按路径图和仓库信号生成候选任务，再进入任务板领取和追踪。</p>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">指挥</span>
+                <span class="pc-header-sep">/</span>
+                <h2>AI 排期</h2>
               </div>
-              <div class="workspace-actions">
-                <button type="button" data-action="generate-plan">生成任务</button>
-                <button type="button" data-action="apply-plan">应用到任务板</button>
+              <div class="pc-header-actions">
+                <button type="button" class="pc-btn-ghost" data-action="generate-plan">生成任务</button>
+                <button type="button" class="pc-btn-primary" data-action="apply-plan">应用到任务板</button>
               </div>
             </div>
 
@@ -744,15 +746,15 @@
         <!-- AI 审阅 -->
         <section class="view" id="reviews">
           <section class="workspace-shell">
-            <div class="workspace-header">
-              <div>
-                <span class="workspace-kicker">AI 审阅</span>
-                <h2>让提交先过一遍交付和安全审阅</h2>
-                <p>Block / Escalate 项需人工确认，选定解决方案后可直接建任务跟进。</p>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">执行</span>
+                <span class="pc-header-sep">/</span>
+                <h2>AI 审阅</h2>
               </div>
-              <div class="workspace-actions">
-                <button type="button" data-action="load-review-queue">刷新待办</button>
-                <button type="button" data-action="run-review">运行审阅</button>
+              <div class="pc-header-actions">
+                <button type="button" class="pc-btn-ghost" data-action="load-review-queue">刷新待办</button>
+                <button type="button" class="pc-btn-primary" data-action="run-review">运行审阅</button>
               </div>
             </div>
 
@@ -793,14 +795,14 @@
         <!-- 异步站会 -->
         <section class="view" id="standup">
           <section class="workspace-shell">
-            <div class="workspace-header">
-              <div>
-                <span class="workspace-kicker">异步站会</span>
-                <h2>把成员状态沉淀成晚会前情报</h2>
-                <p>成员提交昨日完成、今日计划和阻塞项，系统汇总出晚会需要处理的分工和风险。</p>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">执行</span>
+                <span class="pc-header-sep">/</span>
+                <h2>异步站会</h2>
               </div>
-              <div class="workspace-actions">
-                <button type="button" data-action="summarize-standup">AI 汇总站会</button>
+              <div class="pc-header-actions">
+                <button type="button" class="pc-btn-ghost" data-action="summarize-standup">AI 汇总站会</button>
               </div>
             </div>
 
@@ -864,40 +866,49 @@
         <!-- 分工领取 -->
         <section class="view" id="assignment">
           <section class="workspace-shell">
-            <div class="workspace-header">
-              <div>
-                <span class="workspace-kicker">分工领取</span>
-                <h2>任务认领与执行追踪</h2>
-                <p>认领今日任务，会后点「会后总结」推送企微</p>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">执行</span>
+                <span class="pc-header-sep">/</span>
+                <h2>分工领取</h2>
               </div>
-              <div class="workspace-actions">
-                <button type="button" data-action="refresh-assignments">刷新</button>
-                <button type="button" data-action="ai-progress-scan">AI 分析进度</button>
-                <button type="button" data-action="gen-evening-report">生成晚报</button>
-                <button type="button" data-action="meeting-summary" class="btn-meeting-summary">会后总结 →企微</button>
+              <div class="pc-header-actions">
+                <button type="button" class="pc-btn-ghost" data-action="refresh-assignments" id="btnRefreshAssign">刷新</button>
+                <button type="button" class="pc-btn-ghost assign-ai-scan-btn" data-action="ai-progress-scan">AI 分析进度</button>
+                <button type="button" class="pc-btn-primary" data-action="meeting-summary">会后总结 →企微</button>
               </div>
             </div>
 
-            <div class="assign-tab-wrap">
-              <div class="assign-tab-bar" role="tablist">
-                <button class="assign-tab-btn active" data-tab="suggest" role="tab" aria-selected="true">今日建议任务</button>
-                <button class="assign-tab-btn" data-tab="claimed" role="tab" aria-selected="false">已认领 / 未完成 <span id="assignClaimedCount" class="assign-tab-badge"></span></button>
+            <div class="assign-split">
+              <div class="assign-panel assign-panel-suggest">
+                <div class="assign-panel-header">
+                  <div class="assign-panel-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                    <span>今日建议任务</span>
+                  </div>
+                  <span id="assignSuggestCount" class="assign-count-chip" aria-live="polite"></span>
+                </div>
+                <div id="assignableList" class="assignable-list"></div>
               </div>
 
-              <div class="assign-tab-panels">
-                <div class="assign-tab-panel active" id="tabSuggest" role="tabpanel">
-                  <div id="assignableList" class="assignable-list"></div>
-                </div>
-                <div class="assign-tab-panel" id="tabClaimed" role="tabpanel">
-                  <div id="assignmentSummary" class="assignment-summary"></div>
-                </div>
-              </div>
+              <div class="assign-split-divider" aria-hidden="true"></div>
 
-              <details class="plan-adjust-collapse">
-                <summary>AI 计划调整建议</summary>
-                <div id="planAdjustList" class="plan-adjust-list"></div>
-              </details>
+              <div class="assign-panel assign-panel-claimed">
+                <div class="assign-panel-header">
+                  <div class="assign-panel-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span>全员认领</span>
+                  </div>
+                  <span id="assignClaimedCount" class="assign-count-chip assign-count-chip-active" aria-live="polite"></span>
+                </div>
+                <div id="assignmentSummary" class="assignment-summary"></div>
+              </div>
             </div>
+
+            <details class="plan-adjust-collapse">
+              <summary>AI 计划调整建议</summary>
+              <div id="planAdjustList" class="plan-adjust-list"></div>
+            </details>
           </section>
         </section>
 
@@ -905,14 +916,14 @@
 
         <section class="view" id="task-detail">
           <section class="workspace-shell task-detail-shell">
-            <div class="workspace-header task-detail-header">
-              <div>
-                <span class="workspace-kicker">任务工作台</span>
-                <h2 id="taskDetailTitle">选择一个任务</h2>
-                <p id="taskDetailSubtitle">从任务看板或分工领取进入，查看任务细则、完成证据、验收指标和 AI 下一步操作。</p>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">执行</span>
+                <span class="pc-header-sep">/</span>
+                <h2 id="taskDetailTitle">任务工作台</h2>
               </div>
-              <div class="workspace-actions">
-                <button type="button" data-action="back-to-assignment">返回分工</button>
+              <div class="pc-header-actions">
+                <button type="button" class="pc-btn-ghost" data-action="back-to-assignment">← 返回分工</button>
               </div>
             </div>
             <div class="task-detail-grid" id="taskDetailContent"></div>
@@ -922,17 +933,17 @@
         <!-- 日报 & 晚报 -->
         <section class="view" id="report">
           <section class="workspace-shell">
-            <div class="workspace-header">
-              <div>
-                <span class="workspace-kicker">输出</span>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">输出</span>
+                <span class="pc-header-sep">/</span>
                 <h2>日报 &amp; 晚报</h2>
-                <p>AI 生成研发交付报告，对比昨日分工与今日实际 commit</p>
               </div>
-              <div class="workspace-actions">
-                <button type="button" data-action="gen-report">生成日报</button>
-                <button type="button" data-action="gen-evening-report2">生成晚报</button>
-                <button type="button" data-action="compare-report">对照分析</button>
-                <button type="button" data-action="push-report" id="btnPushReport" style="display:none">推送企微</button>
+              <div class="pc-header-actions">
+                <button type="button" class="pc-btn-ghost" data-action="gen-report">生成日报</button>
+                <button type="button" class="pc-btn-ghost" data-action="gen-evening-report2">生成晚报</button>
+                <button type="button" class="pc-btn-ghost" data-action="compare-report">对照分析</button>
+                <button type="button" class="pc-btn-ghost" data-action="push-report" id="btnPushReport" style="display:none">推送企微</button>
               </div>
             </div>
 
@@ -964,13 +975,15 @@
         <!-- 自动提醒 -->
         <section class="view" id="automation">
           <section class="workspace-shell">
-            <div class="workspace-header">
-              <div>
-                <span class="workspace-kicker">自动化</span>
-                <h2>自动提醒规则</h2>
-                <p>风险检测与企业微信自动通知</p>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">输出</span>
+                <span class="pc-header-sep">/</span>
+                <h2>自动提醒</h2>
               </div>
-              <button type="button" data-action="test-alert">测试提醒</button>
+              <div class="pc-header-actions">
+                <button type="button" class="pc-btn-ghost" data-action="test-alert">测试提醒</button>
+              </div>
             </div>
             <article class="workspace-card workspace-card-solo">
               <ul class="rule-list" id="ruleList"></ul>
