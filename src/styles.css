@@ -882,15 +882,15 @@ main {
 
 .dashboard-grid .metric-card {
   grid-column: span 3;
-  height: 112px;
+  height: 84px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 16px 18px;
+  gap: 2px;
+  padding: 12px 16px;
 }
-.dashboard-grid .metric-card > span { font-size: 11px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.dashboard-grid .metric-card > strong { font-size: 2rem; font-weight: 700; line-height: 1; margin: 0; }
-.dashboard-grid .metric-card > small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-grid .metric-card > span { font-size: 10px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.dashboard-grid .metric-card > strong { font-size: 1.6rem; font-weight: 700; line-height: 1; margin: 0; }
+.dashboard-grid .metric-card > small { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .dashboard-grid > .metric-card:nth-child(4) { border-top: 3px solid #ef4444; }
 .dashboard-grid > .metric-card:nth-child(5) { border-top: 3px solid var(--blue); }
