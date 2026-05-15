@@ -971,7 +971,8 @@ async function switchProfileProject(event) {
   if (!projectId || projectId === getCurrentProjectId()) return;
   syncCurrentProject(projectId);
   await loadState();
-  renderPersonalCenter();
+  renderPcWorkspace();
+  renderPcProfile();
   setRoute('overview');
 }
 
@@ -2218,9 +2219,14 @@ function renderAssignments() {
     `).join('');
   }
 
-  // 更新 Tab 2 徽章数
+  // 更新面板徽章数
   const badgeEl = document.querySelector('#assignClaimedCount');
   if (badgeEl) badgeEl.textContent = activeAssignments.length || '';
+  const suggestBadgeEl = document.querySelector('#assignSuggestCount');
+  if (suggestBadgeEl) {
+    const suggestTasks_ = focusedTasks.filter((task) => !claimedActiveTaskIds.has(task.id));
+    suggestBadgeEl.textContent = suggestTasks_.length || '';
+  }
 
   const summaryEl = document.querySelector('#assignmentSummary');
   if (summaryEl) {
@@ -2302,9 +2308,7 @@ function renderAssignments() {
           btn.disabled = true;
           btn.classList.add('claimed');
           btn.textContent = `${btn.dataset.owner} ✓`;
-          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, btn.dataset.owner).then(() => {
-            switchAssignTab('claimed');
-          }).catch((e) => {
+          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, btn.dataset.owner).catch((e) => {
             // 失败时回滚按钮状态
             btn.disabled = false;
             btn.classList.remove('claimed');
@@ -2651,7 +2655,8 @@ function renderAll() {
   renderPlanAdjustments();
   renderAiPm();
   renderMeeting();
-  renderPersonalCenter();
+  renderPcWorkspace();
+  renderPcProfile();
 }
 
 // ── 业务逻辑 ─────────────────────────────────────────────────
@@ -3595,11 +3600,6 @@ function bindEvents() {
     btn.addEventListener('click', () => setReportTab(btn.dataset.reportTab));
   });
 
-  // 分工页 — tab 切换
-  document.querySelectorAll('.assign-tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => switchAssignTab(btn.dataset.tab));
-  });
-
   document.querySelector('[data-action="refresh-assignments"]').addEventListener('click', () => {
     refreshAssignments().catch((e) => toast(e.message));
   });
@@ -3609,9 +3609,7 @@ function bindEvents() {
   document.querySelector('[data-action="back-to-assignment"]')?.addEventListener('click', () => {
     setRoute('assignment');
   });
-  document.querySelector('[data-action="gen-evening-report"]').addEventListener('click', () => {
-    generateEveningReport().then(() => setRoute('report')).catch((e) => toast(e.message));
-  });
+  // gen-evening-report 已移至 #report 页，此处不再绑定
   // 会后总结按钮（meeting 页和 assignment 页各有一个）
   document.querySelectorAll('[data-action="meeting-summary"]').forEach((btn) => {
     btn.addEventListener('click', () => {
