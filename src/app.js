@@ -2116,7 +2116,7 @@ function renderTaskDetail() {
       <p>${escapeHtml(task.description || task.signal || '暂无任务描述。')}</p>
       <dl>
         <div><dt>负责人</dt><dd>${escapeHtml(task.owner || '未指定')}</dd></div>
-        <div><dt>所属交付项</dt><dd>${escapeHtml(deliverable?.title || task.deliverableId || '未绑定')}</dd></div>
+        ${task.deliverableId ? `<div><dt>所属交付项</dt><dd>${escapeHtml(deliverable?.title || task.deliverableId)}</dd></div>` : ''}
         <div><dt>来源</dt><dd>${escapeHtml(task.sourceDoc || task.repo || '任务看板')}</dd></div>
         <div><dt>验收</dt><dd>${escapeHtml(getTaskAcceptance(task))}</dd></div>
       </dl>
