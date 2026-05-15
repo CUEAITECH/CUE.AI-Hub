@@ -85,7 +85,7 @@
             <span class="status-pill" id="syncStatus">API 未连接</span>
             <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
           </div>
-          <!-- 右侧：主导航 + 同步按钮 -->
+          <!-- 右侧：主导航 -->
           <div class="header-right">
             <nav class="nav" aria-label="主导航">
               <button class="nav-item nav-primary active" type="button" data-route="overview" data-nav-parent="overview">总览</button>
@@ -94,7 +94,6 @@
               <button class="nav-item nav-primary" type="button" data-nav-parent="output">输出</button>
               <button class="nav-item nav-primary" type="button" data-nav-parent="personal">个人中心</button>
             </nav>
-            <button class="primary-action" type="button" data-action="sync">同步信号</button>
           </div>
         </div>
         <!-- 展开式第二行导航（hover 一次性展开所有分组，overlay 不推动页面） -->
@@ -117,9 +116,9 @@
             <button class="nav-item" type="button" data-route="automation">自动提醒</button>
           </div>
           <div class="header-sub-group" data-sub="personal">
-            <button class="nav-item" type="button" data-route="personal-center" data-pc-tab="workspace">我的工作台</button>
-            <button class="nav-item" type="button" data-route="personal-center" data-pc-tab="profile-card">个人名片</button>
-            <button class="nav-item" type="button" data-route="personal-center" data-pc-tab="account">账号设置</button>
+            <button class="nav-item" type="button" data-route="pc-workspace">我的工作台</button>
+            <button class="nav-item" type="button" data-route="pc-profile">个人名片</button>
+            <button class="nav-item" type="button" data-route="pc-account">账号设置</button>
           </div>
         </div>
       </header>
@@ -426,183 +425,183 @@
 
         <!-- 晚会闭环 -->
         
-        <section class="view" id="personal-center">
+        <!-- 我的工作台 -->
+        <section class="view" id="pc-workspace">
           <div class="pc-shell">
-            <!-- Header -->
             <div class="pc-header">
-              <h2>个人中心</h2>
+              <div class="pc-header-crumb"><span class="pc-header-parent">个人中心</span><span class="pc-header-sep">/</span><h2>我的工作台</h2></div>
               <div class="pc-header-actions">
-                <button type="button" id="accountSettingsBtn" class="pc-btn-ghost" style="display:none">账号设置</button>
+                <button type="button" id="logoutBtn" class="pc-btn-danger-ghost">退出登录</button>
               </div>
             </div>
-
-            <!-- Tab navigation -->
-            <div class="pc-tabs" role="tablist">
-              <button class="pc-tab active" role="tab" data-tab="workspace" aria-selected="true">我的工作台</button>
-              <button class="pc-tab" role="tab" data-tab="profile-card" aria-selected="false">个人名片</button>
-              <button class="pc-tab" role="tab" data-tab="account" aria-selected="false">账号设置</button>
-              <button class="pc-tab pc-tab-logout" type="button" id="logoutBtn">退出登录</button>
-            </div>
-
-            <!-- Tab: 我的工作台 -->
-            <div class="pc-tab-panel active" data-panel="workspace">
-              <!-- Row 1: Profile summary + Health metrics -->
-              <div class="pc-row pc-row-2col">
-                <article class="pc-card pc-profile-card">
-                  <div class="pc-avatar-row">
-                    <div class="pc-avatar" id="profileAvatar">?</div>
-                    <div class="pc-identity">
-                      <h3 id="profileUserName">未登录</h3>
-                      <p id="profileUserMeta">暂无账号信息</p>
-                    </div>
+            <div class="pc-row pc-row-2col">
+              <article class="pc-card pc-profile-card">
+                <div class="pc-avatar-row">
+                  <div class="pc-avatar" id="profileAvatar">?</div>
+                  <div class="pc-identity">
+                    <h3 id="profileUserName">未登录</h3>
+                    <p id="profileUserMeta">暂无账号信息</p>
                   </div>
-                </article>
-                <article class="pc-card pc-health-card">
-                  <div class="pc-card-eyebrow">交付健康度</div>
-                  <div id="myHealthBody" class="pc-metrics-grid"></div>
-                </article>
+                </div>
+              </article>
+              <article class="pc-card pc-health-card">
+                <div class="pc-card-eyebrow">交付健康度</div>
+                <div id="myHealthBody" class="pc-metrics-grid"></div>
+              </article>
+            </div>
+            <article class="pc-card pc-card-full">
+              <div class="pc-card-header">
+                <div>
+                  <span class="pc-card-eyebrow">我的任务</span>
+                  <h4 class="pc-card-title">当前工作项</h4>
+                </div>
+                <button type="button" class="pc-btn-link pc-route-btn" data-route="assignment">全部任务 →</button>
               </div>
-
-              <!-- Row 2: My tasks -->
-              <article class="pc-card pc-card-full">
+              <div id="myTasksList"></div>
+            </article>
+            <div class="pc-row pc-row-2col">
+              <article class="pc-card">
                 <div class="pc-card-header">
                   <div>
-                    <span class="pc-card-eyebrow">我的任务</span>
-                    <h4 class="pc-card-title">当前工作项</h4>
+                    <span class="pc-card-eyebrow">AI 审阅历史</span>
+                    <h4 class="pc-card-title">代码质量趋势</h4>
                   </div>
-                  <button type="button" class="pc-btn-link pc-route-btn" data-route="assignment">全部任务 →</button>
                 </div>
-                <div id="myTasksList"></div>
+                <div id="myReviewsList"></div>
               </article>
-
-              <article class="pc-card pc-card-full">
+              <article class="pc-card">
                 <div class="pc-card-header">
                   <div>
-                    <span class="pc-card-eyebrow">成员评分 / 贡献健康度</span>
-                    <h4 class="pc-card-title">今日评分构成</h4>
+                    <span class="pc-card-eyebrow">晚会对账</span>
+                    <h4 class="pc-card-title">承诺兑现情况</h4>
                   </div>
                 </div>
-                <div id="myScoreBreakdown" class="score-breakdown"></div>
+                <div id="myEveningList"></div>
               </article>
-
-              <!-- Row 3: Reviews + Evening -->
-              <div class="pc-row pc-row-2col">
-                <article class="pc-card">
-                  <div class="pc-card-header">
-                    <div>
-                      <span class="pc-card-eyebrow">AI 审阅历史</span>
-                      <h4 class="pc-card-title">代码质量趋势</h4>
-                    </div>
-                  </div>
-                  <div id="myReviewsList"></div>
-                </article>
-                <article class="pc-card">
-                  <div class="pc-card-header">
-                    <div>
-                      <span class="pc-card-eyebrow">晚会对账</span>
-                      <h4 class="pc-card-title">承诺兑现情况</h4>
-                    </div>
-                  </div>
-                  <div id="myEveningList"></div>
-                </article>
-              </div>
             </div>
+            <article class="pc-card pc-card-full">
+              <div class="pc-card-header">
+                <div>
+                  <span class="pc-card-eyebrow">成员评分 / 贡献健康度</span>
+                  <h4 class="pc-card-title">今日评分构成</h4>
+                </div>
+              </div>
+              <div id="myScoreBreakdown" class="score-breakdown"></div>
+            </article>
+          </div>
+        </section>
 
-            <!-- Tab: 个人名片 -->
-            <div class="pc-tab-panel" data-panel="profile-card">
-              <div class="pc-profile-card-page">
-                <div class="pc-biz-card">
-                  <div class="pc-biz-avatar" id="bizAvatar">?</div>
-                  <div class="pc-biz-name" id="bizName">未登录</div>
-                  <div class="pc-biz-role" id="bizRole">—</div>
-                  <div class="pc-biz-divider"></div>
-                  <div class="pc-biz-meta">
-                    <div class="pc-biz-meta-row">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                      <span id="bizProject">—</span>
-                    </div>
-                    <div class="pc-biz-meta-row">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                      <span>CUE AI 研发团队</span>
+        <!-- 个人名片 -->
+        <section class="view" id="pc-profile">
+          <div class="pc-shell">
+            <div class="pc-header">
+              <div class="pc-header-crumb"><span class="pc-header-parent">个人中心</span><span class="pc-header-sep">/</span><h2>个人名片</h2></div>
+            </div>
+            <div class="pc-profile-card-page">
+              <div class="pc-biz-card" id="bizCard">
+                <div class="pc-biz-avatar" id="bizAvatar">?</div>
+                <div class="pc-biz-name" id="bizName">未登录</div>
+                <div class="pc-biz-role" id="bizRole">—</div>
+                <div class="pc-biz-bio" id="bizBio"></div>
+                <div class="pc-biz-divider"></div>
+                <div class="pc-biz-meta">
+                  <div class="pc-biz-meta-row">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                    <span id="bizProject">—</span>
+                  </div>
+                  <div class="pc-biz-meta-row">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span>CUE AI 研发团队</span>
+                  </div>
+                </div>
+                <div class="pc-biz-divider"></div>
+                <div class="pc-biz-stats" id="bizStats"></div>
+              </div>
+              <div class="pc-biz-editor">
+                <div class="pc-biz-editor-head">
+                  <span class="pc-card-eyebrow">名片定制</span>
+                  <h4 class="pc-card-title">自定义你的个人名片</h4>
+                </div>
+                <div class="pc-biz-editor-form">
+                  <label class="pc-biz-editor-label">
+                    <span>头衔 / 职位</span>
+                    <input type="text" id="bizRoleInput" placeholder="例如：全栈工程师 · AI 研发" maxlength="40" />
+                  </label>
+                  <label class="pc-biz-editor-label">
+                    <span>个签</span>
+                    <input type="text" id="bizBioInput" placeholder="一句话介绍自己…" maxlength="60" />
+                  </label>
+                  <div class="pc-biz-editor-label">
+                    <span>头像颜色</span>
+                    <div class="pc-biz-color-row" id="bizColorRow">
+                      <button type="button" class="pc-biz-color-swatch active" data-color="blue" style="background: linear-gradient(135deg,#2563EB,#7C3AED)" title="极光蓝紫"></button>
+                      <button type="button" class="pc-biz-color-swatch" data-color="teal" style="background: linear-gradient(135deg,#0D9488,#2563EB)" title="青海蓝"></button>
+                      <button type="button" class="pc-biz-color-swatch" data-color="rose" style="background: linear-gradient(135deg,#E11D48,#F97316)" title="玫瑰橙"></button>
+                      <button type="button" class="pc-biz-color-swatch" data-color="amber" style="background: linear-gradient(135deg,#D97706,#65A30D)" title="暖金绿"></button>
+                      <button type="button" class="pc-biz-color-swatch" data-color="slate" style="background: linear-gradient(135deg,#475569,#0F172A)" title="深海灰"></button>
                     </div>
                   </div>
-                  <div class="pc-biz-divider"></div>
-                  <div class="pc-biz-stats" id="bizStats"></div>
+                  <button type="button" class="pc-biz-save-btn" id="bizSaveBtn">保存名片</button>
+                  <p class="pc-biz-save-hint" id="bizSaveHint"></p>
                 </div>
               </div>
             </div>
+          </div>
+        </section>
 
-            <!-- Tab: 账号设置（内联，不再弹窗） -->
-            <div class="pc-tab-panel" data-panel="account">
-              <div class="pc-account-page">
-                <div class="account-settings-body pc-account-body">
-                  <section class="account-settings-section">
-                    <h3>个人资料</h3>
-                    <dl class="account-settings-info">
-                      <div><dt>姓名</dt><dd id="accountSettingsName">—</dd></div>
-                      <div><dt>登录账号</dt><dd id="accountSettingsUsername">—</dd></div>
-                      <div><dt>当前手机号</dt><dd id="accountSettingsPhoneCurrent">未绑定</dd></div>
-                      <div><dt>当前邮箱</dt><dd id="accountSettingsEmailCurrent">未绑定</dd></div>
-                    </dl>
-                  </section>
-                  <section class="account-settings-section">
-                    <h3>修改密码</h3>
-                    <form class="account-settings-form" id="changePasswordForm" autocomplete="off">
-                      <label>
-                        <span>当前密码</span>
-                        <input type="password" id="currentPasswordInput" autocomplete="current-password" required />
-                      </label>
-                      <label>
-                        <span>新密码（≥ 6 位）</span>
-                        <input type="password" id="newPasswordInput" autocomplete="new-password" minlength="6" required />
-                      </label>
-                      <label>
-                        <span>确认新密码</span>
-                        <input type="password" id="newPasswordConfirmInput" autocomplete="new-password" minlength="6" required />
-                      </label>
-                      <button type="submit" class="modal-primary">保存新密码</button>
-                      <p class="account-settings-hint" id="changePasswordHint"></p>
-                    </form>
-                  </section>
-                  <section class="account-settings-section">
-                    <h3>绑定手机号</h3>
-                    <p class="account-settings-desc">绑定后可用手机号登录。手机号需在所有账号中唯一，仅本人可见。</p>
-                    <form class="account-settings-form" id="bindPhoneForm" autocomplete="off">
-                      <label>
-                        <span>手机号（留空则清除当前绑定）</span>
-                        <input type="tel" id="newPhoneInput" autocomplete="tel" placeholder="例如 13812345678 或 +8613812345678" />
-                      </label>
-                      <div class="account-settings-code-row">
-                        <label>
-                          <span>验证码</span>
-                          <input type="text" id="bindPhoneCodeInput" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" />
-                        </label>
-                        <button type="button" class="modal-secondary" data-action="send-bind-phone-code">获取验证码</button>
-                      </div>
-                      <button type="submit" class="modal-primary">保存手机号</button>
-                      <p class="account-settings-hint" id="bindPhoneHint"></p>
-                    </form>
-                  </section>
-                  <section class="account-settings-section">
-                    <h3>绑定邮箱</h3>
-                    <p class="account-settings-desc">绑定后可用邮箱验证码登录。邮箱需在所有账号中唯一。</p>
-                    <form class="account-settings-form" id="bindEmailForm" autocomplete="off">
-                      <label>
-                        <span>邮箱（留空则清除当前绑定）</span>
-                        <input type="email" id="newEmailInput" autocomplete="email" placeholder="例如 noreply@cueai.top" />
-                      </label>
-                      <div class="account-settings-code-row">
-                        <label>
-                          <span>验证码</span>
-                          <input type="text" id="bindEmailCodeInput" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" />
-                        </label>
-                        <button type="button" class="modal-secondary" data-action="send-bind-email-code">获取验证码</button>
-                      </div>
-                      <button type="submit" class="modal-primary">保存邮箱</button>
-                      <p class="account-settings-hint" id="bindEmailHint"></p>
-                    </form>
-                  </section>
-                </div>
+        <!-- 账号设置 -->
+        <section class="view" id="pc-account">
+          <div class="pc-shell">
+            <div class="pc-header">
+              <div class="pc-header-crumb"><span class="pc-header-parent">个人中心</span><span class="pc-header-sep">/</span><h2>账号设置</h2></div>
+            </div>
+            <div class="pc-account-page">
+              <div class="account-settings-body pc-account-body">
+                <section class="account-settings-section">
+                  <h3>个人资料</h3>
+                  <dl class="account-settings-info">
+                    <div><dt>姓名</dt><dd id="accountSettingsName">—</dd></div>
+                    <div><dt>登录账号</dt><dd id="accountSettingsUsername">—</dd></div>
+                    <div><dt>当前手机号</dt><dd id="accountSettingsPhoneCurrent">未绑定</dd></div>
+                    <div><dt>当前邮箱</dt><dd id="accountSettingsEmailCurrent">未绑定</dd></div>
+                  </dl>
+                </section>
+                <section class="account-settings-section">
+                  <h3>修改密码</h3>
+                  <form class="account-settings-form" id="changePasswordForm" autocomplete="off">
+                    <label><span>当前密码</span><input type="password" id="currentPasswordInput" autocomplete="current-password" required /></label>
+                    <label><span>新密码（≥ 6 位）</span><input type="password" id="newPasswordInput" autocomplete="new-password" minlength="6" required /></label>
+                    <label><span>确认新密码</span><input type="password" id="newPasswordConfirmInput" autocomplete="new-password" minlength="6" required /></label>
+                    <button type="submit" class="modal-primary">保存新密码</button>
+                    <p class="account-settings-hint" id="changePasswordHint"></p>
+                  </form>
+                </section>
+                <section class="account-settings-section">
+                  <h3>绑定手机号</h3>
+                  <p class="account-settings-desc">绑定后可用手机号登录。手机号需在所有账号中唯一，仅本人可见。</p>
+                  <form class="account-settings-form" id="bindPhoneForm" autocomplete="off">
+                    <label><span>手机号（留空则清除当前绑定）</span><input type="tel" id="newPhoneInput" autocomplete="tel" placeholder="例如 13812345678 或 +8613812345678" /></label>
+                    <div class="account-settings-code-row">
+                      <label><span>验证码</span><input type="text" id="bindPhoneCodeInput" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" /></label>
+                      <button type="button" class="modal-secondary" data-action="send-bind-phone-code">获取验证码</button>
+                    </div>
+                    <button type="submit" class="modal-primary">保存手机号</button>
+                    <p class="account-settings-hint" id="bindPhoneHint"></p>
+                  </form>
+                </section>
+                <section class="account-settings-section">
+                  <h3>绑定邮箱</h3>
+                  <p class="account-settings-desc">绑定后可用邮箱验证码登录。邮箱需在所有账号中唯一。</p>
+                  <form class="account-settings-form" id="bindEmailForm" autocomplete="off">
+                    <label><span>邮箱（留空则清除当前绑定）</span><input type="email" id="newEmailInput" autocomplete="email" placeholder="例如 noreply@cueai.top" /></label>
+                    <div class="account-settings-code-row">
+                      <label><span>验证码</span><input type="text" id="bindEmailCodeInput" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" /></label>
+                      <button type="button" class="modal-secondary" data-action="send-bind-email-code">获取验证码</button>
+                    </div>
+                    <button type="submit" class="modal-primary">保存邮箱</button>
+                    <p class="account-settings-hint" id="bindEmailHint"></p>
+                  </form>
+                </section>
               </div>
             </div>
           </div>

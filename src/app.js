@@ -571,6 +571,7 @@ async function renderAccountAdmin() {
         return `
         <div class="admin-user-card ${user.active === false ? 'is-disabled' : ''} ${isFounder ? 'is-founder' : ''}" data-user-id="${escapeHtml(user.id)}">
           <div class="admin-user-card-head">
+            <div class="admin-user-avatar admin-user-avatar-${roleTone}">${escapeHtml((user.name || user.username).slice(0, 1).toUpperCase())}</div>
             <div class="admin-user-identity">
               <strong>${escapeHtml(user.name || user.username)}</strong>
               <span class="admin-user-handle">@${escapeHtml(user.username)}</span>
@@ -845,13 +846,41 @@ function renderMyEveningCard() {
     .join('');
 }
 
-function renderPersonalCenter() {
+const BIZ_AVATAR_GRADIENTS = {
+  blue:  'linear-gradient(135deg,#2563EB,#7C3AED)',
+  teal:  'linear-gradient(135deg,#0D9488,#2563EB)',
+  rose:  'linear-gradient(135deg,#E11D48,#F97316)',
+  amber: 'linear-gradient(135deg,#D97706,#65A30D)',
+  slate: 'linear-gradient(135deg,#475569,#0F172A)',
+};
+
+function getBizCustom(username) {
+  try { return JSON.parse(localStorage.getItem(`cue_biz_${username}`) || '{}'); } catch { return {}; }
+}
+
+function saveBizCustom(username, data) {
+  localStorage.setItem(`cue_biz_${username}`, JSON.stringify(data));
+}
+
+function applyBizCard(me, roleStr, projectName, custom) {
+  const color = custom.color || 'blue';
+  const gradient = BIZ_AVATAR_GRADIENTS[color] || BIZ_AVATAR_GRADIENTS.blue;
+  const bizAvatar = document.querySelector('#bizAvatar');
+  if (bizAvatar) {
+    bizAvatar.textContent = me ? me.slice(0, 1) : '?';
+    bizAvatar.style.background = gradient;
+  }
+  setText('#bizName', me);
+  setText('#bizRole', custom.role || roleStr);
+  setText('#bizBio', custom.bio || '');
+  setText('#bizProject', projectName || '—');
+}
+
+function renderPcWorkspace() {
   const me = sessionStorage.getItem('cueHubUser') || '???';
   const role = currentSessionRole();
   const projectName = state.currentProject?.name || getCurrentProjectId();
   const roleStr = roleLabel(role);
-
-  // Workspace tab
   setText('#profileUserName', me);
   const avatarEl = document.querySelector('#profileAvatar');
   if (avatarEl) avatarEl.textContent = me ? me.slice(0, 1) : '?';
@@ -861,13 +890,19 @@ function renderPersonalCenter() {
   renderMyScoreBreakdown();
   renderMyReviewsCard();
   renderMyEveningCard();
+  document.querySelectorAll('#pc-workspace .pc-route-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setRoute(btn.dataset.route));
+  });
+}
 
-  // Business card tab
-  const bizAvatar = document.querySelector('#bizAvatar');
-  if (bizAvatar) bizAvatar.textContent = me ? me.slice(0, 1) : '?';
-  setText('#bizName', me);
-  setText('#bizRole', roleStr);
-  setText('#bizProject', projectName || '—');
+function renderPcProfile() {
+  const me = sessionStorage.getItem('cueHubUser') || '???';
+  const role = currentSessionRole();
+  const projectName = state.currentProject?.name || getCurrentProjectId();
+  const roleStr = roleLabel(role);
+  const custom = getBizCustom(me);
+
+  applyBizCard(me, roleStr, projectName, custom);
 
   const myTasks = getMyTasks();
   const bizStats = document.querySelector('#bizStats');
@@ -882,12 +917,41 @@ function renderPersonalCenter() {
     `;
   }
 
-  // Bind route buttons
-  document.querySelectorAll('#personal-center .pc-route-btn').forEach((btn) => {
-    btn.addEventListener('click', () => setRoute(btn.dataset.route));
+  const roleInput = document.querySelector('#bizRoleInput');
+  if (roleInput) roleInput.value = custom.role || '';
+  const bioInput = document.querySelector('#bizBioInput');
+  if (bioInput) bioInput.value = custom.bio || '';
+
+  const activeColor = custom.color || 'blue';
+  document.querySelectorAll('.pc-biz-color-swatch').forEach((sw) => {
+    sw.classList.toggle('active', sw.dataset.color === activeColor);
+    sw.onclick = () => {
+      document.querySelectorAll('.pc-biz-color-swatch').forEach((s) => s.classList.remove('active'));
+      sw.classList.add('active');
+      const c = getBizCustom(me);
+      const bizAvatar = document.querySelector('#bizAvatar');
+      if (bizAvatar) bizAvatar.style.background = BIZ_AVATAR_GRADIENTS[sw.dataset.color] || BIZ_AVATAR_GRADIENTS.blue;
+      c.color = sw.dataset.color;
+      saveBizCustom(me, c);
+    };
   });
 
+  const saveBtn = document.querySelector('#bizSaveBtn');
+  const saveHint = document.querySelector('#bizSaveHint');
+  if (saveBtn) {
+    saveBtn.onclick = () => {
+      const c = getBizCustom(me);
+      c.role = (document.querySelector('#bizRoleInput')?.value || '').trim();
+      c.bio  = (document.querySelector('#bizBioInput')?.value  || '').trim();
+      saveBizCustom(me, c);
+      applyBizCard(me, roleStr, projectName, c);
+      if (saveHint) { saveHint.textContent = '✅ 已保存'; setTimeout(() => { saveHint.textContent = ''; }, 2000); }
+    };
+  }
 }
+
+// 向后兼容：旧路由 personal-center 重定向到工作台
+function renderPersonalCenter() { setRoute('pc-workspace'); }
 
 function switchToProject(projectId) {
   if (!projectId || projectId === getCurrentProjectId()) return;
@@ -3270,7 +3334,9 @@ function setRoute(route) {
     'task-detail': 'execution',
     report: 'output',
     automation: 'output',
-    'personal-center': 'personal'
+    'pc-workspace': 'personal',
+    'pc-profile': 'personal',
+    'pc-account': 'personal'
   };
   const activeParent = parentByRoute[route] || route;
   document.querySelectorAll('.nav-item').forEach((item) => {
@@ -3282,8 +3348,14 @@ function setRoute(route) {
   if (route === 'account-admin') {
     renderAccountAdmin().catch((error) => toast(error.message));
   }
-  if (route === 'personal-center') {
-    renderPersonalCenter();
+  if (route === 'pc-workspace') {
+    renderPcWorkspace();
+  }
+  if (route === 'pc-profile') {
+    renderPcProfile();
+  }
+  if (route === 'pc-account') {
+    openAccountSettings().catch((e) => toast(e.message));
   }
 }
 
@@ -3461,35 +3533,9 @@ function bindEvents() {
   });
 
   document.querySelectorAll('[data-route]').forEach((button) => {
-    button.addEventListener('click', () => {
-      setRoute(button.dataset.route);
-      hideHeaderSub();
-      // header sub-nav 的 personal 分组带 data-pc-tab，路由后同时切换个人中心 tab
-      const pcTab = button.dataset.pcTab;
-      if (pcTab) {
-        switchPcTab(pcTab);
-      }
-    });
+    button.addEventListener('click', () => { setRoute(button.dataset.route); hideHeaderSub(); });
   });
 
-  function switchPcTab(panel) {
-    document.querySelectorAll('.pc-tab').forEach((t) => {
-      t.classList.toggle('active', t.dataset.tab === panel);
-      t.setAttribute('aria-selected', String(t.dataset.tab === panel));
-    });
-    document.querySelectorAll('.pc-tab-panel').forEach((p) => {
-      p.classList.toggle('active', p.dataset.panel === panel);
-    });
-    if (panel === 'account') openAccountSettings();
-  }
-
-  // Personal center tab switching
-  document.querySelector('#personal-center')?.addEventListener('click', (e) => {
-    if (e.target.closest('#logoutBtn')) return;
-    const tab = e.target.closest('.pc-tab');
-    if (!tab) return;
-    switchPcTab(tab.dataset.tab);
-  });
 
   // 挂到 window，供动态渲染的 onclick 内联调用
   window.__briefRetry = (assignmentId) => {
