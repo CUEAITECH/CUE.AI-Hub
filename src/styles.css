@@ -821,7 +821,7 @@ main {
 .hero,
 .dashboard-grid {
   display: grid;
-  gap: 12px;
+  gap: 16px;
   align-items: stretch;
 }
 
@@ -882,33 +882,43 @@ main {
 
 .dashboard-grid .metric-card {
   grid-column: span 3;
-  height: 132px;
+  height: 112px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
 }
+.dashboard-grid .metric-card > span { font-size: 11px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.dashboard-grid .metric-card > strong { font-size: 2rem; font-weight: 700; line-height: 1; margin: 0; }
+.dashboard-grid .metric-card > small { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.dashboard-repo,
-.dashboard-activity,
-.dashboard-risks {
-  grid-column: span 6;
-  overflow: hidden;
-}
-
-.dashboard-activity {
-  height: 368px;
-}
+.dashboard-grid > .metric-card:nth-child(4) { border-top: 3px solid #ef4444; }
+.dashboard-grid > .metric-card:nth-child(5) { border-top: 3px solid var(--blue); }
+.dashboard-grid > .metric-card:nth-child(6) { border-top: 3px solid #f59e0b; }
+.dashboard-grid > .metric-card:nth-child(7) { border-top: 3px solid var(--green); }
 
 .dashboard-repo {
+  grid-column: span 6;
   min-height: 368px;
   overflow: visible;
 }
 
+.dashboard-activity {
+  grid-column: span 4;
+  height: 300px;
+  overflow: hidden;
+}
+
 .dashboard-tasks {
-  grid-column: span 6;
-  height: 376px;
+  grid-column: span 4;
+  height: 300px;
   overflow: hidden;
 }
 
 .dashboard-risks {
-  height: 376px;
+  grid-column: span 4;
+  height: 300px;
+  overflow: hidden;
 }
 
 .dashboard-title-card,
@@ -2734,12 +2744,28 @@ select:focus {
 }
 
 .ai-pm-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 240px;
-  gap: 18px;
-  align-items: stretch;
-  padding: 18px 0;
-  border-bottom: 1px solid var(--line);
+  display: none;
+}
+
+.ai-pm-policy-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.ai-pm-policy-inline span {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ai-pm-policy-inline strong {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
 }
 
 .ai-pm-hero h2 {
@@ -3412,6 +3438,12 @@ select:focus {
   .dashboard-tasks,
   .dashboard-risks {
     height: auto;
+  }
+
+  .dashboard-activity,
+  .dashboard-tasks,
+  .dashboard-risks {
+    grid-column: auto;
   }
 
   .project-dashboard-stats,
@@ -5617,6 +5649,7 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   gap: 10px;
   padding: 10px 0;
   border-bottom: 1px solid var(--line);
+  transition: background 150ms ease;
 }
 
 .score-ranking-row:last-child {

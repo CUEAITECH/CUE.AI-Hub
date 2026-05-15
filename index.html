@@ -276,17 +276,24 @@
 
         <!-- 路径图 -->
         <section class="view" id="roadmap">
+          <div class="assign-page-header">
+            <div class="pc-header-crumb">
+              <span class="pc-header-parent">指挥</span>
+              <span class="pc-header-sep">/</span>
+              <h2>路径图</h2>
+            </div>
+            <div class="pc-header-actions">
+              <button type="button" class="pc-btn-ghost" data-action="sync-docs">同步文档</button>
+              <button type="button" class="pc-btn-ghost" data-action="daily-scan">全量扫描</button>
+              <button type="button" class="pc-btn-ghost btn-danger-soft" data-action="cleanup-tasks">清洗任务</button>
+              <button type="button" class="pc-btn-ghost btn-danger-soft" data-action="reset-roadmap">重置路径图</button>
+            </div>
+          </div>
           <section class="panel roadmap-panel">
             <div class="panel-head">
               <div>
                 <span>开发副本</span>
                 <h2>阶段路线图</h2>
-              </div>
-              <div class="panel-actions">
-                <button type="button" data-action="sync-docs">同步文档</button>
-                <button type="button" data-action="daily-scan">一键全量扫描</button>
-                <button type="button" data-action="cleanup-tasks" class="btn-danger-soft">清洗任务</button>
-                <button type="button" data-action="reset-roadmap" class="btn-danger-soft">重置路径图</button>
               </div>
             </div>
             <div class="roadmap-summary" id="roadmapSummary"></div>
@@ -307,16 +314,17 @@
         <!-- AI PM -->
         <section class="view" id="ai-pm">
           <section class="ai-pm-shell">
-            <div class="ai-pm-hero">
-              <div>
-                <span class="workspace-kicker">AI PM 指挥台</span>
-                <h2>GitHub commit 触发开发计划实时调整</h2>
-                <p>小调整和进度同步由 AI 自动记录；影响阶段目标、负责人或排期的大调整进入人工审批。</p>
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">指挥</span>
+                <span class="pc-header-sep">/</span>
+                <h2>AI PM</h2>
               </div>
-              <div class="ai-pm-policy">
-                <span>费用策略</span>
-                <strong>仅新 commit 触发</strong>
-                <small>批量合并同一轮提交，避免无变化时调用 AI PM。</small>
+              <div class="pc-header-actions">
+                <div class="ai-pm-policy-inline">
+                  <span>费用策略</span>
+                  <strong>仅新 commit 触发</strong>
+                </div>
               </div>
             </div>
 
