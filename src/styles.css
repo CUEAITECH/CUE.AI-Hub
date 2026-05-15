@@ -5572,6 +5572,7 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 .pc-tab-panel.active { display: block; }
 
 .score-ranking-card {
+  grid-column: span 6;
   min-height: 190px;
 }
 
