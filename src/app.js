@@ -3603,9 +3603,9 @@ function bindEvents() {
   document.querySelector('[data-action="apply-plan"]').addEventListener('click', () => {
     applyPlan().catch((e) => toast(e.message));
   });
-  document.querySelector('[data-action="sync"]').addEventListener('click', () => {
+  document.querySelectorAll('[data-action="sync"]').forEach((button) => button.addEventListener('click', () => {
     syncCueAiGit().catch((e) => toast(e.message));
-  });
+  }));
   document.querySelectorAll('[data-action="sync-cue-ai"]').forEach((button) => button.addEventListener('click', () => {
     syncCueAiGit().catch((e) => toast(e.message));
   }));
