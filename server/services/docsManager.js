@@ -592,3 +592,62 @@ export async function writeProgressToGitHub(owner, repo, markdown) {
   console.log(`[DocsManager] 写回成功: ${owner}/${repo}/${PROGRESS_DOC_PATH}`);
   return true;
 }
+
+/**
+ * 调度器专用：轻量 sync-docs
+ * 刷新 store.docTasks 快照，并把候选任务导入 hub 任务板（简单标题去重，不做 deliverable 绑定）。
+ * 用于 17:45 自动触发，保证晚会前任务板有可领取候选。
+ *
+ * @param {object} project
+ * @param {string} projectId
+ * @param {object} deps - { updateStore, createId }
+ * @returns {Promise<{imported: number, refreshed: number}>}
+ */
+export async function importDocCandidates(project, projectId, { updateStore, createId }) {
+  const [owner, repo] = (project.githubFullRepo || '').split('/');
+  if (!owner || !repo) return { imported: 0, refreshed: 0 };
+
+  const docs = await fetchProjectDocs(owner, repo);
+  if (!docs.length) return { imported: 0, refreshed: 0 };
+
+  const parsedTasks = await parseDocsForTasks(docs);
+  const limit = Math.min(Math.max(1, Number(process.env.DOC_TASK_IMPORT_LIMIT || 8)), 20);
+  const candidates = selectDailyDocTasks(parsedTasks, limit);
+
+  let imported = 0;
+  await updateStore((draft) => {
+    draft.docTasks = draft.docTasks || {};
+    draft.docTasks[projectId] = parsedTasks;
+
+    draft.tasks = draft.tasks || [];
+    for (const task of candidates) {
+      if (task.status === 'completed') continue;
+      const normNew = String(task.title || '').replace(/\s+/g, '').toLowerCase();
+      const dup = (draft.tasks).find((t) => {
+        const sameDoc = !t.sourceDoc || !task.sourceDoc || t.sourceDoc === task.sourceDoc;
+        const normExist = String(t.title || '').replace(/\s+/g, '').toLowerCase();
+        return sameDoc && (normExist === normNew || normExist.includes(normNew) || normNew.includes(normExist));
+      });
+      if (dup) continue;
+      draft.tasks.unshift({
+        id: createId('task'),
+        title: task.title,
+        owner: '待认领',
+        suggestedOwner: task.owner || '',
+        priority: task.priority || 'P1',
+        status: task.status || 'pending',
+        description: task.description || '',
+        dueDate: task.dueDate || '',
+        sourceDoc: task.sourceDoc || '',
+        projectId,
+        deliverableId: null,
+        acceptance: task.acceptance || task.description || '',
+        createdAt: new Date().toISOString()
+      });
+      imported++;
+    }
+    return draft;
+  });
+
+  return { imported, refreshed: parsedTasks.length };
+}

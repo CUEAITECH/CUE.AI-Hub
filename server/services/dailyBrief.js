@@ -1,4 +1,8 @@
 import { bindAssignmentToExplicitRefs } from './bindingEngine.js';
+import { loadStore, saveStore } from '../store.js';
+import { callClaude } from './claude.js';
+import { scanRisks } from './riskEngine.js';
+import { isWeComAvailable, sendWeComMarkdown, buildPreMeetingWeComMsg } from './wecom.js';
 
 const timezone = 'Asia/Shanghai';
 
@@ -359,4 +363,92 @@ export function applyEveningReportProgress(store, eveningReport) {
       ...(store.planAdjustments || []).filter((item) => item.id !== `adjust_${eveningReport.date}`)
     ].slice(0, 30)
   };
+}
+
+// ─── 晚报生成（供 API 端点和调度器共用）───────────────────────────────────────
+
+export const EVENING_SYSTEM_PROMPT = `你是 CUE Project Hub 的晚报 AI，专为技术负责人生成每日研发晚报。
+晚报结构（Markdown 格式）：
+1. **今日 GitHub 提交汇总**：列出所有提交者和提交标题，统计提交总数
+2. **分工 vs 提交对照**：逐条列出今日领取的分工任务，对应是否有 commit 支撑（有 ✅/无 ⚠️）
+3. **AI Review 结论汇总**：今日所有 Review 的级别和评分
+4. **未完成领取项 Warning**：状态为"进行中"或"未完成"的领取项，用 ⚠️ 标注
+5. **明日建议**：基于今日遗留任务和风险，给出 2-3 条具体建议
+要求：语言专业、简洁，用中文，总长不超过 800 字。`;
+
+export async function generateEveningReport(date) {
+  const store = await loadStore();
+  const generatedAt = new Date();
+  const windowStart = new Date(`${addDays(date, -1)}T18:00:00+08:00`);
+  const hubUrl = process.env.HUB_URL || 'https://hub.cueai.top';
+
+  const snapshotCommits = (store.activities || []).filter((a) => {
+    const createdAt = new Date(a.createdAt || a.date || '');
+    return a.type === 'commit' && createdAt >= windowStart && createdAt <= generatedAt;
+  });
+  const snapshotAssignments = (store.assignments || []).filter((a) => a.date === date);
+  const dateReviews = (store.reviews || []).filter((r) => {
+    const createdAt = new Date(r.createdAt || '');
+    return createdAt >= windowStart && createdAt <= generatedAt;
+  });
+
+  const structuredReport = buildEveningReport(store, date, generatedAt);
+
+  const commitLines = snapshotCommits.length
+    ? snapshotCommits.map((c) => `- ${c.owner || c.actor || '未知'}: ${c.title} (${c.repo || ''})`).join('\n')
+    : '今日暂无 commit 记录';
+  const assignmentLines = snapshotAssignments.length
+    ? snapshotAssignments.map((a) => {
+        const hasCommit = snapshotCommits.some((c) => (c.owner || c.actor || '') === a.owner);
+        return `- [${a.status}] ${a.owner} 领取「${a.taskTitle}」${a.note ? '（' + a.note + '）' : ''} → ${hasCommit ? '✅ 有提交记录' : '⚠️ 无提交记录'}`;
+      }).join('\n')
+    : '今日暂无分工领取记录';
+  const reviewLines = dateReviews.length
+    ? dateReviews.map((r) => `- [${r.level}] ${r.title}（${r.owner}）评分: ${r.score}`).join('\n')
+    : '今日暂无 Review 记录';
+  const unfinishedLines = snapshotAssignments
+    .filter((a) => a.status !== '已完成')
+    .map((a) => `- ⚠️ ${a.owner}：「${a.taskTitle}」状态: ${a.status}`)
+    .join('\n') || '无未完成领取项';
+
+  const llmText = await callClaude(EVENING_SYSTEM_PROMPT, `请生成 ${date} 的研发晚报。
+
+今日 GitHub 提交（共 ${snapshotCommits.length} 条）：
+${commitLines}
+
+今日分工领取 vs 提交对照（共 ${snapshotAssignments.length} 条领取）：
+${assignmentLines}
+
+今日 AI Review（共 ${dateReviews.length} 条）：
+${reviewLines}
+
+未完成领取项：
+${unfinishedLines}`);
+
+  const finalEntry = {
+    ...structuredReport,
+    report: llmText || structuredReport.report,
+    commits: snapshotCommits,
+    assignments: snapshotAssignments
+  };
+
+  const progressedStore = applyEveningReportProgress(store, structuredReport);
+  const alerts = scanRisks(progressedStore);
+  await saveStore({
+    ...progressedStore,
+    eveningReports: {
+      ...(progressedStore.eveningReports || {}),
+      [date]: finalEntry
+    },
+    alerts
+  });
+
+  if (isWeComAvailable()) {
+    const wecomMsg = buildPreMeetingWeComMsg(finalEntry, hubUrl);
+    await sendWeComMarkdown(wecomMsg).catch((err) =>
+      console.error('[WeCom] 晚报推送失败:', err.message)
+    );
+  }
+
+  return finalEntry;
 }
