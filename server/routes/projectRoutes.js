@@ -516,16 +516,11 @@ export function createProjectRoutes({
           }
           imported++;
         } else {
-          // 重复任务：只要有 deliverable 且原任务未绑定，就补上 deliverableId
-          if (deliverable && !duplicate.deliverableId) {
-            duplicate.deliverableId = deliverable.id;
-            if (!deliverable.taskIds?.includes(duplicate.id)) {
-              deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
-            }
-          }
-          // 可信度校验通过时进一步更新 acceptance 等字段
+          // 重复任务：必须通过可信度校验才允许补绑，避免 fuzzy 匹配误绑手动创建的任务
           if (deliverable && isBindingPlausible(duplicate.title, deliverable, parsedPhasesResult)) {
-            duplicate.deliverableId = deliverable.id;
+            if (!duplicate.deliverableId) {
+              duplicate.deliverableId = deliverable.id;
+            }
             if (isPlaceholderAcceptance(duplicate.acceptance)) {
               duplicate.acceptance = task.acceptance || deliverable.acceptance || task.description || duplicate.acceptance || '';
             }
