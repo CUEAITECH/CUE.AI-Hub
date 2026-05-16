@@ -195,6 +195,7 @@ const routeModules = [
     buildMetrics,
     buildProgressMarkdown,
     writeProgressToGitHub,
+    buildHybridAnalysis,
     todayText
   }),
   createAssignmentRoutes({

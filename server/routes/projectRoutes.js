@@ -26,6 +26,7 @@ export function createProjectRoutes({
   buildMetrics,
   buildProgressMarkdown,
   writeProgressToGitHub,
+  buildHybridAnalysis,
   todayText
 }) {
   const slugId = makeSlugId(createId);
@@ -422,6 +423,21 @@ export function createProjectRoutes({
         }
       } catch (err) {
         result.steps.syncCommits = { ok: false, error: err.message };
+      }
+
+      try {
+        const analysisStoreSnap = await loadStore();
+        const analysis = await buildHybridAnalysis(analysisStoreSnap);
+        await updateStore((draft) => ({
+          ...draft,
+          semanticLinks: analysis.semanticLinks || {},
+          riskAnalyses: analysis.riskAnalyses || [],
+          healthAnalysis: analysis.healthAnalysis || null,
+          aiAnalysisUpdatedAt: analysis.generatedAt
+        }));
+        result.steps.refreshAnalysis = { ok: true, generatedAt: analysis.generatedAt };
+      } catch (err) {
+        result.steps.refreshAnalysis = { ok: false, error: err.message };
       }
 
       try {
