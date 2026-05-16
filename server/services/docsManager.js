@@ -603,6 +603,246 @@ export async function writeProgressToGitHub(owner, repo, markdown) {
  * @param {object} deps - { updateStore, createId }
  * @returns {Promise<{imported: number, refreshed: number}>}
  */
+// ===== importDocs 任务匹配 helper（从 projectRoutes.js 迁移） =====
+
+// slugId：需要外部注入 createId（fallback 用），所以做成 factory
+export function makeSlugId(createId) {
+  return function slugId(prefix, value) {
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w㐀-鿿]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40);
+    return `${prefix}_${normalized || createId('node').replace(/^node_/, '')}`;
+  };
+}
+
+export function normalizeTitle(value) {
+  return String(value || '').replace(/\s+/g, '').replace(/[【】()[\]（）]/g, '').toLowerCase();
+}
+
+export function isFuzzyDuplicateTitle(a, b) {
+  if (!a || !b) return false;
+  const diff = Math.abs(a.length - b.length);
+  if (diff > 8) return false;
+  return a.includes(b) || b.includes(a);
+}
+
+const COMMON_ABBREVS = new Set([
+  'api', 'sdk', 'sop', 'sos', 'mvp', 'sku', 'oauth', 'jwt', 'http', 'https',
+  'json', 'yaml', 'crud', 'cors', 'rest', 'cli', 'gui', 'ux', 'ui',
+  'ci', 'cd', 'dev', 'prod', 'qa', 'env', 'v1', 'v2', 'mr', 'pr', 'pm'
+]);
+
+export function extractDistinctiveTokens(text) {
+  const ascii = String(text || '').toLowerCase().match(/[a-z][a-z0-9]+/g) || [];
+  return ascii.filter((t) => t.length >= 4 && !COMMON_ABBREVS.has(t));
+}
+
+export function extractTokens(text) {
+  const tokens = new Set();
+  const ascii = String(text || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+  ascii.forEach((t) => tokens.add(t));
+  const cjkRuns = String(text || '').match(/[一-鿿]+/g) || [];
+  for (const run of cjkRuns) {
+    for (let i = 0; i < run.length - 1; i++) {
+      tokens.add(run.slice(i, i + 2));
+    }
+    if (run.length === 1) tokens.add(run);
+  }
+  return tokens;
+}
+
+export function isTitleConsistent(taskTitle, deliverableTitle) {
+  const taskTokens = extractDistinctiveTokens(taskTitle);
+  const dlvTokens = extractDistinctiveTokens(deliverableTitle);
+  if (!taskTokens.length || !dlvTokens.length) return true;
+  const taskLower = String(taskTitle).toLowerCase();
+  const dlvLower = String(deliverableTitle).toLowerCase();
+  if (taskTokens.some((t) => dlvLower.includes(t))) return true;
+  if (dlvTokens.some((t) => taskLower.includes(t))) return true;
+  return false;
+}
+
+export function jaccardSimilarity(a, b) {
+  const ta = extractTokens(a);
+  const tb = extractTokens(b);
+  if (!ta.size || !tb.size) return 0;
+  let inter = 0;
+  for (const t of ta) if (tb.has(t)) inter++;
+  const union = ta.size + tb.size - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+export function sharedPrefixLen(a, b) {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i++;
+  return i;
+}
+
+export function isLikelyDuplicate(a, b) {
+  if (!a || !b) return false;
+  const normA = normalizeTitle(a);
+  const normB = normalizeTitle(b);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+  if (Math.abs(normA.length - normB.length) <= 8 && (normA.includes(normB) || normB.includes(normA))) return true;
+  if (sharedPrefixLen(normA, normB) >= 4 && jaccardSimilarity(a, b) >= 0.3) return true;
+  return false;
+}
+
+export function findPhaseByLLMKeywords(deliverableTitle, phases) {
+  if (!deliverableTitle || !phases.length) return { phaseId: null, score: 0 };
+  const dlvLower = String(deliverableTitle).toLowerCase();
+  const dlvTokens = extractTokens(deliverableTitle);
+  let best = null;
+  let bestScore = 0;
+  for (const phase of phases) {
+    const keywords = Array.isArray(phase.productKeywords) ? phase.productKeywords : [];
+    if (!keywords.length) continue;
+    let score = 0;
+    for (const kw of keywords) {
+      const kwLower = String(kw || '').toLowerCase().trim();
+      if (!kwLower) continue;
+      if (dlvLower.includes(kwLower)) { score += 2; continue; }
+      const kwTokens = extractTokens(kw);
+      for (const t of kwTokens) if (dlvTokens.has(t)) { score += 1; break; }
+    }
+    if (score > bestScore) { bestScore = score; best = phase.id; }
+  }
+  return { phaseId: best, score: bestScore };
+}
+
+export function isBindingPlausible(taskTitle, deliverable, parsedPhasesResult) {
+  if (!isTitleConsistent(taskTitle, deliverable.title)) return false;
+  if (!deliverable.phaseId || !parsedPhasesResult?.phases?.length) return true;
+  const phases = parsedPhasesResult.phases;
+  const taskBest = findPhaseByLLMKeywords(taskTitle, phases);
+  if (!taskBest.phaseId || taskBest.score < 2) return true;
+  if (taskBest.phaseId === deliverable.phaseId) return true;
+  const deliverablePhase = phases.find((p) => p.id === deliverable.phaseId);
+  let dlvPhaseScore = 0;
+  if (deliverablePhase && Array.isArray(deliverablePhase.productKeywords)) {
+    const tl = String(taskTitle).toLowerCase();
+    const tt = extractTokens(taskTitle);
+    for (const k of deliverablePhase.productKeywords) {
+      const kl = String(k || '').toLowerCase().trim();
+      if (!kl) continue;
+      if (tl.includes(kl)) { dlvPhaseScore += 2; continue; }
+      const kt = extractTokens(k);
+      for (const t of kt) if (tt.has(t)) { dlvPhaseScore += 1; break; }
+    }
+  }
+  return taskBest.score - dlvPhaseScore < 2;
+}
+
+export function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
+  if (!parsedPhasesResult || !deliverableTitle) return null;
+  const { phases = [], nodes = [], deliverableAssignments = {} } = parsedPhasesResult;
+  const phaseIdSet = new Set(phases.map((p) => p.id));
+  const kw = findPhaseByLLMKeywords(deliverableTitle, phases);
+  const normDlv = normalizeTitle(deliverableTitle);
+  let llmMap = deliverableAssignments[deliverableTitle];
+  if (!llmMap || !phaseIdSet.has(llmMap)) {
+    for (const [k, v] of Object.entries(deliverableAssignments)) {
+      if (normalizeTitle(k) === normDlv && phaseIdSet.has(v)) { llmMap = v; break; }
+    }
+  }
+  if (llmMap && kw.phaseId && llmMap !== kw.phaseId && kw.score >= 2) {
+    const llmPhaseScore = (() => {
+      const llmPhase = phases.find((p) => p.id === llmMap);
+      if (!llmPhase || !Array.isArray(llmPhase.productKeywords)) return 0;
+      const dlvLower = deliverableTitle.toLowerCase();
+      const dlvTokens = extractTokens(deliverableTitle);
+      let s = 0;
+      for (const k of llmPhase.productKeywords) {
+        const kl = String(k || '').toLowerCase().trim();
+        if (!kl) continue;
+        if (dlvLower.includes(kl)) { s += 2; continue; }
+        const kt = extractTokens(k);
+        for (const t of kt) if (dlvTokens.has(t)) { s += 1; break; }
+      }
+      return s;
+    })();
+    if (kw.score - llmPhaseScore >= 2) return kw.phaseId;
+  }
+  if (llmMap && phaseIdSet.has(llmMap)) return llmMap;
+  if (!normDlv) return null;
+  if (kw.phaseId && kw.score >= 2) return kw.phaseId;
+  const nodeMatch = nodes.find((n) => {
+    const normNode = normalizeTitle(n.title || '');
+    return normNode === normDlv || normNode.includes(normDlv) || normDlv.includes(normNode);
+  });
+  if (nodeMatch?.phaseId && phaseIdSet.has(nodeMatch.phaseId)) return nodeMatch.phaseId;
+  const dlvTokens = extractTokens(deliverableTitle);
+  let bestPhaseId = null;
+  let bestScore = 0;
+  for (const phase of phases) {
+    const phaseTokens = extractTokens(phase.title || '');
+    let score = 0;
+    for (const t of dlvTokens) if (phaseTokens.has(t)) score++;
+    if (score > bestScore) { bestScore = score; bestPhaseId = phase.id; }
+  }
+  if (bestScore >= 1) return bestPhaseId;
+  return kw.phaseId || null;
+}
+
+export function findDeliverableByTitle(deliverables = [], title = '') {
+  const key = normalizeTitle(title);
+  if (!key) return null;
+  return deliverables.find((item) => {
+    const candidate = normalizeTitle(item.title);
+    return candidate === key || candidate.includes(key) || key.includes(candidate);
+  }) || null;
+}
+
+export function isPlaceholderAcceptance(value) {
+  return !String(value || '').trim() || /待补充|未定|todo/i.test(String(value || ''));
+}
+
+// 内部 helper：合并 stage checklist（依赖 parsedPhasesResult + defaultStageChecklist + reassignChecklistPhaseIds）
+export function mergeStageChecklist(draft, parsedPhasesResult, defaultStageChecklist, reassignChecklistPhaseIds) {
+  if (!parsedPhasesResult?.phases?.length) return;
+  const { phases: newPhases, nodes: newNodes, nodeAssignments } = parsedPhasesResult;
+  draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases };
+  if (!(newNodes || []).length) return;
+  const currentChecklist = draft.currentStage.checklist?.length
+    ? draft.currentStage.checklist : defaultStageChecklist;
+  const oldById = new Map(currentChecklist.map((node) => [node.id, node]));
+  const newNodeSet = new Set(newNodes.map((node) => node.id));
+  const mergedNodes = [
+    ...newNodes.map((node) => {
+      const old = oldById.get(node.id);
+      return old
+        ? { ...old, title: node.title || old.title, acceptance: node.acceptance || old.acceptance, phaseId: node.phaseId || old.phaseId }
+        : node;
+    }),
+    ...currentChecklist.filter((node) => !newNodeSet.has(node.id) && (node.taskIds?.length > 0))
+  ];
+  draft.currentStage.checklist = reassignChecklistPhaseIds(mergedNodes, newPhases, nodeAssignments || {});
+}
+
+// 应用进度文档建议（用 docs/阶段进度追踪.md 中标记已完成的项给 deliverable 加 suggest 标）
+export function applyProgressDocSuggestions(draft, docs, parseProgressDoc) {
+  const progressDoc = (docs || []).find((doc) => String(doc.name || doc.path || '').includes('阶段进度追踪'));
+  if (!progressDoc) return 0;
+  const progressItems = parseProgressDoc(progressDoc.content || '');
+  let suggested = 0;
+  draft.deliverables = draft.deliverables || [];
+  for (const item of progressItems) {
+    if (item.docStatus !== '已完成') continue;
+    const deliverable = findDeliverableByTitle(draft.deliverables, item.title);
+    if (!deliverable || deliverable.status === '已完成' || deliverable.manualOverride?.status === '已完成') continue;
+    deliverable.docSuggestComplete = true;
+    deliverable.docStatus = item.docStatus;
+    deliverable.docStatusUpdatedAt = new Date().toISOString();
+    suggested++;
+  }
+  return suggested;
+}
+
 export async function importDocCandidates(project, projectId, { updateStore, createId }) {
   const [owner, repo] = (project.githubFullRepo || '').split('/');
   if (!owner || !repo) return { imported: 0, refreshed: 0 };
