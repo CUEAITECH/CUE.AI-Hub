@@ -55,6 +55,7 @@ export function createProjectRoutes({
   reviewChange,
   scanRisks,
   buildMetrics,
+  buildHybridAnalysis,
   fetchProjectDocs,
   parseDocsForTasks,
   parseProgressDoc,
@@ -389,7 +390,13 @@ export function createProjectRoutes({
     ).map((node) => ({ id: node.id, title: node.title, phaseId: node.phaseId }));
     const parsedPhasesResult = await parsePhasesFromDocs(planDocs, parsedTasks, existingNodes);
     const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
-    const dailyCandidates = selectDailyDocTasks(parsedTasks, importLimit);
+    // 注入系统现有数据：已完成任务过滤、commit 覆盖降权、晚会 nextTargets 提权
+    const selectionContext = {
+      hubTasks: (storeSnap.tasks || []).filter((t) => !t.projectId || t.projectId === projectId),
+      semanticLinks: storeSnap.semanticLinks || {},
+      eveningReports: storeSnap.eveningReports || {}
+    };
+    const dailyCandidates = selectDailyDocTasks(parsedTasks, importLimit, selectionContext);
     // 保证每个 unique deliverableTitle 至少有一个代表任务入候选（让路径图 phase 都有内容，不留空 phase）
     const coveredDeliverables = new Set(dailyCandidates.map((t) => t.deliverableTitle).filter(Boolean));
     const representatives = [];
@@ -947,7 +954,27 @@ export function createProjectRoutes({
         assignment.date === today && assignment.projectId === projectId
       );
 
-      const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today, deliverables);
+      // 风险映射 + commit 覆盖 + 晚会对账（与 daily-scan 复用相同逻辑）
+      const rawAlerts = scanRisks(store);
+      const analysisById = Object.fromEntries(
+        (store.riskAnalyses || []).map((a) => [a.alertId, a])
+      );
+      const riskByTaskId = {};
+      for (const alert of rawAlerts) {
+        if (!alert.source) continue;
+        const analysis = analysisById[alert.id];
+        const severity = analysis?.severity || alert.severity;
+        const current = riskByTaskId[alert.source];
+        if (!current || severity < current.severity) {
+          riskByTaskId[alert.source] = { severity, reason: analysis?.reason || alert.detail };
+        }
+      }
+      const progressContext = {
+        riskByTaskId,
+        commitTaskLinks: store.semanticLinks?.commitTaskLinks || [],
+        eveningReports: store.eveningReports || {}
+      };
+      const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today, deliverables, progressContext);
       await writeProgressToGitHub(owner, repo, markdown);
 
       sendJson(res, 200, { written: true, path: 'docs/阶段进度追踪.md', date: today });
@@ -982,6 +1009,25 @@ export function createProjectRoutes({
         result.steps.syncCommits = { ok: false, error: err.message };
       }
 
+      // Step 1.5：语义分析 + 风险分析，让后续 importDocs/buildProgressMarkdown 用最新数据
+      try {
+        const storeForAnalysis = await loadStore();
+        const freshAnalysis = await buildHybridAnalysis(storeForAnalysis);
+        if (freshAnalysis) {
+          await updateStore((draft) => {
+            draft.semanticLinks = freshAnalysis.semanticLinks || draft.semanticLinks || {};
+            draft.riskAnalyses = freshAnalysis.riskAnalyses || draft.riskAnalyses || [];
+            draft.healthAnalysis = freshAnalysis.healthAnalysis || draft.healthAnalysis || null;
+            draft.aiAnalysisUpdatedAt = freshAnalysis.generatedAt;
+            return draft;
+          });
+          result.steps.refreshAnalysis = { ok: true, llmEnabled: freshAnalysis.llmEnabled };
+        }
+      } catch (err) {
+        result.steps.refreshAnalysis = { ok: false, error: err.message };
+        // 非致命：继续用缓存的 semanticLinks
+      }
+
       try {
         const docsResult = await importDocs(project, projectId, url);
         result.steps.syncDocs = {
@@ -1007,7 +1053,27 @@ export function createProjectRoutes({
         const todayAssignments = (freshStore.assignments || []).filter((assignment) =>
           assignment.date === today && assignment.projectId === projectId
         );
-        const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today, deliverables);
+        // 构建进度文档上下文：风险映射 + commit 覆盖 + 晚会对账
+        const rawAlerts = scanRisks(freshStore);
+        const analysisById = Object.fromEntries(
+          (freshStore.riskAnalyses || []).map((a) => [a.alertId, a])
+        );
+        const riskByTaskId = {};
+        for (const alert of rawAlerts) {
+          if (!alert.source) continue;
+          const analysis = analysisById[alert.id];
+          const severity = analysis?.severity || alert.severity;
+          const current = riskByTaskId[alert.source];
+          if (!current || severity < current.severity) {
+            riskByTaskId[alert.source] = { severity, reason: analysis?.reason || alert.detail };
+          }
+        }
+        const progressContext = {
+          riskByTaskId,
+          commitTaskLinks: freshStore.semanticLinks?.commitTaskLinks || [],
+          eveningReports: freshStore.eveningReports || {}
+        };
+        const markdown = buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, today, deliverables, progressContext);
         await writeProgressToGitHub(owner, repo, markdown);
         result.steps.updateDocs = { ok: true };
       } catch (err) {
