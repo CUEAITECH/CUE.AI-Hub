@@ -256,6 +256,7 @@ const routeModules = [
     reviewChange,
     scanRisks,
     buildMetrics,
+    buildHybridAnalysis,
     fetchProjectDocs,
     parseDocsForTasks,
     parseProgressDoc,
