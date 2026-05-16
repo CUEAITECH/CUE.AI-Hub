@@ -78,7 +78,7 @@ export function createProjectRoutes({
 
   async function importDocs(project, projectId, url) {
     const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
-    return importDocsForProject(project, projectId, { importLimit });
+    return importDocsForProject(project, projectId, importLimit);
   }
 
   return async function projectRoutes(req, res, url) {

@@ -805,7 +805,7 @@ export function isPlaceholderAcceptance(value) {
 }
 
 // 内部 helper：合并 stage checklist（依赖 parsedPhasesResult + defaultStageChecklist + reassignChecklistPhaseIds）
-export function mergeStageChecklist(draft, parsedPhasesResult, defaultStageChecklist, reassignChecklistPhaseIds) {
+function mergeStageChecklist(draft, parsedPhasesResult) {
   if (!parsedPhasesResult?.phases?.length) return;
   const { phases: newPhases, nodes: newNodes, nodeAssignments } = parsedPhasesResult;
   draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases };
@@ -827,7 +827,7 @@ export function mergeStageChecklist(draft, parsedPhasesResult, defaultStageCheck
 }
 
 // 应用进度文档建议（用 docs/阶段进度追踪.md 中标记已完成的项给 deliverable 加 suggest 标）
-export function applyProgressDocSuggestions(draft, docs, parseProgressDoc) {
+function applyProgressDocSuggestions(draft, docs) {
   const progressDoc = (docs || []).find((doc) => String(doc.name || doc.path || '').includes('阶段进度追踪'));
   if (!progressDoc) return 0;
   const progressItems = parseProgressDoc(progressDoc.content || '');
@@ -845,7 +845,7 @@ export function applyProgressDocSuggestions(draft, docs, parseProgressDoc) {
   return suggested;
 }
 
-export async function importDocsForProject(project, projectId, deps = {}) {
+export async function importDocsForProject(project, projectId, importLimitArg) {
   const slugId = makeSlugId(createId);
 
   const [owner, repo] = (project.githubFullRepo || project.repository || '').split('/');
@@ -869,7 +869,7 @@ export async function importDocsForProject(project, projectId, deps = {}) {
     ? storeSnap.currentStage.checklist : defaultStageChecklist
   ).map((node) => ({ id: node.id, title: node.title, phaseId: node.phaseId }));
   const parsedPhasesResult = await parsePhasesFromDocs(planDocs, parsedTasks, existingNodes);
-  const importLimit = Number(deps.importLimit ?? process.env.DOC_TASK_IMPORT_LIMIT ?? 8);
+  const importLimit = Number(importLimitArg ?? process.env.DOC_TASK_IMPORT_LIMIT ?? 8);
   const dailyCandidates = selectDailyDocTasks(parsedTasks, importLimit);
   // 保证每个 unique deliverableTitle 至少有一个代表任务入候选（让路径图 phase 都有内容，不留空 phase）
   const coveredDeliverables = new Set(dailyCandidates.map((t) => t.deliverableTitle).filter(Boolean));
@@ -1097,8 +1097,8 @@ export async function importDocsForProject(project, projectId, deps = {}) {
     draft.tasks = existing;
     if (!draft.docTasks) draft.docTasks = {};
     draft.docTasks[projectId] = parsedTasks;
-    mergeStageChecklist(draft, parsedPhasesResult, defaultStageChecklist, reassignChecklistPhaseIds);
-    docSuggestions = applyProgressDocSuggestions(draft, docs, parseProgressDoc);
+    mergeStageChecklist(draft, parsedPhasesResult);
+    docSuggestions = applyProgressDocSuggestions(draft, docs);
     return draft;
   });
 

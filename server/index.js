@@ -65,7 +65,7 @@ import {
   selectDailyDocTasks,
   buildProgressMarkdown,
   writeProgressToGitHub,
-  importDocCandidates
+  importDocsForProject
 } from './services/docsManager.js';
 import {
   applyEveningReportProgress,
@@ -371,7 +371,7 @@ startScheduler({
   generateEveningReport,
   buildProgressMarkdown,
   writeProgressToGitHub,
-  importDocCandidates,
+  importDocsForProject,
   buildHybridAnalysis,
   isWeComAvailable,
   sendWeComMarkdown,

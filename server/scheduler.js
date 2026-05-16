@@ -8,7 +8,7 @@ export function startScheduler(deps) {
     generateEveningReport,
     buildProgressMarkdown,
     writeProgressToGitHub,
-    importDocCandidates,
+    importDocsForProject,
     buildHybridAnalysis,
     isWeComAvailable,
     sendWeComMarkdown,
@@ -179,9 +179,9 @@ export function startScheduler(deps) {
         const syncProjects = (syncStore.projects || []).filter((p) => hasGitHubConfig(p));
         for (const project of syncProjects) {
           try {
-            const result = await importDocCandidates(project, project.id, { updateStore, createId });
+            const result = await importDocsForProject(project, project.id);
             if (result.imported > 0) {
-              console.log(`[Scheduler] sync-docs ${project.githubFullRepo}：新增候选 ${result.imported} 条，解析 ${result.refreshed} 条`);
+              console.log(`[Scheduler] sync-docs ${project.githubFullRepo}：新增任务 ${result.imported}，候选 ${result.selected || 0}，phases ${result.phases || 0}，新建 deliverable ${result.createdDeliverables || 0}`);
             }
           } catch (err) {
             console.error(`[Scheduler] sync-docs 失败 ${project.id}:`, err.message);
