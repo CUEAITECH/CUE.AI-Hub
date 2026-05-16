@@ -845,7 +845,7 @@ function applyProgressDocSuggestions(draft, docs) {
   return suggested;
 }
 
-export async function importDocsForProject(project, projectId, importLimitArg) {
+export async function importDocsForProject(project, projectId, importLimit) {
   const slugId = makeSlugId(createId);
 
   const [owner, repo] = (project.githubFullRepo || project.repository || '').split('/');
@@ -869,8 +869,8 @@ export async function importDocsForProject(project, projectId, importLimitArg) {
     ? storeSnap.currentStage.checklist : defaultStageChecklist
   ).map((node) => ({ id: node.id, title: node.title, phaseId: node.phaseId }));
   const parsedPhasesResult = await parsePhasesFromDocs(planDocs, parsedTasks, existingNodes);
-  const importLimit = Number(importLimitArg ?? process.env.DOC_TASK_IMPORT_LIMIT ?? 8);
-  const dailyCandidates = selectDailyDocTasks(parsedTasks, importLimit);
+  const effectiveImportLimit = Number(importLimit ?? process.env.DOC_TASK_IMPORT_LIMIT ?? 8);
+  const dailyCandidates = selectDailyDocTasks(parsedTasks, effectiveImportLimit);
   // 保证每个 unique deliverableTitle 至少有一个代表任务入候选（让路径图 phase 都有内容，不留空 phase）
   const coveredDeliverables = new Set(dailyCandidates.map((t) => t.deliverableTitle).filter(Boolean));
   const representatives = [];
@@ -1106,7 +1106,7 @@ export async function importDocsForProject(project, projectId, importLimitArg) {
     imported,
     selected: importCandidates.length,
     totalCandidates: parsedTasks.length,
-    importLimit: Math.min(Math.max(Number.isFinite(importLimit) ? Math.floor(importLimit) : 8, 1), 20),
+    importLimit: Math.min(Math.max(Number.isFinite(effectiveImportLimit) ? Math.floor(effectiveImportLimit) : 8, 1), 20),
     message: `已从 ${parsedTasks.length} 个候选任务中选择 ${importCandidates.length} 个适合近期领取的任务导入。`,
     importedTasks: nextStore.tasks.filter((task) => (
       task.projectId === projectId && importCandidates.some((candidate) =>
@@ -1118,53 +1118,4 @@ export async function importDocsForProject(project, projectId, importLimitArg) {
     createdDeliverables,
     docSuggestComplete: docSuggestions
   };
-}
-
-export async function importDocCandidates(project, projectId, { updateStore, createId }) {
-  const [owner, repo] = (project.githubFullRepo || '').split('/');
-  if (!owner || !repo) return { imported: 0, refreshed: 0 };
-
-  const docs = await fetchProjectDocs(owner, repo);
-  if (!docs.length) return { imported: 0, refreshed: 0 };
-
-  const parsedTasks = await parseDocsForTasks(docs);
-  const limit = Math.min(Math.max(1, Number(process.env.DOC_TASK_IMPORT_LIMIT || 8)), 20);
-  const candidates = selectDailyDocTasks(parsedTasks, limit);
-
-  let imported = 0;
-  await updateStore((draft) => {
-    draft.docTasks = draft.docTasks || {};
-    draft.docTasks[projectId] = parsedTasks;
-
-    draft.tasks = draft.tasks || [];
-    for (const task of candidates) {
-      if (task.status === 'completed') continue;
-      const normNew = String(task.title || '').replace(/\s+/g, '').toLowerCase();
-      const dup = (draft.tasks).find((t) => {
-        const sameDoc = !t.sourceDoc || !task.sourceDoc || t.sourceDoc === task.sourceDoc;
-        const normExist = String(t.title || '').replace(/\s+/g, '').toLowerCase();
-        return sameDoc && (normExist === normNew || normExist.includes(normNew) || normNew.includes(normExist));
-      });
-      if (dup) continue;
-      draft.tasks.unshift({
-        id: createId('task'),
-        title: task.title,
-        owner: '待认领',
-        suggestedOwner: task.owner || '',
-        priority: task.priority || 'P1',
-        status: task.status || 'pending',
-        description: task.description || '',
-        dueDate: task.dueDate || '',
-        sourceDoc: task.sourceDoc || '',
-        projectId,
-        deliverableId: null,
-        acceptance: task.acceptance || task.description || '',
-        createdAt: new Date().toISOString()
-      });
-      imported++;
-    }
-    return draft;
-  });
-
-  return { imported, refreshed: parsedTasks.length };
 }
