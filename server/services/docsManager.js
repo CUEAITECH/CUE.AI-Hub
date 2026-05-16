@@ -10,7 +10,8 @@
  */
 
 import { callClaude, parseJsonOutput } from './claude.js';
-import { loadStore, updateStore } from '../store.js';
+import { createId, loadStore, updateStore } from '../store.js';
+import { defaultStageChecklist, reassignChecklistPhaseIds } from './stageChecklist.js';
 
 const API_BASE = 'https://api.github.com';
 const PROGRESS_DOC_PATH = 'docs/阶段进度追踪.md';
@@ -844,8 +845,7 @@ export function applyProgressDocSuggestions(draft, docs, parseProgressDoc) {
   return suggested;
 }
 
-export async function importDocsForProject(project, projectId, deps) {
-  const { createId, defaultStageChecklist, parsePhasesFromDocs, reassignChecklistPhaseIds } = deps;
+export async function importDocsForProject(project, projectId, deps = {}) {
   const slugId = makeSlugId(createId);
 
   const [owner, repo] = (project.githubFullRepo || project.repository || '').split('/');

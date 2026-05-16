@@ -193,15 +193,8 @@ const routeModules = [
     reviewChange,
     scanRisks,
     buildMetrics,
-    fetchProjectDocs,
-    parseDocsForTasks,
-    parseProgressDoc,
-    parsePhasesFromDocs,
-    selectDailyDocTasks,
     buildProgressMarkdown,
     writeProgressToGitHub,
-    defaultStageChecklist,
-    reassignChecklistPhaseIds,
     todayText
   }),
   createAssignmentRoutes({

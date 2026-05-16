@@ -1,5 +1,5 @@
 import { isProjectFounder, verifySessionToken } from '../services/auth.js';
-import { importDocsForProject } from '../services/docsManager.js';
+import { importDocsForProject, makeSlugId } from '../services/docsManager.js';
 
 function getProjectRepo(project) {
   if (project.githubFullRepo?.includes('/')) {
@@ -7,38 +7,6 @@ function getProjectRepo(project) {
     return { owner, repo };
   }
   return { owner: project.githubOwner || '', repo: project.repository || '' };
-}
-
-function isPlaceholderAcceptance(value) {
-  return !String(value || '').trim() || /待补充|未定|todo/i.test(String(value || ''));
-}
-
-function mergeStageChecklist(draft, parsedPhasesResult, defaultStageChecklist, reassignChecklistPhaseIds) {
-  if (!parsedPhasesResult?.phases?.length) return;
-
-  const { phases: newPhases, nodes: newNodes, nodeAssignments } = parsedPhasesResult;
-  draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases };
-  if (!(newNodes || []).length) return;
-
-  const currentChecklist = draft.currentStage.checklist?.length
-    ? draft.currentStage.checklist : defaultStageChecklist;
-  const oldById = new Map(currentChecklist.map((node) => [node.id, node]));
-  const newNodeSet = new Set(newNodes.map((node) => node.id));
-  const mergedNodes = [
-    ...newNodes.map((node) => {
-      const old = oldById.get(node.id);
-      return old
-        ? {
-            ...old,
-            title: node.title || old.title,
-            acceptance: node.acceptance || old.acceptance,
-            phaseId: node.phaseId || old.phaseId
-          }
-        : node;
-    }),
-    ...currentChecklist.filter((node) => !newNodeSet.has(node.id) && (node.taskIds?.length > 0))
-  ];
-  draft.currentStage.checklist = reassignChecklistPhaseIds(mergedNodes, newPhases, nodeAssignments || {});
 }
 
 export function createProjectRoutes({
@@ -56,243 +24,11 @@ export function createProjectRoutes({
   reviewChange,
   scanRisks,
   buildMetrics,
-  fetchProjectDocs,
-  parseDocsForTasks,
-  parseProgressDoc,
-  parsePhasesFromDocs,
-  selectDailyDocTasks,
   buildProgressMarkdown,
   writeProgressToGitHub,
-  defaultStageChecklist,
-  reassignChecklistPhaseIds,
   todayText
 }) {
-  function slugId(prefix, value) {
-    const normalized = String(value || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^\w\u3400-\u9fff]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 40);
-    return `${prefix}_${normalized || createId('node').replace(/^node_/, '')}`;
-  }
-
-  function normalizeTitle(value) {
-    return String(value || '').replace(/\s+/g, '').replace(/[【】()[\]（）]/g, '').toLowerCase();
-  }
-
-  // 判断两个 normTitle 是否"近似重复"：一个包含另一个，且长度差 ≤ 8
-  function isFuzzyDuplicateTitle(a, b) {
-    if (!a || !b) return false;
-    const diff = Math.abs(a.length - b.length);
-    if (diff > 8) return false;
-    return a.includes(b) || b.includes(a);
-  }
-
-  // 项目无关的常见缩写，不能作为"产品域识别符"（每个项目都可能出现，没有区分度）
-  const COMMON_ABBREVS = new Set([
-    'api', 'sdk', 'sop', 'sos', 'mvp', 'sku', 'oauth', 'jwt', 'http', 'https',
-    'json', 'yaml', 'crud', 'cors', 'rest', 'cli', 'gui', 'ux', 'ui',
-    'ci', 'cd', 'dev', 'prod', 'qa', 'env', 'v1', 'v2', 'mr', 'pr', 'pm'
-  ]);
-
-  // 提取"产品域识别符"：长度 ≥ 4 且不在常见缩写表里的纯 ASCII token
-  // 用途：判断两个标题是否属于不同产品端（iPhone vs iPad 之类）
-  // 项目无关：完全靠字符特征识别，不写死任何项目术语
-  function extractDistinctiveTokens(text) {
-    const ascii = String(text || '').toLowerCase().match(/[a-z][a-z0-9]+/g) || [];
-    return ascii.filter((t) => t.length >= 4 && !COMMON_ABBREVS.has(t));
-  }
-
-  // task 标题 与 deliverable 标题 是否在产品域上"不冲突"（基于 ASCII 标识符）
-  function isTitleConsistent(taskTitle, deliverableTitle) {
-    const taskTokens = extractDistinctiveTokens(taskTitle);
-    const dlvTokens = extractDistinctiveTokens(deliverableTitle);
-    if (!taskTokens.length || !dlvTokens.length) return true;
-    const taskLower = String(taskTitle).toLowerCase();
-    const dlvLower = String(deliverableTitle).toLowerCase();
-    if (taskTokens.some((t) => dlvLower.includes(t))) return true;
-    if (dlvTokens.some((t) => taskLower.includes(t))) return true;
-    return false;
-  }
-
-  // 更强的可信度校验：ASCII 标识符 + phase productKeywords 双重检查
-  // 用例：iPhone 任务被 LLM 错绑到纯中文标题的"第一周后端交付物"deliverable，
-  //       isTitleConsistent 无法判定，但 phase productKeywords 能识别出 task 实际归属客户端 phase。
-  function isBindingPlausible(taskTitle, deliverable, parsedPhasesResult) {
-    // 1. ASCII 标识符冲突直接拒绝
-    if (!isTitleConsistent(taskTitle, deliverable.title)) return false;
-    // 2. 基于 LLM productKeywords 的 phase 级一致性
-    if (!deliverable.phaseId || !parsedPhasesResult?.phases?.length) return true;
-    const phases = parsedPhasesResult.phases;
-    const taskBest = findPhaseByLLMKeywords(taskTitle, phases);
-    if (!taskBest.phaseId || taskBest.score < 2) return true; // task 没强 phase 信号，不否决
-    if (taskBest.phaseId === deliverable.phaseId) return true; // 一致
-    // task 的最佳 phase 与 deliverable 实际 phase 不同——计算 deliverable phase 对该 task 的得分
-    const deliverablePhase = phases.find((p) => p.id === deliverable.phaseId);
-    let dlvPhaseScore = 0;
-    if (deliverablePhase && Array.isArray(deliverablePhase.productKeywords)) {
-      const tl = String(taskTitle).toLowerCase();
-      const tt = extractTokens(taskTitle);
-      for (const k of deliverablePhase.productKeywords) {
-        const kl = String(k || '').toLowerCase().trim();
-        if (!kl) continue;
-        if (tl.includes(kl)) { dlvPhaseScore += 2; continue; }
-        const kt = extractTokens(k);
-        for (const t of kt) if (tt.has(t)) { dlvPhaseScore += 1; break; }
-      }
-    }
-    // task 的最佳 phase 比 deliverable 的 phase 评分高 ≥ 2 → 视为错绑
-    return taskBest.score - dlvPhaseScore < 2;
-  }
-
-  // Jaccard 相似度（基于 extractTokens 的 bigram + ASCII tokens）
-  function jaccardSimilarity(a, b) {
-    const ta = extractTokens(a);
-    const tb = extractTokens(b);
-    if (!ta.size || !tb.size) return 0;
-    let inter = 0;
-    for (const t of ta) if (tb.has(t)) inter++;
-    const union = ta.size + tb.size - inter;
-    return union > 0 ? inter / union : 0;
-  }
-
-  function sharedPrefixLen(a, b) {
-    const n = Math.min(a.length, b.length);
-    let i = 0;
-    while (i < n && a[i] === b[i]) i++;
-    return i;
-  }
-
-  // 综合判定两个标题是否为重复任务（覆盖比 isFuzzyDuplicateTitle 更广）
-  function isLikelyDuplicate(a, b) {
-    if (!a || !b) return false;
-    const normA = normalizeTitle(a);
-    const normB = normalizeTitle(b);
-    if (!normA || !normB) return false;
-    if (normA === normB) return true;
-    // 模糊包含（长度差 ≤ 8）
-    if (Math.abs(normA.length - normB.length) <= 8 && (normA.includes(normB) || normB.includes(normA))) return true;
-    // 前缀共享 ≥ 4 char + Jaccard ≥ 0.3：覆盖词序调换 / 同义变体
-    if (sharedPrefixLen(normA, normB) >= 4 && jaccardSimilarity(a, b) >= 0.3) return true;
-    return false;
-  }
-
-  // 提取中文 bigrams（2字窗口）+ ASCII tokens，用于更稳的关键词重叠匹配
-  function extractTokens(text) {
-    const tokens = new Set();
-    const ascii = String(text || '').toLowerCase().match(/[a-z0-9]+/g) || [];
-    ascii.forEach((t) => tokens.add(t));
-    const cjkRuns = String(text || '').match(/[一-鿿]+/g) || [];
-    for (const run of cjkRuns) {
-      for (let i = 0; i < run.length - 1; i++) {
-        tokens.add(run.slice(i, i + 2));
-      }
-      if (run.length === 1) tokens.add(run);
-    }
-    return tokens;
-  }
-
-  // 用 LLM 自己提取的 phase.productKeywords 匹配 deliverable
-  // 完全项目无关：所有关键词都来自当前项目 LLM 解析出的 phase 数据，没有任何硬编码项目术语
-  // 评分：deliverable 标题（或其 token）包含 phase 的关键词时 +1；选总分最高的 phase
-  function findPhaseByLLMKeywords(deliverableTitle, phases) {
-    if (!deliverableTitle || !phases.length) return { phaseId: null, score: 0 };
-    const dlvLower = String(deliverableTitle).toLowerCase();
-    const dlvTokens = extractTokens(deliverableTitle);
-    let best = null;
-    let bestScore = 0;
-    for (const phase of phases) {
-      const keywords = Array.isArray(phase.productKeywords) ? phase.productKeywords : [];
-      if (!keywords.length) continue;
-      let score = 0;
-      for (const kw of keywords) {
-        const kwLower = String(kw || '').toLowerCase().trim();
-        if (!kwLower) continue;
-        // 用子串匹配（ASCII 大小写无关）+ bigram 重叠双通道
-        if (dlvLower.includes(kwLower)) { score += 2; continue; }
-        const kwTokens = extractTokens(kw);
-        for (const t of kwTokens) if (dlvTokens.has(t)) { score += 1; break; }
-      }
-      if (score > bestScore) { bestScore = score; best = phase.id; }
-    }
-    return { phaseId: best, score: bestScore };
-  }
-
-  // 从 parsedPhasesResult 中为一个 deliverableTitle 找最匹配的 phaseId
-  // 项目无关的优先级：
-  //   1. LLM deliverableAssignments（经一致性校验）
-  //   2. 基于 LLM phase.productKeywords 的匹配（评分 ≥ 2）
-  //   3. node 标题包含匹配
-  //   4. bigram 字面重叠 fallback
-  //   一致性校验：若 LLM 把 deliverable 分到一个 phase，但另一个 phase 的 productKeywords
-  //   对该 deliverable 评分明显更高，视为 LLM 错位，回退到关键词最匹配的 phase
-  function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
-    if (!parsedPhasesResult || !deliverableTitle) return null;
-    const { phases = [], nodes = [], deliverableAssignments = {} } = parsedPhasesResult;
-    const phaseIdSet = new Set(phases.map((p) => p.id));
-
-    // LLM 给出的 productKeywords 评分结果（同时作为 LLM 映射校验基准）
-    const kw = findPhaseByLLMKeywords(deliverableTitle, phases);
-
-    // 1. LLM deliverableAssignments
-    const normDlv = normalizeTitle(deliverableTitle);
-    let llmMap = deliverableAssignments[deliverableTitle];
-    if (!llmMap || !phaseIdSet.has(llmMap)) {
-      for (const [k, v] of Object.entries(deliverableAssignments)) {
-        if (normalizeTitle(k) === normDlv && phaseIdSet.has(v)) { llmMap = v; break; }
-      }
-    }
-    // 1c. 一致性校验：用 LLM 自己的 productKeywords 评估
-    //     若关键词最匹配 phase 与 LLM 映射不同，且关键词得分明显高（≥ 2），用关键词结果
-    //     这是项目无关的——所有信号都来自 LLM 自己的输出
-    if (llmMap && kw.phaseId && llmMap !== kw.phaseId && kw.score >= 2) {
-      const llmPhaseScore = (() => {
-        const llmPhase = phases.find((p) => p.id === llmMap);
-        if (!llmPhase || !Array.isArray(llmPhase.productKeywords)) return 0;
-        const dlvLower = deliverableTitle.toLowerCase();
-        const dlvTokens = extractTokens(deliverableTitle);
-        let s = 0;
-        for (const k of llmPhase.productKeywords) {
-          const kl = String(k || '').toLowerCase().trim();
-          if (!kl) continue;
-          if (dlvLower.includes(kl)) { s += 2; continue; }
-          const kt = extractTokens(k);
-          for (const t of kt) if (dlvTokens.has(t)) { s += 1; break; }
-        }
-        return s;
-      })();
-      // 关键词匹配分至少比 LLM 映射高 2，才视为 LLM 错位
-      if (kw.score - llmPhaseScore >= 2) return kw.phaseId;
-    }
-    if (llmMap && phaseIdSet.has(llmMap)) return llmMap;
-    if (!normDlv) return null;
-
-    // 2. LLM productKeywords 匹配（需要至少 score >= 2，避免噪声）
-    if (kw.phaseId && kw.score >= 2) return kw.phaseId;
-
-    // 3. node 标题包含匹配
-    const nodeMatch = nodes.find((n) => {
-      const normNode = normalizeTitle(n.title || '');
-      return normNode === normDlv || normNode.includes(normDlv) || normDlv.includes(normNode);
-    });
-    if (nodeMatch?.phaseId && phaseIdSet.has(nodeMatch.phaseId)) return nodeMatch.phaseId;
-
-    // 4. bigram 字面重叠 fallback（phase 标题对比）
-    const dlvTokens = extractTokens(deliverableTitle);
-    let bestPhaseId = null;
-    let bestScore = 0;
-    for (const phase of phases) {
-      const phaseTokens = extractTokens(phase.title || '');
-      let score = 0;
-      for (const t of dlvTokens) if (phaseTokens.has(t)) score++;
-      if (score > bestScore) { bestScore = score; bestPhaseId = phase.id; }
-    }
-    // 同 productKeywords 评分弱兜底，避免噪声匹配
-    if (bestScore >= 1) return bestPhaseId;
-    // 5. 最后兜底：返回 productKeywords 评分最高的（即使 < 2），让 LLM 也尽量给个 phase
-    return kw.phaseId || null;
-  }
+  const slugId = makeSlugId(createId);
 
   function normalizeProjectInput(input = {}, fallbackId = '') {
     const owner = String(input.githubOwner || '').trim();
@@ -329,33 +65,6 @@ export function createProjectRoutes({
     };
   }
 
-  function findDeliverableByTitle(deliverables = [], title = '') {
-    const key = normalizeTitle(title);
-    if (!key) return null;
-    return deliverables.find((item) => {
-      const candidate = normalizeTitle(item.title);
-      return candidate === key || candidate.includes(key) || key.includes(candidate);
-    }) || null;
-  }
-
-  function applyProgressDocSuggestions(draft, docs) {
-    const progressDoc = (docs || []).find((doc) => String(doc.name || doc.path || '').includes('阶段进度追踪'));
-    if (!progressDoc) return 0;
-    const progressItems = parseProgressDoc(progressDoc.content || '');
-    let suggested = 0;
-    draft.deliverables = draft.deliverables || [];
-    for (const item of progressItems) {
-      if (item.docStatus !== '已完成') continue;
-      const deliverable = findDeliverableByTitle(draft.deliverables, item.title);
-      if (!deliverable || deliverable.status === '已完成' || deliverable.manualOverride?.status === '已完成') continue;
-      deliverable.docSuggestComplete = true;
-      deliverable.docStatus = item.docStatus;
-      deliverable.docStatusUpdatedAt = new Date().toISOString();
-      suggested++;
-    }
-    return suggested;
-  }
-
   async function runProjectSync(project, scanOptions) {
     if (hasGitHubConfig(project)) {
       return scanGitHubProject(project, scanOptions);
@@ -369,13 +78,7 @@ export function createProjectRoutes({
 
   async function importDocs(project, projectId, url) {
     const importLimit = Number(url.searchParams.get('limit') || process.env.DOC_TASK_IMPORT_LIMIT || 8);
-    return importDocsForProject(project, projectId, {
-      createId,
-      defaultStageChecklist,
-      parsePhasesFromDocs,
-      reassignChecklistPhaseIds,
-      importLimit
-    });
+    return importDocsForProject(project, projectId, { importLimit });
   }
 
   return async function projectRoutes(req, res, url) {
