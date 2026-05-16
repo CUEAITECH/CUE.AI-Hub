@@ -298,6 +298,19 @@ export function migrateStore(store) {
     return candidate ? { ...project, founderId: candidate.id } : project;
   });
 
+  // 确保每个项目的创始人在该项目里拥有 project_admin 角色。
+  // syncDefaultTeamUsers 会把通配角色重置为 developer，必须在此补回项目级权限，
+  // 否则创始人每次重启后都会丢失账号管理权限（403 Forbidden）。
+  next.projects.forEach((project) => {
+    if (!project.founderId) return;
+    const founder = (next.users || []).find((u) => u.id === project.founderId);
+    if (!founder) return;
+    const projectRole = (founder.projectRoles || {})[project.id];
+    if (projectRole !== 'project_admin' && projectRole !== 'admin') {
+      founder.projectRoles = { ...(founder.projectRoles || {}), [project.id]: 'project_admin' };
+    }
+  });
+
   const currentStage = next.currentStage || {};
   const isLegacyHubStage = currentStage.id === 'stage_mvp'
     || currentStage.name === 'CUE 项目中枢 MVP'
