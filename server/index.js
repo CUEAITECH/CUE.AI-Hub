@@ -75,7 +75,7 @@ import {
   todayText,
   generateEveningReport
 } from './services/dailyBrief.js';
-import { buildHybridAnalysis } from './services/semanticLinker.js';
+import { refreshAnalysisIntoStore } from './services/semanticLinker.js';
 import { generateAssignmentBrief } from './services/assignmentBrief.js';
 import { bindActivityToExplicitRefs } from './services/bindingEngine.js';
 import { verifySessionToken } from './services/auth.js';
@@ -171,7 +171,7 @@ const routeModules = [
     sendError,
     buildStageChecklist,
     aggregateDeliverableProgress,
-    buildHybridAnalysis,
+    refreshAnalysisIntoStore,
     scanRisks,
     buildMetrics,
     generatePlanAlternatives,
@@ -195,7 +195,7 @@ const routeModules = [
     buildMetrics,
     buildProgressMarkdown,
     writeProgressToGitHub,
-    buildHybridAnalysis,
+    refreshAnalysisIntoStore,
     todayText
   }),
   createAssignmentRoutes({
@@ -374,7 +374,7 @@ startScheduler({
   buildProgressMarkdown,
   writeProgressToGitHub,
   importDocsForProject,
-  buildHybridAnalysis,
+  refreshAnalysisIntoStore,
   isWeComAvailable,
   sendWeComMarkdown,
   todayText,

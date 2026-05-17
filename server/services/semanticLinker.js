@@ -194,3 +194,21 @@ export async function buildHybridAnalysis(store) {
     llmEnabled: isAvailable()
   };
 }
+
+/**
+ * 通用的"刷新并落库"封装：loadStore → buildHybridAnalysis → updateStore
+ * 三个调用方共用：planningRoutes / scheduler / projectRoutes(daily-scan)
+ * 返回 { semanticLinks, riskAnalyses, healthAnalysis, aiAnalysisUpdatedAt }
+ */
+export async function refreshAnalysisIntoStore(loadStore, updateStore) {
+  const snap = await loadStore();
+  const analysis = await buildHybridAnalysis(snap);
+  await updateStore((draft) => ({
+    ...draft,
+    semanticLinks: analysis.semanticLinks || {},
+    riskAnalyses: analysis.riskAnalyses || [],
+    healthAnalysis: analysis.healthAnalysis || null,
+    aiAnalysisUpdatedAt: analysis.generatedAt
+  }));
+  return analysis;
+}

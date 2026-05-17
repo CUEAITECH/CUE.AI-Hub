@@ -6,6 +6,10 @@ import { buildMetrics, scanRisks } from './riskEngine.js';
 import { generatePlanAdjustment, persistPlanAdjustment, estimateTasksProgress } from './planner.js';
 import { buildHybridAnalysis } from './semanticLinker.js';
 
+// 自动收口的进度阈值（默认 95；可通过 AUTO_CLOSE_PROGRESS_THRESHOLD 调整）
+// 设为 100 则只在 LLM 报 100% 时才自动收口；设为 90 则更宽松
+const AUTO_CLOSE_PROGRESS_THRESHOLD = Math.max(50, Math.min(100, Number(process.env.AUTO_CLOSE_PROGRESS_THRESHOLD) || 95));
+
 export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
   if (!hasGitHubConfig(project)) {
     throw new Error(`项目未配置 githubOwner，请先设置 githubOwner 和 repository`);
@@ -105,11 +109,16 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
             updatedAt: new Date().toISOString()
           };
           // 自动收口：suggestComplete + 高进度 + 非手动 + 当前未完成
+          // 如果之前自动收口过、之后又被人手动改动（updatedAt > autoClosedAt），不要再自动关
+          const operatorRevertedSinceAutoClose = task.autoClosedAt
+            && task.updatedAt
+            && new Date(task.updatedAt).getTime() > new Date(task.autoClosedAt).getTime();
           const shouldAutoClose = !!r.suggestComplete
-            && appliedProgress >= 95
+            && appliedProgress >= AUTO_CLOSE_PROGRESS_THRESHOLD
             && !isManualProgress
             && task.status !== 'done'
-            && task.status !== 'completed';
+            && task.status !== 'completed'
+            && !operatorRevertedSinceAutoClose;
           if (shouldAutoClose) {
             task.status = 'done';
             task.progress = 100;
