@@ -74,7 +74,7 @@ export function createPlanningRoutes({
     }
 
     if (req.method === 'POST' && url.pathname === '/api/ai/refresh-analysis') {
-      await refreshAnalysisIntoStore(loadStore, updateStore);
+      await refreshAnalysisIntoStore();
       const nextStore = await loadStore();
       const alerts = scanRisks(nextStore);
       sendJson(res, 200, {

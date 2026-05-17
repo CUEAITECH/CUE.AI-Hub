@@ -426,7 +426,7 @@ export function createProjectRoutes({
       }
 
       try {
-        const analysis = await refreshAnalysisIntoStore(loadStore, updateStore);
+        const analysis = await refreshAnalysisIntoStore();
         result.steps.refreshAnalysis = { ok: true, generatedAt: analysis.generatedAt };
       } catch (err) {
         result.steps.refreshAnalysis = { ok: false, error: err.message };

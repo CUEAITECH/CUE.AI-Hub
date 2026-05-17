@@ -157,7 +157,7 @@ export function startScheduler(deps) {
 
       // 17:45 AI 语义分析刷新（兜底：无论当天 GitHub 同步是否触发过，都保证晚会前是最新的）
       try {
-        await refreshAnalysisIntoStore(loadStore, updateStore);
+        await refreshAnalysisIntoStore();
         console.log('[Scheduler] AI 语义分析刷新完成');
       } catch (err) {
         console.error('[Scheduler] AI 语义分析失败:', err.message);
