@@ -84,9 +84,10 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
       return persistPlanAdjustment(adjustment, newActivities, 'github-sync');
     }).catch((err) => console.error('[PlanAdjust/GitHubSync]', err.message));
 
-    estimateTasksProgress(nextStore).then((results) => {
+    estimateTasksProgress(nextStore).then(async (results) => {
       if (!results.length) return;
-      return updateStore((draft) => {
+      const autoClosed = [];
+      await updateStore((draft) => {
         for (const r of results) {
           const task = draft.tasks.find((t) => t.id === r.taskId);
           if (!task) continue;
@@ -103,9 +104,46 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
             suggestComplete: !!r.suggestComplete,
             updatedAt: new Date().toISOString()
           };
+          // 自动收口：suggestComplete + 高进度 + 非手动 + 当前未完成
+          const shouldAutoClose = !!r.suggestComplete
+            && appliedProgress >= 95
+            && !isManualProgress
+            && task.status !== 'done'
+            && task.status !== 'completed';
+          if (shouldAutoClose) {
+            task.status = 'done';
+            task.progress = 100;
+            task.autoClosedAt = new Date().toISOString();
+            task.autoCloseReason = String(r.reason || '').slice(0, 120);
+            autoClosed.push({
+              id: task.id,
+              title: task.title,
+              owner: task.owner,
+              reason: task.autoCloseReason
+            });
+          }
         }
         return draft;
       });
+      // 推送企微让负责人确认（不阻塞）
+      if (autoClosed.length > 0) {
+        try {
+          const { isWeComAvailable, sendWeComMarkdown } = await import('./wecom.js');
+          if (isWeComAvailable()) {
+            const lines = [
+              `## 🤖 AI 自动收口提醒（${autoClosed.length} 条）`,
+              '',
+              ...autoClosed.slice(0, 5).map((t) => `- **${t.title}**（${t.owner || '未认领'}）— ${t.reason || '已完成'}`),
+              ...(autoClosed.length > 5 ? [`- ... 等共 ${autoClosed.length} 条`] : []),
+              '',
+              'AI 判定这些任务已完成并自动关单。如有误判请在 hub 改回 pending。'
+            ].join('\n');
+            await sendWeComMarkdown(lines);
+          }
+        } catch (err) {
+          console.error('[AutoClose/WeCom] 推送失败:', err.message);
+        }
+      }
     }).catch((err) => console.error('[AIProgress/GitHubSync]', err.message));
 
     buildHybridAnalysis(nextStore).then((analysis) => {
