@@ -12,7 +12,8 @@ export function createWebhookRoutes({
   buildMetrics,
   scanRisks,
   githubWebhookSecret,
-  bindActivityToExplicitRefs
+  bindActivityToExplicitRefs,
+  importDocsForProject
 }) {
   return async function webhookRoutes(req, res, url) {
     if (req.method !== 'POST' || url.pathname !== '/api/webhooks/github') return false;
@@ -63,6 +64,26 @@ export function createWebhookRoutes({
         if (!adjustment) return null;
         return persistPlanAdjustment(adjustment, boundActivities, 'github-webhook');
       }).catch((err) => console.error('[PlanAdjust]', err.message));
+    }
+
+    // 检测 push 是否改动 docs/*.md，自动触发 sync-docs（不阻塞 webhook 响应）
+    const reposWithDocsChanges = new Set();
+    for (const activity of boundActivities) {
+      if (activity.type !== 'commit') continue;
+      const touched = (activity.files || []).some((f) => /^docs\/.*\.md$/.test(f));
+      if (touched) reposWithDocsChanges.add((activity.repo || '').toLowerCase());
+    }
+    if (reposWithDocsChanges.size > 0 && typeof importDocsForProject === 'function') {
+      const candidateProjects = (nextStore.projects || []).filter((p) =>
+        reposWithDocsChanges.has(String(p.githubFullRepo || '').toLowerCase())
+      );
+      for (const project of candidateProjects) {
+        importDocsForProject(project, project.id).then((result) => {
+          console.log(`[Webhook] docs/ 变更触发 sync-docs：${project.githubFullRepo} — 新增任务 ${result.imported || 0}，phases ${result.phases || 0}`);
+        }).catch((err) => {
+          console.error(`[Webhook] docs sync 失败 ${project.githubFullRepo}：`, err.message);
+        });
+      }
     }
 
     sendJson(res, 202, {

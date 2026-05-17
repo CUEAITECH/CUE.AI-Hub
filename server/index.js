@@ -296,7 +296,8 @@ const routeModules = [
     buildMetrics,
     scanRisks,
     githubWebhookSecret,
-    bindActivityToExplicitRefs
+    bindActivityToExplicitRefs,
+    importDocsForProject
   })
 ];
 
