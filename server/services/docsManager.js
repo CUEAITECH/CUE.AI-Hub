@@ -444,18 +444,53 @@ function priorityRank(task) {
  * @param {number} limit
  * @returns {Array}
  */
-export function selectDailyDocTasks(tasks, limit = 8) {
+export function selectDailyDocTasks(tasks, limit = 8, selectionContext = {}) {
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 20) : 8;
+
+  const hubTasks = selectionContext.hubTasks || [];
+
+  // 已完成或进度≥90的 hub 任务标题 → 过滤掉，不再重复导入
+  const completedTitles = new Set(
+    hubTasks
+      .filter((t) => t.status === 'completed' || Number(t.progress || 0) >= 90)
+      .map((t) => String(t.title || '').trim())
+  );
+
+  // 有 semanticLink commit 覆盖的 hub 任务标题 → 降权（可能已在进行中）
+  const commitLinks = selectionContext.semanticLinks?.commitTaskLinks || [];
+  const hubById = new Map(hubTasks.map((t) => [t.id, t]));
+  const titlesWithCommit = new Set(
+    commitLinks.map((link) => hubById.get(link.taskId)?.title).filter(Boolean)
+  );
+
+  // 最新晚会 nextTargets → 提权
+  const lastReport = Object.values(selectionContext.eveningReports || {})
+    .filter((r) => r?.date)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  const nextTargetTitles = new Set(
+    (lastReport?.nextTargets || []).map((t) => String(t.taskTitle || '').trim()).filter(Boolean)
+  );
+
+  function scoreTask(task) {
+    const title = String(task.title || '').trim();
+    // priorityRank: P0=0, P1=1, P2=2 → 转为正向分
+    let score = task.priority === 'P0' ? 30 : task.priority === 'P1' ? 20 : 10;
+    if (nextTargetTitles.has(title)) score += 25; // 晚会推荐加权
+    if (task.dueDate) {
+      const days = Math.ceil((new Date(task.dueDate).getTime() - Date.now()) / 86400000);
+      score += days <= 0 ? 15 : days <= 3 ? 10 : 0;
+    }
+    if (titlesWithCommit.has(title)) score -= 15; // 已有 commit → 降权
+    return score;
+  }
+
   return [...(tasks || [])]
-    .filter((task) => task.status !== 'completed')
-    .sort((a, b) => {
-      const rank = priorityRank(a) - priorityRank(b);
-      if (rank !== 0) return rank;
-      if (a.dueDate && b.dueDate) return String(a.dueDate).localeCompare(String(b.dueDate));
-      if (a.dueDate) return -1;
-      if (b.dueDate) return 1;
-      return String(a.sourceDoc || '').localeCompare(String(b.sourceDoc || ''));
+    .filter((task) => {
+      if (task.status === 'completed') return false;
+      if (completedTitles.has(String(task.title || '').trim())) return false;
+      return true;
     })
+    .sort((a, b) => scoreTask(b) - scoreTask(a))
     .slice(0, safeLimit);
 }
 
@@ -468,13 +503,33 @@ export function selectDailyDocTasks(tasks, limit = 8) {
  * @param {string} date - YYYY-MM-DD
  * @returns {string}
  */
-export function buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, date, deliverables = []) {
+export function buildProgressMarkdown(project, docTasks, hubTasks, todayAssignments, date, deliverables = [], context = {}) {
   const lines = [
     `# ${project.name || project.id} 阶段进度追踪`,
     '',
     `> 最后更新：${date}（由 CUE Project Hub AI 产品经理自动生成）`,
     '',
   ];
+
+  // ── 预计算上下文数据 ─────────────────────────────────────────────
+  // A. 有 commit 覆盖的任务 ID 集合（来自 semanticLinks.commitTaskLinks）
+  const commitCoveredTaskIds = new Set(
+    (context.commitTaskLinks || []).map((link) => link.taskId)
+  );
+
+  // B. 近 7 天晚会对账中已交付的任务 ID 集合
+  const recentReports = Object.values(context.eveningReports || {})
+    .filter((r) => r?.date)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, 7);
+  const deliveredTaskIds = new Set(
+    recentReports.flatMap((r) =>
+      (r.reconciliation || []).filter((row) => row.completed).map((row) => row.taskId)
+    )
+  );
+
+  // C. 风险映射（key = task.id，由调用方预计算传入）
+  const riskByTaskId = context.riskByTaskId || {};
 
   if (Array.isArray(deliverables) && deliverables.length) {
     const byPhase = {};
@@ -491,8 +546,27 @@ export function buildProgressMarkdown(project, docTasks, hubTasks, todayAssignme
         const status = deliverable.manualOverride?.status || deliverable.status || '待补证据';
         const icon = status === '已完成' ? '✅' : ['推进中', '进行中', '高风险', '阻塞'].includes(status) ? '🔶' : '⬜';
         const ownerStr = deliverable.owner ? `（${deliverable.owner}）` : '';
-        lines.push(`- ${icon} **${deliverable.title}**${ownerStr}`);
+
+        // 计算交付项聚合标签（从子任务 taskIds 汇总）
+        const linkedIds = deliverable.taskIds || [];
+        let worstRisk = null;
+        for (const tid of linkedIds) {
+          const r = riskByTaskId[tid];
+          if (r && (!worstRisk || r.severity < worstRisk.severity)) worstRisk = r;
+        }
+        const hasCommit = linkedIds.some((id) => commitCoveredTaskIds.has(id));
+        const wasDelivered = linkedIds.some((id) => deliveredTaskIds.has(id));
+        // P3（无 git 信号）太普遍，不在文档中展示，避免全部标红
+        const riskTag = worstRisk?.severity === 'P1' ? ' 🔴P1'
+          : worstRisk?.severity === 'P2' ? ' 🟡P2' : '';
+        const commitTag = hasCommit ? ' 📝有提交' : '';
+        const deliveredTag = wasDelivered ? ' ✅已交付' : '';
+
+        lines.push(`- ${icon} **${deliverable.title}**${ownerStr}${riskTag}${commitTag}${deliveredTag}`);
         if (deliverable.acceptance) lines.push(`  - ${deliverable.acceptance}`);
+        if (worstRisk?.reason && worstRisk.severity !== 'P3') {
+          lines.push(`  - ⚠️ ${worstRisk.reason}`);
+        }
         if (deliverable.docSuggestComplete) lines.push('  - 文档侧已标记完成，等待 Hub 人工确认。');
       }
       lines.push('');
@@ -870,7 +944,16 @@ export async function importDocsForProject(project, projectId, importLimit) {
   ).map((node) => ({ id: node.id, title: node.title, phaseId: node.phaseId }));
   const parsedPhasesResult = await parsePhasesFromDocs(planDocs, parsedTasks, existingNodes);
   const effectiveImportLimit = Number(importLimit ?? process.env.DOC_TASK_IMPORT_LIMIT ?? 8);
-  const dailyCandidates = selectDailyDocTasks(parsedTasks, effectiveImportLimit);
+  // selectionContext (from PR #21): use real hub state to bias ranking
+  //   - hubTasks 过滤已完成任务
+  //   - semanticLinks.commitTaskLinks 降权已被 commit 覆盖的任务
+  //   - eveningReports[最新].nextTargets 提权晚会指定的下一步
+  const selectionContext = {
+    hubTasks: (storeSnap.tasks || []).filter((t) => !t.projectId || t.projectId === projectId),
+    semanticLinks: storeSnap.semanticLinks || {},
+    eveningReports: storeSnap.eveningReports || {}
+  };
+  const dailyCandidates = selectDailyDocTasks(parsedTasks, effectiveImportLimit, selectionContext);
   // 保证每个 unique deliverableTitle 至少有一个代表任务入候选（让路径图 phase 都有内容，不留空 phase）
   const coveredDeliverables = new Set(dailyCandidates.map((t) => t.deliverableTitle).filter(Boolean));
   const representatives = [];

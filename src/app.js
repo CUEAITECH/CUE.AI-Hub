@@ -2367,7 +2367,10 @@ function renderAssignments() {
               </div>
             </div>
             <div class="claim-member-btns">
-              ${state.members.map((m) => `
+              ${(currentUserCanManageAccounts()
+                ? state.members
+                : state.members.filter((m) => m.name === (sessionStorage.getItem('cueHubUser') || ''))
+              ).map((m) => `
                 <button class="claim-member-btn ${claimedOwners.has(m.name) ? 'claimed' : ''}"
                   data-task-id="${escapeHtml(task.id)}"
                   data-task-title="${escapeHtml(task.title)}"
