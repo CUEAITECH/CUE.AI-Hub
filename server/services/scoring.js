@@ -8,6 +8,9 @@ const STATUS = {
   ABSENT: 'absent'
 };
 
+const ATTENDANCE_WEIGHT = 0.3;
+const CONTRIBUTION_WEIGHT = 0.7;
+
 function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Number(value) || 0));
 }
@@ -165,15 +168,21 @@ function scoreReviews(store, projectId, date, owner) {
   const reviews = (store.reviews || []).filter((item) => (
     inProject(item, projectId) && sameDate(item.createdAt || item.date, date) && (item.owner || item.actor) === owner
   ));
-  if (!reviews.length) return { score: 14, count: 0, average: null, detail: '当天无 AI Review，按中性分处理' };
-  const avg = reviews.reduce((sum, item) => sum + clamp(item.score, 0, 100), 0) / reviews.length;
-  const blockPenalty = reviews.filter((item) => item.level === 'Block').length * 5;
-  const escalatePenalty = reviews.filter((item) => item.level === 'Escalate').length * 7;
+  if (!reviews.length) return { score: 14, count: 0, average: null, unresolvedCount: 0, detail: '当天无 AI Review，按中性分处理' };
+  const unresolved = reviews.filter((item) => (
+    (item.level === 'Block' || item.level === 'Escalate') && !item.humanDecision
+  ));
+  const unresolvedBlocks = unresolved.filter((item) => item.level === 'Block').length;
+  const unresolvedEscalates = unresolved.filter((item) => item.level === 'Escalate').length;
+  const penalty = unresolvedBlocks * 5 + unresolvedEscalates * 7;
   return {
-    score: clamp((avg / 100) * 20 - blockPenalty - escalatePenalty, 0, 20),
+    score: clamp(20 - penalty, 0, 20),
     count: reviews.length,
-    average: Math.round(avg),
-    detail: `Review 均分 ${Math.round(avg)}，Block/Escalate 会额外扣分`
+    average: null,
+    unresolvedCount: unresolved.length,
+    detail: unresolved.length
+      ? `当天仍有 ${unresolvedBlocks} 条 Block、${unresolvedEscalates} 条 Escalate 未处理，按未修复问题扣分`
+      : '当天 Review 已覆盖且无未处理 Block/Escalate，不扣分'
   };
 }
 
@@ -226,9 +235,11 @@ function scoreAttendance(store, projectId, date, owner) {
   const task = attendanceFor(store, projectId, date, owner, 'task_completion');
   const meetingScore = attendanceStatusScore(meeting?.status);
   const taskScore = taskCompletionStatusScore(task?.status);
-  const points = Math.round((meetingScore * 0.5 + taskScore * 0.5));
+  const raw = Math.round((meetingScore * 0.5 + taskScore * 0.5));
+  const points = Math.round(raw * 3);
   return {
     points,
+    raw,
     meetingStatus: meeting?.status || 'unknown',
     taskStatus: task?.status || 'unknown',
     detail: `晚会${attendanceLabel(meeting?.status)}，任务${attendanceLabel(task?.status)}`
@@ -258,7 +269,7 @@ export function buildDailyScores(store, { projectId = DEFAULT_PROJECT_ID, date =
     const closure = scoreClosure(store, projectId, date, owner);
     const attendance = scoreAttendance(store, projectId, date, owner);
     const contributionRaw = clamp(tasks.score + commits.score + reviews.score + closure.score, 0, 100);
-    const contributionScore = Math.round(contributionRaw * 0.9);
+    const contributionScore = Math.round(contributionRaw * CONTRIBUTION_WEIGHT);
     const dailyScore = clamp(contributionScore + attendance.points, 0, 100);
     const carryover = carryoverDates(store, projectId, date, owner);
     return {
@@ -268,6 +279,7 @@ export function buildDailyScores(store, { projectId = DEFAULT_PROJECT_ID, date =
       dailyScore: Math.round(dailyScore),
       contributionScore,
       attendancePoints: attendance.points,
+      attendanceRaw: attendance.raw,
       contributionRaw: Math.round(contributionRaw),
       components: {
         taskDelivery: tasks,

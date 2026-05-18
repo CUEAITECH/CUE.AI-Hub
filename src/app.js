@@ -1176,17 +1176,17 @@ function renderMyScoreBreakdown() {
   el.innerHTML = `
     <div class="score-breakdown-head">
       <strong>${Math.round(row.dailyScore || 0)}</strong>
-      <span>今日总分 = 贡献 ${Math.round(row.contributionScore || 0)} + 出勤 ${Math.round(row.attendancePoints || 0)}</span>
+      <span>今日总分 = 贡献 ${Math.round(row.contributionScore || 0)} + 考勤 ${Math.round(row.attendancePoints || 0)}</span>
     </div>
     <div class="score-breakdown-grid">
       <div><b>${componentScore(c.taskDelivery?.score, 40)}</b><span>任务交付贡献</span><small>${escapeHtml(c.taskDelivery?.detail || '')}</small></div>
       <div><b>${componentScore(c.effectiveCommits?.score, 25)}</b><span>有效 Commit 贡献</span><small>${escapeHtml(c.effectiveCommits?.detail || '')}</small></div>
       <div><b>${componentScore(c.reviewQuality?.score, 20)}</b><span>Review 质量</span><small>${escapeHtml(c.reviewQuality?.detail || '')}</small></div>
       <div><b>${componentScore(c.closure?.score, 15)}</b><span>闭环表现</span><small>${escapeHtml(c.closure?.detail || '')}</small></div>
-      <div><b>+${Math.round(row.attendancePoints || 0)}</b><span>出勤分</span><small>${escapeHtml(c.attendance?.detail || '')}</small></div>
+      <div><b>+${Math.round(row.attendancePoints || 0)}</b><span>考勤分</span><small>${escapeHtml(c.attendance?.detail || '')} · 原始 ${Math.round(row.attendanceRaw || 0)}/10，按 30% 权重折算</small></div>
       <div><b>${row.carryoverDates?.length || 1} 天</b><span>延期完成窗口</span><small>${escapeHtml((row.carryoverDates || [row.date]).join(' / '))}</small></div>
     </div>
-    <p class="score-bonus-note">基础奖金按月评分百分比乘总额计算；全勤奖单独核算，不并入基础奖金。</p>
+    <p class="score-bonus-note">当前口径：贡献项总和先按 70% 折算，考勤原始 10 分按 30% 折算为最高 30 分；Review 只对未处理的 Block / Escalate 扣分。基础奖金按月评分百分比乘总额计算；全勤奖单独核算，不并入基础奖金。</p>
   `;
 }
 
