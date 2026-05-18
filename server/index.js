@@ -78,7 +78,7 @@ import {
 import { refreshAnalysisIntoStore } from './services/semanticLinker.js';
 import { generateAssignmentBrief } from './services/assignmentBrief.js';
 import { bindActivityToExplicitRefs } from './services/bindingEngine.js';
-import { verifySessionToken } from './services/auth.js';
+import { getSessionToken, verifySessionToken } from './services/auth.js';
 import { dispatchRoutes } from './routes/index.js';
 import { createSystemRoutes } from './routes/systemRoutes.js';
 import { createAssignmentRoutes } from './routes/assignmentRoutes.js';
@@ -127,10 +127,7 @@ function hasValidApiKey(req) {
 }
 
 function hasValidSession(req) {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ')
-    ? header.slice(7).trim()
-    : req.headers['x-cue-session-token'] || '';
+  const token = getSessionToken(req);
   return Boolean(verifySessionToken(token));
 }
 

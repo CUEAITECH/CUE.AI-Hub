@@ -1,4 +1,7 @@
-import { verifySessionToken } from '../services/auth.js';
+import { getUserFromRequest } from '../services/auth.js';
+
+// per-(date,userId) in-flight guard：避免同一用户连续点刷新导致重复 LLM 调用
+const inFlightRefresh = new Map();
 
 export function createRecommendationRoutes({
   loadStore,
@@ -11,22 +14,11 @@ export function createRecommendationRoutes({
   normalizeAssignment
 }) {
 
-  function getCurrentUser(req, store) {
-    const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ')
-      ? header.slice(7).trim()
-      : req.headers['x-cue-session-token'] || '';
-    const payload = verifySessionToken(token);
-    if (!payload?.sub) return null;
-    const user = (store.users || []).find((u) => u.id === payload.sub);
-    return user || null;
-  }
-
   return async function recommendationRoutes(req, res, url) {
     // GET /api/recommendations?date=YYYY-MM-DD
     if (req.method === 'GET' && url.pathname === '/api/recommendations') {
       const store = await loadStore();
-      const user = getCurrentUser(req, store);
+      const user = getUserFromRequest(req, store);
       if (!user) { sendError(res, 401, 'login required'); return true; }
 
       const date = url.searchParams.get('date') || tomorrowText();
@@ -61,47 +53,58 @@ export function createRecommendationRoutes({
     // POST /api/recommendations/refresh
     if (req.method === 'POST' && url.pathname === '/api/recommendations/refresh') {
       const store = await loadStore();
-      const user = getCurrentUser(req, store);
+      const user = getUserFromRequest(req, store);
       if (!user) { sendError(res, 401, 'login required'); return true; }
 
       const { json } = await readBody(req);
       const date = (json && json.date) || tomorrowText();
 
-      // 老 candidates 标 superseded
-      await updateStore((draft) => {
-        draft.dailyTaskSuggestions = draft.dailyTaskSuggestions || {};
-        draft.dailyTaskSuggestions[date] = draft.dailyTaskSuggestions[date] || {};
-        const existing = draft.dailyTaskSuggestions[date][user.id];
-        if (existing?.candidates?.length) {
-          for (const c of existing.candidates) {
-            if (c.status === 'pending') c.status = 'superseded';
-          }
-        }
-        return draft;
-      });
+      const flightKey = `${date}|${user.id}`;
+      if (inFlightRefresh.has(flightKey)) {
+        sendError(res, 429, '推荐刷新中，请稍候再试');
+        return true;
+      }
+      inFlightRefresh.set(flightKey, Date.now());
 
-      // 重新生成
-      const fresh = await loadStore();
       try {
-        const result = await generateDailyTaskSuggestions(date, user.id, fresh, { triggeredBy: 'manual' });
+        // 老 candidates 标 superseded
         await updateStore((draft) => {
-          draft.dailyTaskSuggestions[date][user.id] = {
-            generatedAt: new Date().toISOString(),
-            generatedBy: 'manual',
-            pool: result.pool,
-            candidates: result.candidates
-          };
+          draft.dailyTaskSuggestions = draft.dailyTaskSuggestions || {};
+          draft.dailyTaskSuggestions[date] = draft.dailyTaskSuggestions[date] || {};
+          const existing = draft.dailyTaskSuggestions[date][user.id];
+          if (existing?.candidates?.length) {
+            for (const c of existing.candidates) {
+              if (c.status === 'pending') c.status = 'superseded';
+            }
+          }
           return draft;
         });
-        const after = await loadStore();
-        const entry = after.dailyTaskSuggestions[date][user.id];
-        sendJson(res, 200, { date, ...entry });
-      } catch (err) {
-        if (err instanceof LLMUnavailableError) {
-          sendError(res, 503, 'AI 推荐暂不可用', err.message);
-          return true;
+
+        // 重新生成
+        const fresh = await loadStore();
+        try {
+          const result = await generateDailyTaskSuggestions(date, user.id, fresh, { triggeredBy: 'manual' });
+          await updateStore((draft) => {
+            draft.dailyTaskSuggestions[date][user.id] = {
+              generatedAt: new Date().toISOString(),
+              generatedBy: 'manual',
+              pool: result.pool,
+              candidates: result.candidates
+            };
+            return draft;
+          });
+          const after = await loadStore();
+          const entry = after.dailyTaskSuggestions[date][user.id];
+          sendJson(res, 200, { date, ...entry });
+        } catch (err) {
+          if (err instanceof LLMUnavailableError) {
+            sendError(res, 503, 'AI 推荐暂不可用', err.message);
+            return true;
+          }
+          throw err;
         }
-        throw err;
+      } finally {
+        inFlightRefresh.delete(flightKey);
       }
       return true;
     }
@@ -111,7 +114,7 @@ export function createRecommendationRoutes({
     if (req.method === 'POST' && acceptMatch) {
       const taskId = acceptMatch[1];
       const store = await loadStore();
-      const user = getCurrentUser(req, store);
+      const user = getUserFromRequest(req, store);
       if (!user) { sendError(res, 401, 'login required'); return true; }
 
       const { json } = await readBody(req);
