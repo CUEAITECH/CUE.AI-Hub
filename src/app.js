@@ -2548,34 +2548,66 @@ function renderConfig() {
   }
 }
 
-function renderMeetingAssignments() {
-  const list = document.querySelector('#meetingAssignmentList');
-  if (!list) return;
-  const date = getMeetingDate();
-  const assignments = state.assignments.filter((assignment) => assignment.date === date);
-  if (!assignments.length) {
-    list.innerHTML = '<div class="empty-state">会后还没有领取记录。成员在企微领取后会同步到这里，也可以临时手动补录。</div>';
+// Task 5.1/5.2: 旧的 #meetingAssignmentList / renderMeetingAssignments 已移除，
+// 替换为 AI 推荐面板（#meetingRecommendationList + renderMeetingRecommendations）。
+
+async function renderMeetingRecommendations() {
+  const listEl = document.querySelector('#meetingRecommendationList');
+  const metaEl = document.querySelector('#meetingRecommendationMeta');
+  if (!listEl) return;
+
+  const date = (typeof getMeetingDate === 'function' && getMeetingDate()) || tomorrowStr();
+  listEl.innerHTML = '<div class="empty-state">加载推荐中…</div>';
+  if (metaEl) metaEl.textContent = '';
+
+  let data;
+  try {
+    data = await api(`/api/recommendations?date=${encodeURIComponent(date)}`);
+  } catch (e) {
+    listEl.innerHTML = `<div class="recommendation-error">加载推荐失败：${escapeHtml(e.message || String(e))}</div>`;
     return;
   }
 
-  const groups = assignments.reduce((acc, assignment) => {
-    acc[assignment.owner] = acc[assignment.owner] || [];
-    acc[assignment.owner].push(assignment);
-    return acc;
-  }, {});
+  if (!data.candidates?.length) {
+    listEl.innerHTML = `<div class="empty-state">${escapeHtml(data.message || '今日尚无 AI 推荐')}</div>`;
+    if (metaEl && data.pool) {
+      metaEl.textContent = `候选池 ${data.pool.eligibleCount} 个任务`;
+    }
+    return;
+  }
 
-  list.innerHTML = Object.entries(groups).map(([owner, items]) => `
-    <div class="meeting-owner-assignments">
-      <strong>${escapeHtml(owner)}</strong>
-      ${items.map((assignment) => `
-        <div class="meeting-assignment-row">
-          <span>${escapeHtml(assignment.taskTitle || assignment.taskId)}</span>
-          <small>${escapeHtml(assignment.status || '进行中')} · ${escapeHtml(assignment.wecomStatus || '已记录')} · ${formatDateTime(assignment.updatedAt || assignment.createdAt)}</small>
-          ${assignment.note ? `<p>${escapeHtml(assignment.note)}</p>` : ''}
+  listEl.innerHTML = data.candidates.map((c) => {
+    const task = c.task || { title: c.taskId };
+    const taken = !!c.acceptedBy;
+    const accepted = c.status === 'accepted';
+    return `
+      <div class="recommendation-card${taken || accepted ? ' is-taken' : ''}" data-task-id="${escapeHtml(c.taskId)}" data-date="${escapeHtml(date)}">
+        <div class="recommendation-card-body">
+          <div class="recommendation-title">${taken ? '🔒 ' : ''}${escapeHtml(task.title || c.taskId)}</div>
+          <div class="recommendation-meta-line">
+            ${taken
+              ? `<span class="recommendation-taken-tag">已被 ${escapeHtml(c.acceptedBy)} 领取</span>`
+              : `<span class="recommendation-score-tag">${c.score} 分</span> · ${escapeHtml(c.reason || '')}`
+            }
+          </div>
+          ${!taken && c.hint ? `<div class="recommendation-hint">💡 ${escapeHtml(c.hint)}</div>` : ''}
         </div>
-      `).join('')}
-    </div>
-  `).join('');
+        <button class="recommendation-accept-btn" data-action="accept-recommendation" ${taken || accepted ? 'disabled' : ''}>
+          ${accepted ? '✓ 已领取' : (taken ? '—' : '✓ 我做')}
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  if (metaEl) {
+    const ts = data.generatedAt ? new Date(data.generatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '-';
+    metaEl.textContent = `生成于 ${ts} · 候选池 ${data.pool?.eligibleCount ?? 0} 个任务`;
+  }
+}
+
+function tomorrowStr() {
+  const d = new Date(Date.now() + 24 * 3600 * 1000);
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
 }
 
 function renderMeetingReport() {
@@ -2704,9 +2736,8 @@ function renderMeetingTargets() {
 function renderMeeting() {
   const meetingDate = document.querySelector('#meetingDate');
   if (meetingDate && !meetingDate.value) meetingDate.value = getTodayText();
-  setOptions('#meetingAssignmentOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
-  setOptions('#meetingAssignmentTask', state.tasks.filter((task) => task.status !== '已完成'), (task) => task.id, (task) => `${task.title} · ${task.owner} · ${task.progress}%`);
-  renderMeetingAssignments();
+  // Task 5.2: AI 推荐替换旧的会后领取表单
+  renderMeetingRecommendations();
   renderMeetingReport();
   renderMeetingReconciliation();
   renderMeetingAttendance();
@@ -3273,30 +3304,7 @@ async function syncCueAiGit(options = {}) {
   if (!options.silent) toast(`同步完成（${srcLabel}）：${payload.addedActivities || 0} 条 commit，${payload.addedReviews || 0} 条 AI Review`);
 }
 
-async function createMeetingAssignment() {
-  const taskId = document.querySelector('#meetingAssignmentTask').value;
-  const task = state.tasks.find((item) => item.id === taskId);
-  if (!taskId) { toast('请选择领取任务'); return; }
-  const payload = await api('/api/assignments', {
-    method: 'POST',
-    body: JSON.stringify({
-      date: getMeetingDate(),
-      owner: document.querySelector('#meetingAssignmentOwner').value,
-      taskId,
-      taskTitle: task?.title || taskId,
-      note: document.querySelector('#meetingAssignmentNote').value,
-      status: '进行中',
-      wecomStatus: '待企业微信确认'
-    })
-  });
-  state.assignments = [
-    ...(payload.assignments || []),
-    ...state.assignments.filter((assignment) => assignment.date !== getMeetingDate())
-  ];
-  renderMeeting();
-  renderAssignments();
-  toast('任务领取已记录，晚会后可同步到企业微信');
-}
+// Task 5.1/5.2: createMeetingAssignment 已移除（旧的会后领取表单替换为 AI 推荐）
 
 async function copyEveningReport() {
   const report = document.querySelector('#meetingEveningReport')?.textContent || state.eveningReport || '';
@@ -3641,9 +3649,47 @@ function bindEvents() {
   document.querySelector('[data-action="generate-evening-report"]')?.addEventListener('click', () => {
     generateEveningReport().catch((e) => toast(e.message));
   });
-  document.querySelector('[data-action="create-assignment"]')?.addEventListener('click', once('create-assignment', () => (
-    createMeetingAssignment().catch((e) => toast(e.message))
-  )));
+  // Task 5.2: AI 推荐的 ✓ 接受 / 🔄 刷新 走事件委托（卡片动态生成，逐个绑监听会泄漏）
+  document.addEventListener('click', async (event) => {
+    const acceptBtn = event.target.closest('[data-action="accept-recommendation"]');
+    if (acceptBtn && !acceptBtn.disabled) {
+      const card = acceptBtn.closest('.recommendation-card');
+      const taskId = card?.dataset.taskId;
+      const date = card?.dataset.date;
+      if (!taskId || !date) return;
+      acceptBtn.disabled = true;
+      const origText = acceptBtn.textContent;
+      acceptBtn.textContent = '提交中…';
+      try {
+        await api(`/api/recommendations/${encodeURIComponent(taskId)}/accept`, {
+          method: 'POST',
+          body: JSON.stringify({ date })
+        });
+        await renderMeetingRecommendations();
+      } catch (e) {
+        acceptBtn.disabled = false;
+        acceptBtn.textContent = origText;
+        toast(`领取失败：${e.message || e}`);
+      }
+      return;
+    }
+    const refreshBtn = event.target.closest('[data-action="refresh-recommendations"]');
+    if (refreshBtn && !refreshBtn.disabled) {
+      refreshBtn.disabled = true;
+      const orig = refreshBtn.textContent;
+      refreshBtn.textContent = '生成中…';
+      const date = (typeof getMeetingDate === 'function' && getMeetingDate()) || tomorrowStr();
+      try {
+        await api('/api/recommendations/refresh', { method: 'POST', body: JSON.stringify({ date }) });
+        await renderMeetingRecommendations();
+      } catch (e) {
+        toast(`刷新失败：${e.message || e}`);
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = orig;
+      }
+    }
+  });
   document.querySelector('[data-action="copy-evening-report"]')?.addEventListener('click', () => {
     copyEveningReport().catch((e) => toast(e.message));
   });

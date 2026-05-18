@@ -5,7 +5,7 @@
 **Sprint：** 1.5a（thin slice）
 **Spec：** [docs/superpowers/specs/2026-05-18-ai-task-recommendation-design.md](./superpowers/specs/2026-05-18-ai-task-recommendation-design.md)
 **Branch：** `claude/quirky-moser-d4bda9`
-**当前状态：** 🟡 Phase 4 完成（17:45 调度器已接入推荐生成），等待 Phase 5 前端改造
+**当前状态：** 🟡 Phase 5 完成（前端 panel + 事件接入），等待 Phase 6 E2E 验证
 **最后更新：** 2026-05-18
 
 ---
@@ -19,7 +19,7 @@
 | 2 | 推荐引擎 service | ✅ 完成 | `01bba95` | server/services/dailyTaskSuggester.js |
 | 3 | API endpoints | ✅ 完成 | `7074c1e` | GET/POST recommendations 3 个 |
 | 4 | 调度器接入 17:45 | ✅ 完成 | `e2fd9e2` | scheduler.js 加生成步 |
-| 5 | 前端 panel 改造 | ⚪ 待开始 | - | index.html + src/app.js |
+| 5 | 前端 panel 改造 | ✅ 完成 | `a2f1c2a` + `<commit>` | index.html + src/app.js |
 | 6 | E2E smoke 验证 | ⚪ 待开始 | - | 烟雾测试通过 |
 
 图例：⚪ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
