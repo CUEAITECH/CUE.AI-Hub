@@ -227,6 +227,31 @@ export function normalizeEmail(value) {
   return email;
 }
 
+/**
+ * 从请求中提取 session token（同时支持 Authorization: Bearer 和 X-CUE-Session-Token）
+ * Bearer 前缀大小写不敏感（RFC 6750）。
+ */
+export function getSessionToken(req) {
+  const header = String(req.headers?.authorization || '');
+  const bearerMatch = header.match(/^Bearer\s+(.+)$/i);
+  if (bearerMatch) return bearerMatch[1].trim();
+  const fallback = req.headers?.['x-cue-session-token'];
+  return fallback ? String(fallback).trim() : '';
+}
+
+/**
+ * 从请求中拿到当前登录用户对象（基于 store.users 查 payload.sub）
+ * @returns user 对象 或 null
+ */
+export function getUserFromRequest(req, store) {
+  const token = getSessionToken(req);
+  if (!token) return null;
+  const payload = verifySessionToken(token);
+  if (!payload?.sub) return null;
+  const users = (store && store.users) || [];
+  return users.find((u) => u.id === payload.sub) || null;
+}
+
 export function normalizeUserRecord(user, now = new Date().toISOString()) {
   const projectIds = Array.isArray(user.projectIds) && user.projectIds.length ? user.projectIds : ['cue_ai_classroom'];
   const role = user.role || 'developer';

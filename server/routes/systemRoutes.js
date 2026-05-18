@@ -1,6 +1,7 @@
 import {
   createSessionToken,
   findUserForProject,
+  getSessionToken,
   hashPassword,
   issueEmailCode,
   issuePhoneCode,
@@ -17,21 +18,15 @@ import {
 } from '../services/auth.js';
 import { isSmtpConfigured, sendVerificationEmail } from '../services/mailer.js';
 
-function getBearerToken(req) {
-  const header = req.headers.authorization || '';
-  if (header.startsWith('Bearer ')) return header.slice(7).trim();
-  return req.headers['x-cue-session-token'] || '';
-}
-
 function getSessionUser(req, users, projectId) {
-  const session = verifySessionToken(getBearerToken(req));
+  const session = verifySessionToken(getSessionToken(req));
   if (!session || session.projectId !== projectId) return null;
   const user = users.find((item) => item.id === session.sub && item.active !== false) || null;
   return user && userCanManageProject(user, projectId) ? user : null;
 }
 
 function getProjectSessionUser(req, users, projectId) {
-  const session = verifySessionToken(getBearerToken(req));
+  const session = verifySessionToken(getSessionToken(req));
   if (!session || session.projectId !== projectId) return null;
   const user = users.find((item) => item.id === session.sub && item.active !== false) || null;
   return user && findUserForProject(users, user.username, projectId) ? user : null;
@@ -129,7 +124,7 @@ export function createSystemRoutes({
           return true;
         }
       } else {
-        const session = verifySessionToken(getBearerToken(req));
+        const session = verifySessionToken(getSessionToken(req));
         if (!session) {
           sendJson(res, 401, { ok: false, error: 'not authenticated' });
           return true;
@@ -186,7 +181,7 @@ export function createSystemRoutes({
           return true;
         }
       } else {
-        const session = verifySessionToken(getBearerToken(req));
+        const session = verifySessionToken(getSessionToken(req));
         if (!session) {
           sendJson(res, 401, { ok: false, error: 'not authenticated' });
           return true;
@@ -406,10 +401,7 @@ export function createSystemRoutes({
         sendJson(res, 500, { ok: false, error: 'auth store is not writable' });
         return true;
       }
-      const headers = req.headers || {};
-      const auth = headers.authorization || '';
-      const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : (headers['x-cue-session-token'] || '');
-      const session = verifySessionToken(token);
+      const session = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
       const { json } = await readBody(req);
       const before = await loadStore();

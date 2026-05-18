@@ -7,7 +7,7 @@ export function createPlanningRoutes({
   sendError,
   buildStageChecklist,
   aggregateDeliverableProgress,
-  buildHybridAnalysis,
+  refreshAnalysisIntoStore,
   scanRisks,
   buildMetrics,
   generatePlanAlternatives,
@@ -74,15 +74,8 @@ export function createPlanningRoutes({
     }
 
     if (req.method === 'POST' && url.pathname === '/api/ai/refresh-analysis') {
-      const store = await loadStore();
-      const analysis = await buildHybridAnalysis(store);
-      const nextStore = await updateStore((draft) => ({
-        ...draft,
-        semanticLinks: analysis.semanticLinks || {},
-        riskAnalyses: analysis.riskAnalyses || [],
-        healthAnalysis: analysis.healthAnalysis || null,
-        aiAnalysisUpdatedAt: analysis.generatedAt
-      }));
+      await refreshAnalysisIntoStore();
+      const nextStore = await loadStore();
       const alerts = scanRisks(nextStore);
       sendJson(res, 200, {
         semanticLinks: nextStore.semanticLinks,

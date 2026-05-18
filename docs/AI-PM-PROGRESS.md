@@ -1,0 +1,90 @@
+# AI 任务推荐功能 — 实施进度看板
+
+> **实时维护**。每个 Phase / Task 完成后立即更新此文档，避免上下文丢失导致重复工作或冲突。
+
+**Sprint：** 1.5a（thin slice）
+**Spec：** [docs/superpowers/specs/2026-05-18-ai-task-recommendation-design.md](./superpowers/specs/2026-05-18-ai-task-recommendation-design.md)
+**Branch：** `claude/quirky-moser-d4bda9`
+**当前状态：** 🟢 Sprint 1.5a thin slice 完成
+**最后更新：** 2026-05-18
+
+---
+
+## Phase 进度总览
+
+| # | Phase | 状态 | 提交 SHA | 关键产出 |
+|---|------|------|---------|---------|
+| 0 | spec & plan | ✅ 完成 | - | spec + implementation plan |
+| 1 | 数据模型 + migrateStore | ✅ 完成 | `d3aaf25` | store.dailyTaskSuggestions + aiPromptTraces, assignment 加字段 |
+| 2 | 推荐引擎 service | ✅ 完成 | `01bba95` | server/services/dailyTaskSuggester.js |
+| 3 | API endpoints | ✅ 完成 | `7074c1e` | GET/POST recommendations 3 个 |
+| 4 | 调度器接入 17:45 | ✅ 完成 | `e2fd9e2` | scheduler.js 加生成步 |
+| 5 | 前端 panel 改造 | ✅ 完成 | `a2f1c2a` + `b13c639` | index.html + src/app.js |
+| 6 | E2E smoke 验证 | ✅ 完成 | `d77a7c4` | 烟测通过 + 修复同用户重复 accept 幂等性 bug |
+
+图例：⚪ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
+
+---
+
+## 已确认的关键设计决策
+
+(摘自 brainstorming 全程，每条都有 spec 章节锚)
+
+| # | 决策 | 来源 |
+|---|------|------|
+| Q1 | UI 入口：改造现有 meeting tab + 概览页 banner（banner 留 Sprint 1.5c）| spec §5 |
+| Q2 | 可见性：默认个人，可切全员（全员 toggle 留 1.5c）| spec §5 + §7 |
+| Q3 | 推荐来源：现有任务池筛选，AI 不创建新任务 | spec §4.2 |
+| Q4 | 生成时机：17:45 自动 + 手动刷新按钮 | spec §3.2, §4.5 |
+| Q5 | 兜底：✓/换/看全部/今天没任务（thin slice 只做 ✓）| spec §7 |
+| Q6 | 数据模型：新 `dailyTaskSuggestions`，接受后转 assignment | spec §2 |
+| Q7 | LLM 调用方式：独立调用每用户 1 次，prompt cache 命中 system | spec §4.3 |
+| Q8 | superseded 排除：同 forDate 内排除，跨日 reset | spec §2.4 |
+| Q9 | 任务冲突：UI 灰态 + 409 兜底，不自动补位 | spec §3.3 |
+| Q10 | 实施范围：thin slice 6 Phase（不含 swap/看全部/全员/banner/WeCom）| spec §7 |
+| Q11 | LLM 失败：fail loud，不做规则降级（保 PMF 数据纯净度）| spec §4.4 |
+| Q12 | 加 `store.aiPromptTraces` 落 LLM 输入/输出日志，解锁 prompt 迭代 | spec §2.5, §4.5, §8.2 |
+
+---
+
+## Sprint 1.5a 收尾后的下一步
+
+- [ ] 配 `ANTHROPIC_API_KEY` 上生产环境
+- [ ] 团队试用 1-2 周收集 PMF 指标（接受率 / 刷新率 / aiPromptTraces 质量）
+- [ ] 根据反馈决定是否启动 **Sprint 1.5b**（换一个 / 看全部 / 今天没任务）
+- [ ] 根据反馈决定是否启动 **Sprint 1.5c**（全员视图 / 概览 banner / WeCom 适配）
+
+---
+
+## 决策日志（implementer 遇到分歧记这里）
+
+(空，待 implementer 添加)
+
+---
+
+## 已知 issues / 偏离设计的地方
+
+- E2E 烟测中无 `ANTHROPIC_API_KEY` 环境变量，LLM 排序路径未经 HTTP 真实端到端验证（503 失败路径已确认）；happy-path 通过手工注入 `dailyTaskSuggestions` 候选 + 调用 `/accept` 完成验证。生产环境带 key 上线后建议复跑一次完整 refresh→accept。
+- 修复 commit `d77a7c4`：同一用户对已 owner 的任务重复 POST `/accept` 之前会重复创建 assignment；现已幂等返回原 assignment + `idempotent:true`。
+- ~~Promise.race socket leak~~ **已修** `a1cdcc9`：`callClaude` 现在接收 `options.signal`（传给 Anthropic SDK 第 2 个参数），`dailyTaskSuggester` 用 `AbortController` + `setTimeout(abort)` + `finally clearTimeout` 三联组合，超时时底层 HTTP 真正取消。
+- **scheduler 17:45 单进程假设**：`lastEveningReportDate` 是 in-memory guard，scale 到多实例时需要分布式锁。当前单进程部署 OK。
+- **bindEvents 重复调用风险**：新增的全局 click delegation 如果 `bindEvents` 被调用 2 次（目前不会，但 hot-reload 类场景会），accept 会触发多次。当前 bindEvents 只在启动调一次，无影响。
+
+---
+
+## PMF 指标看板（功能上线后开始收集）
+
+| 指标 | 当前值 | 目标 |
+|------|--------|------|
+| 接受率 | - | > 60% |
+| 刷新率 | - | < 30% |
+| 候选池健康 | - | 平均 ≥ 5 个 |
+| 接受后完成率 | - | > 70% |
+| 撤销率 | - | < 10% |
+
+---
+
+## 后续 Sprint 蓝图
+
+- **1.5b**（看反馈）：换一个 / 看全部 / 今天没任务 三出口
+- **1.5c**（看反馈）：全员视图 + 概览 banner + WeCom 适配 + 周报推送

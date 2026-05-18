@@ -21,12 +21,14 @@ export async function callClaude(systemPrompt, userPrompt, options = {}) {
   const client = getClient();
   if (!client) return null;
   try {
+    // SDK 接收 second-arg request options（AbortSignal 等），允许调用方在超时时取消底层 HTTP 请求
+    const requestOptions = options.signal ? { signal: options.signal } : undefined;
     const response = await client.messages.create({
       model: getModel(),
       max_tokens: options.maxTokens || 4096,
       system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }]
-    });
+    }, requestOptions);
     // 检测因 max_tokens 截断的情况，给出明确日志
     if (response.stop_reason === 'max_tokens') {
       console.warn(`[Claude] 输出在 max_tokens=${options.maxTokens || 4096} 处被截断（stop_reason=max_tokens），输出可能不完整`);

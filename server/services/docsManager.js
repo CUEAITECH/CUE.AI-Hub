@@ -10,6 +10,8 @@
  */
 
 import { callClaude, parseJsonOutput } from './claude.js';
+import { createId, loadStore, updateStore } from '../store.js';
+import { defaultStageChecklist, reassignChecklistPhaseIds } from './stageChecklist.js';
 
 const API_BASE = 'https://api.github.com';
 const PROGRESS_DOC_PATH = 'docs/阶段进度追踪.md';
@@ -340,11 +342,11 @@ export async function parsePhasesFromDocs(docs, parsedTasks = [], existingNodes 
           if (!phases.length) throw new Error('no valid phases');
           const phaseIdSet = new Set(phases.map((p) => p.id));
           // 处理 nodes：通过标题匹配复用已有节点 id
-          const normalizeTitle = (t) => String(t || '').replace(/\s+/g, '').toLowerCase();
-          const existingByTitle = new Map(existingNodes.map((n) => [normalizeTitle(n.title), n.id]));
+          const compactTitle = (t) => String(t || '').replace(/\s+/g, '').toLowerCase();
+          const existingByTitle = new Map(existingNodes.map((n) => [compactTitle(n.title), n.id]));
           const nodes = Array.isArray(parsed.nodes)
             ? parsed.nodes.slice(0, 40).map((n) => {
-                const normalizedTitle = normalizeTitle(n.title);
+                const normalizedTitle = compactTitle(n.title);
                 // 复用：完整包含 or 被包含关系
                 const matchedId = existingByTitle.get(normalizedTitle)
                   || [...existingByTitle.entries()].find(([t]) => t.includes(normalizedTitle) || normalizedTitle.includes(t))?.[1];
@@ -665,4 +667,538 @@ export async function writeProgressToGitHub(owner, repo, markdown) {
 
   console.log(`[DocsManager] 写回成功: ${owner}/${repo}/${PROGRESS_DOC_PATH}`);
   return true;
+}
+
+/**
+ * 调度器专用：轻量 sync-docs
+ * 刷新 store.docTasks 快照，并把候选任务导入 hub 任务板（简单标题去重，不做 deliverable 绑定）。
+ * 用于 17:45 自动触发，保证晚会前任务板有可领取候选。
+ *
+ * @param {object} project
+ * @param {string} projectId
+ * @param {object} deps - { updateStore, createId }
+ * @returns {Promise<{imported: number, refreshed: number}>}
+ */
+// ===== importDocs 任务匹配 helper（从 projectRoutes.js 迁移） =====
+
+// slugId：需要外部注入 createId（fallback 用），所以做成 factory
+export function makeSlugId(createId) {
+  return function slugId(prefix, value) {
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w㐀-鿿]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40);
+    return `${prefix}_${normalized || createId('node').replace(/^node_/, '')}`;
+  };
+}
+
+export function normalizeTitle(value) {
+  return String(value || '').replace(/\s+/g, '').replace(/[【】()[\]（）]/g, '').toLowerCase();
+}
+
+export function isFuzzyDuplicateTitle(a, b) {
+  if (!a || !b) return false;
+  const diff = Math.abs(a.length - b.length);
+  if (diff > 8) return false;
+  return a.includes(b) || b.includes(a);
+}
+
+const COMMON_ABBREVS = new Set([
+  'api', 'sdk', 'sop', 'sos', 'mvp', 'sku', 'oauth', 'jwt', 'http', 'https',
+  'json', 'yaml', 'crud', 'cors', 'rest', 'cli', 'gui', 'ux', 'ui',
+  'ci', 'cd', 'dev', 'prod', 'qa', 'env', 'v1', 'v2', 'mr', 'pr', 'pm'
+]);
+
+export function extractDistinctiveTokens(text) {
+  const ascii = String(text || '').toLowerCase().match(/[a-z][a-z0-9]+/g) || [];
+  return ascii.filter((t) => t.length >= 4 && !COMMON_ABBREVS.has(t));
+}
+
+export function extractTokens(text) {
+  const tokens = new Set();
+  const ascii = String(text || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+  ascii.forEach((t) => tokens.add(t));
+  const cjkRuns = String(text || '').match(/[一-鿿]+/g) || [];
+  for (const run of cjkRuns) {
+    for (let i = 0; i < run.length - 1; i++) {
+      tokens.add(run.slice(i, i + 2));
+    }
+    if (run.length === 1) tokens.add(run);
+  }
+  return tokens;
+}
+
+export function isTitleConsistent(taskTitle, deliverableTitle) {
+  const taskTokens = extractDistinctiveTokens(taskTitle);
+  const dlvTokens = extractDistinctiveTokens(deliverableTitle);
+  if (!taskTokens.length || !dlvTokens.length) return true;
+  const taskLower = String(taskTitle).toLowerCase();
+  const dlvLower = String(deliverableTitle).toLowerCase();
+  if (taskTokens.some((t) => dlvLower.includes(t))) return true;
+  if (dlvTokens.some((t) => taskLower.includes(t))) return true;
+  return false;
+}
+
+export function jaccardSimilarity(a, b) {
+  const ta = extractTokens(a);
+  const tb = extractTokens(b);
+  if (!ta.size || !tb.size) return 0;
+  let inter = 0;
+  for (const t of ta) if (tb.has(t)) inter++;
+  const union = ta.size + tb.size - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+export function sharedPrefixLen(a, b) {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i++;
+  return i;
+}
+
+export function isLikelyDuplicate(a, b) {
+  if (!a || !b) return false;
+  const normA = normalizeTitle(a);
+  const normB = normalizeTitle(b);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+  if (Math.abs(normA.length - normB.length) <= 8 && (normA.includes(normB) || normB.includes(normA))) return true;
+  if (sharedPrefixLen(normA, normB) >= 4 && jaccardSimilarity(a, b) >= 0.3) return true;
+  return false;
+}
+
+export function findPhaseByLLMKeywords(deliverableTitle, phases) {
+  if (!deliverableTitle || !phases.length) return { phaseId: null, score: 0 };
+  const dlvLower = String(deliverableTitle).toLowerCase();
+  const dlvTokens = extractTokens(deliverableTitle);
+  let best = null;
+  let bestScore = 0;
+  for (const phase of phases) {
+    const keywords = Array.isArray(phase.productKeywords) ? phase.productKeywords : [];
+    if (!keywords.length) continue;
+    let score = 0;
+    for (const kw of keywords) {
+      const kwLower = String(kw || '').toLowerCase().trim();
+      if (!kwLower) continue;
+      if (dlvLower.includes(kwLower)) { score += 2; continue; }
+      const kwTokens = extractTokens(kw);
+      for (const t of kwTokens) if (dlvTokens.has(t)) { score += 1; break; }
+    }
+    if (score > bestScore) { bestScore = score; best = phase.id; }
+  }
+  return { phaseId: best, score: bestScore };
+}
+
+export function isBindingPlausible(taskTitle, deliverable, parsedPhasesResult) {
+  if (!isTitleConsistent(taskTitle, deliverable.title)) return false;
+  if (!deliverable.phaseId || !parsedPhasesResult?.phases?.length) return true;
+  const phases = parsedPhasesResult.phases;
+  const taskBest = findPhaseByLLMKeywords(taskTitle, phases);
+  if (!taskBest.phaseId || taskBest.score < 2) return true;
+  if (taskBest.phaseId === deliverable.phaseId) return true;
+  const deliverablePhase = phases.find((p) => p.id === deliverable.phaseId);
+  let dlvPhaseScore = 0;
+  if (deliverablePhase && Array.isArray(deliverablePhase.productKeywords)) {
+    const tl = String(taskTitle).toLowerCase();
+    const tt = extractTokens(taskTitle);
+    for (const k of deliverablePhase.productKeywords) {
+      const kl = String(k || '').toLowerCase().trim();
+      if (!kl) continue;
+      if (tl.includes(kl)) { dlvPhaseScore += 2; continue; }
+      const kt = extractTokens(k);
+      for (const t of kt) if (tt.has(t)) { dlvPhaseScore += 1; break; }
+    }
+  }
+  return taskBest.score - dlvPhaseScore < 2;
+}
+
+export function findPhaseForDeliverable(deliverableTitle, parsedPhasesResult) {
+  if (!parsedPhasesResult || !deliverableTitle) return null;
+  const { phases = [], nodes = [], deliverableAssignments = {} } = parsedPhasesResult;
+  const phaseIdSet = new Set(phases.map((p) => p.id));
+  const kw = findPhaseByLLMKeywords(deliverableTitle, phases);
+  const normDlv = normalizeTitle(deliverableTitle);
+  let llmMap = deliverableAssignments[deliverableTitle];
+  if (!llmMap || !phaseIdSet.has(llmMap)) {
+    for (const [k, v] of Object.entries(deliverableAssignments)) {
+      if (normalizeTitle(k) === normDlv && phaseIdSet.has(v)) { llmMap = v; break; }
+    }
+  }
+  if (llmMap && kw.phaseId && llmMap !== kw.phaseId && kw.score >= 2) {
+    const llmPhaseScore = (() => {
+      const llmPhase = phases.find((p) => p.id === llmMap);
+      if (!llmPhase || !Array.isArray(llmPhase.productKeywords)) return 0;
+      const dlvLower = deliverableTitle.toLowerCase();
+      const dlvTokens = extractTokens(deliverableTitle);
+      let s = 0;
+      for (const k of llmPhase.productKeywords) {
+        const kl = String(k || '').toLowerCase().trim();
+        if (!kl) continue;
+        if (dlvLower.includes(kl)) { s += 2; continue; }
+        const kt = extractTokens(k);
+        for (const t of kt) if (dlvTokens.has(t)) { s += 1; break; }
+      }
+      return s;
+    })();
+    if (kw.score - llmPhaseScore >= 2) return kw.phaseId;
+  }
+  if (llmMap && phaseIdSet.has(llmMap)) return llmMap;
+  if (!normDlv) return null;
+  if (kw.phaseId && kw.score >= 2) return kw.phaseId;
+  const nodeMatch = nodes.find((n) => {
+    const normNode = normalizeTitle(n.title || '');
+    return normNode === normDlv || normNode.includes(normDlv) || normDlv.includes(normNode);
+  });
+  if (nodeMatch?.phaseId && phaseIdSet.has(nodeMatch.phaseId)) return nodeMatch.phaseId;
+  const dlvTokens = extractTokens(deliverableTitle);
+  let bestPhaseId = null;
+  let bestScore = 0;
+  for (const phase of phases) {
+    const phaseTokens = extractTokens(phase.title || '');
+    let score = 0;
+    for (const t of dlvTokens) if (phaseTokens.has(t)) score++;
+    if (score > bestScore) { bestScore = score; bestPhaseId = phase.id; }
+  }
+  if (bestScore >= 1) return bestPhaseId;
+  return kw.phaseId || null;
+}
+
+export function findDeliverableByTitle(deliverables = [], title = '') {
+  const key = normalizeTitle(title);
+  if (!key) return null;
+  return deliverables.find((item) => {
+    const candidate = normalizeTitle(item.title);
+    return candidate === key || candidate.includes(key) || key.includes(candidate);
+  }) || null;
+}
+
+export function isPlaceholderAcceptance(value) {
+  return !String(value || '').trim() || /待补充|未定|todo/i.test(String(value || ''));
+}
+
+// 内部 helper：合并 stage checklist（依赖 parsedPhasesResult + defaultStageChecklist + reassignChecklistPhaseIds）
+function mergeStageChecklist(draft, parsedPhasesResult) {
+  if (!parsedPhasesResult?.phases?.length) return;
+  const { phases: newPhases, nodes: newNodes, nodeAssignments } = parsedPhasesResult;
+  draft.currentStage = { ...(draft.currentStage || {}), phases: newPhases };
+  if (!(newNodes || []).length) return;
+  const currentChecklist = draft.currentStage.checklist?.length
+    ? draft.currentStage.checklist : defaultStageChecklist;
+  const oldById = new Map(currentChecklist.map((node) => [node.id, node]));
+  const newNodeSet = new Set(newNodes.map((node) => node.id));
+  const mergedNodes = [
+    ...newNodes.map((node) => {
+      const old = oldById.get(node.id);
+      return old
+        ? { ...old, title: node.title || old.title, acceptance: node.acceptance || old.acceptance, phaseId: node.phaseId || old.phaseId }
+        : node;
+    }),
+    ...currentChecklist.filter((node) => !newNodeSet.has(node.id) && (node.taskIds?.length > 0))
+  ];
+  draft.currentStage.checklist = reassignChecklistPhaseIds(mergedNodes, newPhases, nodeAssignments || {});
+}
+
+// 应用进度文档建议（用 docs/阶段进度追踪.md 中标记已完成的项给 deliverable 加 suggest 标）
+function applyProgressDocSuggestions(draft, docs) {
+  const progressDoc = (docs || []).find((doc) => String(doc.name || doc.path || '').includes('阶段进度追踪'));
+  if (!progressDoc) return 0;
+  const progressItems = parseProgressDoc(progressDoc.content || '');
+  let suggested = 0;
+  draft.deliverables = draft.deliverables || [];
+  for (const item of progressItems) {
+    if (item.docStatus !== '已完成') continue;
+    const deliverable = findDeliverableByTitle(draft.deliverables, item.title);
+    if (!deliverable || deliverable.status === '已完成' || deliverable.manualOverride?.status === '已完成') continue;
+    deliverable.docSuggestComplete = true;
+    deliverable.docStatus = item.docStatus;
+    deliverable.docStatusUpdatedAt = new Date().toISOString();
+    suggested++;
+  }
+  return suggested;
+}
+
+export async function importDocsForProject(project, projectId, importLimit) {
+  const slugId = makeSlugId(createId);
+
+  const [owner, repo] = (project.githubFullRepo || project.repository || '').split('/');
+  if (!owner || !repo) {
+    throw new Error('项目未配置 githubFullRepo，请先 PATCH 设置');
+  }
+
+  const docs = await fetchProjectDocs(owner, repo);
+  if (!docs.length) {
+    return { imported: 0, message: 'docs/ 目录无计划文档' };
+  }
+
+  const parsedTasks = await parseDocsForTasks(docs);
+  if (!parsedTasks.length) {
+    return { imported: 0, message: 'LLM 未解析出任务（无 API key 或文档无可执行任务）' };
+  }
+
+  const storeSnap = await loadStore();
+  const planDocs = docs.filter((doc) => !String(doc.name || doc.path || '').includes('阶段进度追踪'));
+  const existingNodes = (storeSnap.currentStage?.checklist?.length
+    ? storeSnap.currentStage.checklist : defaultStageChecklist
+  ).map((node) => ({ id: node.id, title: node.title, phaseId: node.phaseId }));
+  const parsedPhasesResult = await parsePhasesFromDocs(planDocs, parsedTasks, existingNodes);
+  const effectiveImportLimit = Number(importLimit ?? process.env.DOC_TASK_IMPORT_LIMIT ?? 8);
+  // selectionContext (from PR #21): use real hub state to bias ranking
+  //   - hubTasks 过滤已完成任务
+  //   - semanticLinks.commitTaskLinks 降权已被 commit 覆盖的任务
+  //   - eveningReports[最新].nextTargets 提权晚会指定的下一步
+  const selectionContext = {
+    hubTasks: (storeSnap.tasks || []).filter((t) => !t.projectId || t.projectId === projectId),
+    semanticLinks: storeSnap.semanticLinks || {},
+    eveningReports: storeSnap.eveningReports || {}
+  };
+  const dailyCandidates = selectDailyDocTasks(parsedTasks, effectiveImportLimit, selectionContext);
+  // 保证每个 unique deliverableTitle 至少有一个代表任务入候选（让路径图 phase 都有内容，不留空 phase）
+  const coveredDeliverables = new Set(dailyCandidates.map((t) => t.deliverableTitle).filter(Boolean));
+  const representatives = [];
+  for (const parsed of parsedTasks) {
+    const dlv = parsed.deliverableTitle;
+    if (!dlv || coveredDeliverables.has(dlv)) continue;
+    if (parsed.status === 'completed') continue;
+    coveredDeliverables.add(dlv);
+    representatives.push(parsed);
+  }
+  const importCandidates = [...dailyCandidates, ...representatives];
+
+  let imported = 0;
+  let createdDeliverables = 0;
+  let docSuggestions = 0;
+  const nextStore = await updateStore((draft) => {
+    let existing = draft.tasks || [];
+    draft.deliverables = draft.deliverables || [];
+    // 找一个与 task 标题产品域一致的 deliverable（用于校验 LLM 给的 deliverableTitle）
+    function findConsistentDeliverableForTask(taskTitle) {
+      if (!taskTitle) return null;
+      return (draft.deliverables || []).find((d) => (
+        (!d.projectId || d.projectId === projectId)
+        && isTitleConsistent(taskTitle, d.title)
+        && extractDistinctiveTokens(taskTitle).some((t) => String(d.title).toLowerCase().includes(t))
+      )) || null;
+    }
+
+    for (const task of importCandidates) {
+      let deliverable = findDeliverableByTitle(draft.deliverables, task.deliverableTitle || task.title);
+      // 可信度校验：LLM 给的 deliverable 是否合理（ASCII 标识符 + phase productKeywords）
+      if (deliverable && !isBindingPlausible(task.title, deliverable, parsedPhasesResult)) {
+        const better = findConsistentDeliverableForTask(task.title);
+        deliverable = better; // 没找到就 null（任务暂留为孤儿，下次重绑）
+      }
+      if (deliverable && !deliverable.phaseId) {
+        // 已有 deliverable 但 phaseId 为空，尝试补填
+        const resolvedPhaseId = findPhaseForDeliverable(deliverable.title, parsedPhasesResult);
+        if (resolvedPhaseId) {
+          deliverable.phaseId = resolvedPhaseId;
+          deliverable.updatedAt = new Date().toISOString();
+        }
+      }
+      if (!deliverable && (task.deliverableTitle || task.title)) {
+        deliverable = {
+          id: slugId('deliverable', task.deliverableTitle || task.title),
+          projectId,
+          phaseId: findPhaseForDeliverable(task.deliverableTitle || task.title, parsedPhasesResult),
+          title: task.deliverableTitle || task.title,
+          owner: task.owner || '',
+          acceptance: task.description || '',
+          keywords: [task.title, task.deliverableTitle, task.sourceDoc].filter(Boolean),
+          status: task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '推进中' : '待补证据',
+          progress: task.status === 'completed' ? 100 : 0,  // 进度由子任务聚合，不在此硬编码
+          sourceDocPath: task.sourceDoc || '',
+          docSuggestComplete: false,
+          manualOverride: null,
+          taskIds: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        draft.deliverables.push(deliverable);
+        createdDeliverables++;
+      }
+      // 用 isLikelyDuplicate（精确 + 模糊包含 + Jaccard）去重，防止变体堆积
+      const duplicate = existing.find(
+        (item) => {
+          const sameDoc = !item.sourceDoc || !task.sourceDoc || item.sourceDoc === task.sourceDoc;
+          return sameDoc && isLikelyDuplicate(item.title, task.title);
+        }
+      );
+      // 兜底：docs 来的任务必须有 deliverableId，不允许孤儿状态
+      if (!deliverable && task.sourceDoc) {
+        const fallbackTitle = task.deliverableTitle || task.title;
+        deliverable = {
+          id: slugId('deliverable', fallbackTitle),
+          projectId,
+          phaseId: findPhaseForDeliverable(fallbackTitle, parsedPhasesResult),
+          title: fallbackTitle,
+          owner: task.owner || '',
+          acceptance: task.acceptance || task.description || '',
+          keywords: [task.title, task.deliverableTitle, task.sourceDoc].filter(Boolean),
+          status: task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '推进中' : '待补证据',
+          progress: 0,
+          sourceDocPath: task.sourceDoc || '',
+          docSuggestComplete: false,
+          manualOverride: null,
+          taskIds: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        draft.deliverables.push(deliverable);
+        createdDeliverables++;
+      }
+
+      if (!duplicate) {
+        const taskId = createId('task');
+        existing.unshift({
+          id: taskId,
+          title: task.title,
+          // task.owner 永远是 '待认领'：LLM 建议的负责人只是建议，
+          // task.owner 应该只反映"实际领取"状态。LLM 的建议保留在 suggestedOwner，前端可选展示
+          owner: '待认领',
+          suggestedOwner: task.owner || '',
+          priority: task.priority || 'P1',
+          status: task.status || 'pending',
+          description: task.description || '',
+          dueDate: task.dueDate || '',
+          sourceDoc: task.sourceDoc || '',
+          projectId,
+          deliverableId: deliverable?.id || null,
+          acceptance: task.acceptance || deliverable?.acceptance || task.description || '',
+          createdAt: new Date().toISOString()
+        });
+        if (deliverable && !deliverable.taskIds?.includes(taskId)) {
+          deliverable.taskIds = [...(deliverable.taskIds || []), taskId];
+        }
+        imported++;
+      } else {
+        // 重复任务：只要有 deliverable 且原任务未绑定，就补上 deliverableId
+        if (deliverable && !duplicate.deliverableId) {
+          duplicate.deliverableId = deliverable.id;
+          if (!deliverable.taskIds?.includes(duplicate.id)) {
+            deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
+          }
+        }
+        // 可信度校验通过时进一步更新 acceptance 等字段
+        if (deliverable && isBindingPlausible(duplicate.title, deliverable, parsedPhasesResult)) {
+          duplicate.deliverableId = deliverable.id;
+          if (isPlaceholderAcceptance(duplicate.acceptance)) {
+            duplicate.acceptance = task.acceptance || deliverable.acceptance || task.description || duplicate.acceptance || '';
+          }
+          if (!deliverable.taskIds?.includes(duplicate.id)) {
+            deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];
+          }
+        }
+      }
+    } // end for (const task of importCandidates)
+    // 第二遍：只把存量任务重绑到第一遍已经创建的 deliverable，不创建新的
+    // 防止幽灵 deliverable（LLM 解析出 40 个任务但只导入 8 个时，剩下 32 个会创建空 deliverable 污染路径图）
+    let rebound = 0;
+    for (const parsed of parsedTasks) {
+      const targetDlvTitle = parsed.deliverableTitle || parsed.title;
+      if (!targetDlvTitle) continue;
+      const deliverable = findDeliverableByTitle(draft.deliverables, targetDlvTitle);
+      if (!deliverable) continue; // 不创建幽灵
+      // 补填 phaseId（已有 deliverable 但缺 phase）
+      if (!deliverable.phaseId) {
+        const resolved = findPhaseForDeliverable(deliverable.title, parsedPhasesResult);
+        if (resolved) {
+          deliverable.phaseId = resolved;
+          deliverable.updatedAt = new Date().toISOString();
+        }
+      }
+      // 用 isLikelyDuplicate 找现有匹配任务，加上可信度校验后再统一绑定
+      for (const task of existing) {
+        if (task.projectId && task.projectId !== projectId) continue;
+        if (!isLikelyDuplicate(task.title, parsed.title)) continue;
+        if (!isBindingPlausible(task.title, deliverable, parsedPhasesResult)) continue;
+        if (task.deliverableId !== deliverable.id) {
+          task.deliverableId = deliverable.id;
+          rebound++;
+        }
+        if (!deliverable.taskIds?.includes(task.id)) {
+          deliverable.taskIds = [...(deliverable.taskIds || []), task.id];
+        }
+      }
+    }
+    // 第三遍：deliverable 级模糊去重——若两个 deliverable normTitle 互相包含且长度差 ≤ 8，合并
+    // 保留 taskIds 多的，合并对方的 taskIds 和被绑的 task.deliverableId
+    const dedupedDeliverables = [];
+    const mergedMap = new Map(); // oldId → newId
+    for (const dlv of draft.deliverables) {
+      if (dlv.projectId && dlv.projectId !== projectId) {
+        dedupedDeliverables.push(dlv);
+        continue;
+      }
+      const dlvNorm = normalizeTitle(dlv.title);
+      const peer = dedupedDeliverables.find((existing) =>
+        existing.projectId === projectId
+        && (normalizeTitle(existing.title) === dlvNorm
+          || isFuzzyDuplicateTitle(normalizeTitle(existing.title), dlvNorm))
+      );
+      if (peer) {
+        // 合并到 peer：选 taskIds 多的为主，少的为附
+        const peerCount = (peer.taskIds || []).length;
+        const dlvCount = (dlv.taskIds || []).length;
+        const winner = peerCount >= dlvCount ? peer : dlv;
+        const loser = peerCount >= dlvCount ? dlv : peer;
+        winner.taskIds = Array.from(new Set([...(winner.taskIds || []), ...(loser.taskIds || [])]));
+        winner.keywords = Array.from(new Set([...(winner.keywords || []), ...(loser.keywords || [])]));
+        if (!winner.phaseId && loser.phaseId) winner.phaseId = loser.phaseId;
+        mergedMap.set(loser.id, winner.id);
+        if (winner === dlv) {
+          // 替换 dedupedDeliverables 中的 peer 为 dlv
+          const idx = dedupedDeliverables.indexOf(peer);
+          dedupedDeliverables[idx] = dlv;
+        }
+      } else {
+        dedupedDeliverables.push(dlv);
+      }
+    }
+    draft.deliverables = dedupedDeliverables;
+    // 重映射 tasks/activities/assignments 上被合并掉的 deliverableId
+    if (mergedMap.size > 0) {
+      draft.tasks = (draft.tasks || []).map((task) => (
+        task.deliverableId && mergedMap.has(task.deliverableId)
+          ? { ...task, deliverableId: mergedMap.get(task.deliverableId) }
+          : task
+      ));
+      existing = draft.tasks;
+      draft.activities = (draft.activities || []).map((activity) => (
+        activity.deliverableId && mergedMap.has(activity.deliverableId)
+          ? { ...activity, deliverableId: mergedMap.get(activity.deliverableId) }
+          : activity
+      ));
+      draft.assignments = (draft.assignments || []).map((assignment) => (
+        assignment.deliverableId && mergedMap.has(assignment.deliverableId)
+          ? { ...assignment, deliverableId: mergedMap.get(assignment.deliverableId) }
+          : assignment
+      ));
+    }
+    draft._syncDocsLog = { rebound, mergedDeliverables: mergedMap.size };
+    draft.tasks = existing;
+    if (!draft.docTasks) draft.docTasks = {};
+    draft.docTasks[projectId] = parsedTasks;
+    mergeStageChecklist(draft, parsedPhasesResult);
+    docSuggestions = applyProgressDocSuggestions(draft, docs);
+    return draft;
+  });
+
+  return {
+    imported,
+    selected: importCandidates.length,
+    totalCandidates: parsedTasks.length,
+    importLimit: Math.min(Math.max(Number.isFinite(effectiveImportLimit) ? Math.floor(effectiveImportLimit) : 8, 1), 20),
+    message: `已从 ${parsedTasks.length} 个候选任务中选择 ${importCandidates.length} 个适合近期领取的任务导入。`,
+    importedTasks: nextStore.tasks.filter((task) => (
+      task.projectId === projectId && importCandidates.some((candidate) =>
+        candidate.title === task.title && candidate.sourceDoc === task.sourceDoc
+      )
+    )),
+    candidates: parsedTasks,
+    phases: parsedPhasesResult?.phases?.length || 0,
+    createdDeliverables,
+    docSuggestComplete: docSuggestions
+  };
 }

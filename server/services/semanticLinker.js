@@ -1,6 +1,7 @@
 import { callClaude, parseJsonOutput, isAvailable } from './claude.js';
 import { buildStageChecklist } from './stageChecklist.js';
 import { buildMetrics, scanRisks } from './riskEngine.js';
+import { loadStore, updateStore } from '../store.js';
 
 const LINK_SYSTEM_PROMPT = `你是 Cue.AI 项目的 AI 技术项目经理。你负责把任务、阶段节点、Git commit 语义关联起来。
 
@@ -193,4 +194,22 @@ export async function buildHybridAnalysis(store) {
     generatedAt: new Date().toISOString(),
     llmEnabled: isAvailable()
   };
+}
+
+/**
+ * 通用的"刷新并落库"封装：loadStore → buildHybridAnalysis → updateStore
+ * 三个调用方共用：planningRoutes / scheduler / projectRoutes(daily-scan)
+ * 返回 { semanticLinks, riskAnalyses, healthAnalysis, aiAnalysisUpdatedAt }
+ */
+export async function refreshAnalysisIntoStore() {
+  const snap = await loadStore();
+  const analysis = await buildHybridAnalysis(snap);
+  await updateStore((draft) => ({
+    ...draft,
+    semanticLinks: analysis.semanticLinks || {},
+    riskAnalyses: analysis.riskAnalyses || [],
+    healthAnalysis: analysis.healthAnalysis || null,
+    aiAnalysisUpdatedAt: analysis.generatedAt
+  }));
+  return analysis;
 }

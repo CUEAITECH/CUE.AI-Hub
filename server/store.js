@@ -195,6 +195,8 @@ export function migrateStore(store) {
     riskAnalyses: [],
     healthAnalysis: null,
     users: [],
+    dailyTaskSuggestions: {},
+    aiPromptTraces: [],
     currentStage: defaultCurrentStage,
     ...store
   };

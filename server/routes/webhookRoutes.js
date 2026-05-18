@@ -1,3 +1,7 @@
+// 进行中的项目级任务（防止 webhook 突发流量导致 LLM 调用堆积）
+const inFlightDocsSync = new Set();
+const inFlightPlanAdjust = new Set();
+
 export function createWebhookRoutes({
   createId,
   updateStore,
@@ -12,7 +16,8 @@ export function createWebhookRoutes({
   buildMetrics,
   scanRisks,
   githubWebhookSecret,
-  bindActivityToExplicitRefs
+  bindActivityToExplicitRefs,
+  importDocsForProject
 }) {
   return async function webhookRoutes(req, res, url) {
     if (req.method !== 'POST' || url.pathname !== '/api/webhooks/github') return false;
@@ -59,10 +64,46 @@ export function createWebhookRoutes({
     });
 
     if (boundActivities.length > 0) {
-      generatePlanAdjustment(boundActivities, nextStore).then((adjustment) => {
-        if (!adjustment) return null;
-        return persistPlanAdjustment(adjustment, boundActivities, 'github-webhook');
-      }).catch((err) => console.error('[PlanAdjust]', err.message));
+      // 用 webhook 中第一个 activity 的 repo 当 key（一次 webhook 通常是一个 repo）
+      const planKey = boundActivities[0].repo || 'unknown';
+      if (!inFlightPlanAdjust.has(planKey)) {
+        inFlightPlanAdjust.add(planKey);
+        generatePlanAdjustment(boundActivities, nextStore).then((adjustment) => {
+          if (!adjustment) return null;
+          return persistPlanAdjustment(adjustment, boundActivities, 'github-webhook');
+        }).catch((err) => console.error('[PlanAdjust]', err.message)).finally(() => {
+          inFlightPlanAdjust.delete(planKey);
+        });
+      } else {
+        console.log(`[Webhook] plan-adjust 跳过 ${planKey}：已有进行中任务`);
+      }
+    }
+
+    // 检测 push 是否改动 docs/*.md，自动触发 sync-docs（不阻塞 webhook 响应）
+    const reposWithDocsChanges = new Set();
+    for (const activity of boundActivities) {
+      if (activity.type !== 'commit') continue;
+      const touched = (activity.files || []).some((f) => /^docs\/.*\.md$/.test(f));
+      if (touched) reposWithDocsChanges.add((activity.repo || '').toLowerCase());
+    }
+    if (reposWithDocsChanges.size > 0 && typeof importDocsForProject === 'function') {
+      const candidateProjects = (nextStore.projects || []).filter((p) =>
+        reposWithDocsChanges.has(String(p.githubFullRepo || '').toLowerCase())
+      );
+      for (const project of candidateProjects) {
+        if (inFlightDocsSync.has(project.id)) {
+          console.log(`[Webhook] docs sync 跳过 ${project.githubFullRepo}：已有进行中任务`);
+          continue;
+        }
+        inFlightDocsSync.add(project.id);
+        importDocsForProject(project, project.id).then((result) => {
+          console.log(`[Webhook] docs/ 变更触发 sync-docs：${project.githubFullRepo} — 新增任务 ${result.imported || 0}，phases ${result.phases || 0}`);
+        }).catch((err) => {
+          console.error(`[Webhook] docs sync 失败 ${project.githubFullRepo}：`, err.message);
+        }).finally(() => {
+          inFlightDocsSync.delete(project.id);
+        });
+      }
     }
 
     sendJson(res, 202, {

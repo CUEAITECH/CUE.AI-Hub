@@ -1,4 +1,12 @@
 import { callClaude, parseJsonOutput, isAvailable } from './claude.js';
+import { createId, updateStore } from '../store.js';
+import {
+  normalizeStageName,
+  normalizeStageShortName,
+  defaultPhases,
+  reassignChecklistPhaseIds
+} from './stageChecklist.js';
+import { todayText } from './dailyBrief.js';
 
 const ownerProfiles = [
   { name: '胡佳涛', keywords: ['后端', 'api', 'webhook', 'github', '数据库', '架构', '安全', '签名'] },
@@ -150,4 +158,267 @@ export async function generatePlan(goal, existingMembers = []) {
     console.warn('[Planner] LLM 输出解析失败，降级到规则引擎');
   }
   return generatePlanWithRules(goal, existingMembers);
+}
+
+// ─── AI 任务进度扫描 ──────────────────────────────────────────────────────────
+
+export const AI_PROGRESS_SYSTEM = `你是任务进度评估助手。根据每个任务的验收标准和关联 Git 提交，评估完成度（0-100 整数）。
+
+评分标准：
+- 提交完整覆盖验收标准所有功能点 → 85-100
+- 核心功能已实现，边缘情况或测试待处理 → 65-84
+- 部分功能实现，主干仍未完成 → 30-64
+- 少量相关提交，主体未开始 → 10-29
+
+输出格式：JSON 数组，每项：{"taskId":"task_xxx","progress":75,"reason":"理由（20字内）","hint":"要提高进度还需要补充的内容（30字内）","suggestComplete":false}
+suggestComplete 为 true 当且仅当 progress >= 80。hint 说明提高进度需要哪些具体证据或操作（如：补充测试提交、PR合并、验收截图等）。只返回 JSON 数组，不要其他文字。`;
+
+export async function estimateTasksProgress(store) {
+  const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成' && t.status !== '已取消');
+  if (!activeTasks.length) return [];
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const recentCommits = (store.activities || []).filter((a) => a.type === 'commit' && a.createdAt >= cutoff);
+
+  const taskOwners = new Map();
+  for (const a of (store.assignments || [])) {
+    if (!a.taskId || a.status === '已取消') continue;
+    if (!taskOwners.has(a.taskId)) taskOwners.set(a.taskId, new Set());
+    taskOwners.get(a.taskId).add(a.owner);
+  }
+
+  const semanticTaskIds = new Map();
+  for (const link of ((store.semanticLinks || {}).commitTaskLinks || [])) {
+    if (Number(link.confidence) >= 0.4) {
+      if (!semanticTaskIds.has(link.taskId)) semanticTaskIds.set(link.taskId, new Set());
+      semanticTaskIds.get(link.taskId).add(link.activityId);
+    }
+  }
+
+  const taskEntries = activeTasks.map((task) => {
+    const owners = taskOwners.get(task.id) || new Set();
+    const semanticIds = semanticTaskIds.get(task.id) || new Set();
+    const titleWords = task.title.toLowerCase().replace(/[^一-龥a-z0-9]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
+    const linked = recentCommits.filter((c) => {
+      const text = `${c.title || ''} ${(c.files || []).join(' ')}`.toLowerCase();
+      return semanticIds.has(c.id)
+        || (owners.size > 0 && owners.has(c.owner || c.actor || ''))
+        || text.includes(task.id.toLowerCase())
+        || titleWords.some((w) => text.includes(w));
+    });
+    return { task, commits: linked.slice(0, 8) };
+  }).filter((e) => e.commits.length > 0);
+
+  if (!taskEntries.length) return [];
+
+  const userPrompt = taskEntries.map(({ task, commits }) => [
+    `任务 ${task.id}：${task.title}`,
+    `验收：${task.acceptance || '未定'}`,
+    `当前进度：${task.progress || 0}%`,
+    `认领人：${[...(taskOwners.get(task.id) || [])].join('、') || task.owner || '未知'}`,
+    `关联提交：\n${commits.map((c) => `  - [${c.owner || c.actor || '?'}] ${c.title || c.id}`).join('\n')}`
+  ].join('\n')).join('\n---\n');
+
+  const raw = await callClaude(AI_PROGRESS_SYSTEM, userPrompt);
+  const parsed = raw ? parseJsonOutput(raw) : null;
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+// ─── Commit 触发计划调整建议 ──────────────────────────────────────────────────
+
+export async function generatePlanAdjustment(activities, store) {
+  const SYSTEM = `你是 CUE Project Hub 的 AI PM。根据最新 GitHub commit 和当前任务状态，判断是否需要调整开发计划。
+必须输出 JSON，不要输出 Markdown。格式：
+{
+  "needed": true,
+  "scope": "minor|major|progress",
+  "summary": "一句话说明",
+  "suggestion": "不超过 200 字的具体计划调整",
+  "impact": "影响范围",
+  "requiresApprovalReason": "如为 major，说明为什么需要人工审批",
+  "stageUpdate": {
+    "shortName": "总览短名，中文最多14字或英文最多20字符，只写阶段简称，不写项目全名",
+    "status": "进行中|高风险|阻塞|已完成",
+    "progressDelta": 0,
+    "checklist": [
+      { "id": "已有或新阶段节点 id", "title": "阶段节点短标题", "owner": "负责人", "keywords": ["commit 关键词"], "acceptance": "验收口径", "phaseId": "所属阶段id（必填，从当前阶段划分中选，不能新建）" }
+    ]
+  }
+}
+分类规则：
+- progress：只同步进度、补充证据、确认任务推进，可自动执行。
+- minor：小范围拆分、补充验收标准、调整当天跟进项，可自动执行。
+- major：改变阶段目标、延期、转派关键负责人、调整里程碑或影响多人排期，必须人工审批。
+- 如果建议影响阶段展示或路径图，必须给出 stageUpdate；总览只能使用后端生成的 shortName，不能让前端临时裁剪长阶段名。
+- stageUpdate.checklist 每个节点必须有 phaseId，从当前阶段划分中选 id，不能新建 phaseId。
+- 不需要调整时输出 {"needed": false}。`;
+  const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成').slice(0, 10);
+  const stage = normalizeStageName(store.currentStage || {});
+  const commitSummary = activities.map((a) => `- ${a.owner}: ${a.title} (${a.repo || ''})`).join('\n');
+  const taskSummary = activeTasks.map((t) => `- [${t.status}] ${t.title}（${t.owner}）进度${t.progress}%`).join('\n');
+  const stageSummary = `当前阶段：${stage.name}；总览短名：${stage.shortName}；目标日期：${stage.targetDate || '待确认'}；状态：${stage.status || '进行中'}；进度：${Number(stage.progress) || 0}%`;
+  const phases = store.currentStage?.phases || [];
+  const phaseLine = phases.length ? `当前阶段划分：${phases.map((p) => `${p.id}（${p.title}）`).join('、')}` : '';
+  const text = await callClaude(SYSTEM, `${stageSummary}${phaseLine ? '\n' + phaseLine : ''}\n\n最新提交：\n${commitSummary}\n\n当前任务：\n${taskSummary}`);
+  const parsed = parseJsonOutput(text);
+  if (parsed && parsed.needed === false) return null;
+  const scope = ['major', 'minor', 'progress'].includes(parsed?.scope) ? parsed.scope : inferAdjustmentScope(text, activities);
+  const stageUpdate = normalizePlanStageUpdate(parsed?.stageUpdate, scope, activities);
+  return {
+    scope,
+    mode: scope === 'major' ? 'approval' : 'auto',
+    status: scope === 'major' ? 'pending_approval' : 'auto_applied',
+    summary: parsed?.summary || (scope === 'progress' ? '同步 commit 进度信号' : '根据 commit 调整开发计划'),
+    suggestion: parsed?.suggestion || text || '',
+    impact: parsed?.impact || summarizeAdjustmentImpact(scope, activities),
+    requiresApprovalReason: parsed?.requiresApprovalReason || (scope === 'major' ? '涉及阶段目标、负责人或排期变化，需要人工确认。' : ''),
+    stageUpdate,
+    costReason: `本轮 ${activities.length} 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。`
+  };
+}
+
+export async function generatePlanAlternatives(item) {
+  if (!isAvailable()) return [];
+  const SYSTEM = `你是 CUE Project Hub 的 AI PM，负责为需要人工审批的大计划调整提供备选方案。
+根据已提出的主方案，生成 2 个方向不同的备选方案（保守 / 激进）。
+输出 JSON 数组，不输出其他文字：
+[
+  {
+    "title": "方案标题（10字以内）",
+    "approach": "具体调整思路（100字以内）",
+    "impact": "影响范围（50字以内）",
+    "risk": "高|中|低",
+    "stageUpdate": {
+      "shortName": "中文最多14字",
+      "status": "进行中|高风险|阻塞",
+      "progressDelta": 0,
+      "checklist": [
+        { "id": "节点id", "title": "短标题", "owner": "负责人", "keywords": [], "acceptance": "验收口径", "phaseId": "所属阶段id（必填，从当前阶段划分中选）" }
+      ]
+    }
+  }
+]`;
+  const currentPhases = (item.stageUpdate?.phases || []);
+  const phaseLine = currentPhases.length ? `当前阶段划分：${currentPhases.map((p) => `${p.id}（${p.title}）`).join('、')}\n` : '';
+  const userPrompt = `${phaseLine}主方案：${item.suggestion || ''}\n原因：${item.requiresApprovalReason || ''}\n影响：${item.impact || ''}`;
+  const text = await callClaude(SYSTEM, userPrompt);
+  const parsed = parseJsonOutput(text);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.slice(0, 2).map((opt, i) => ({
+    id: i + 2,
+    title: String(opt.title || `备选方案${i + 2}`).slice(0, 20),
+    approach: String(opt.approach || '').slice(0, 200),
+    impact: String(opt.impact || '').slice(0, 100),
+    risk: ['高', '中', '低'].includes(opt.risk) ? opt.risk : '中',
+    stageUpdate: opt.stageUpdate || null
+  }));
+}
+
+export function normalizePlanStageUpdate(stageUpdate, scope, activities = []) {
+  const input = stageUpdate && typeof stageUpdate === 'object' ? stageUpdate : {};
+  const fallbackShortName = inferStageShortNameFromActivities(activities);
+  const normalized = {};
+  const shortName = String(input.shortName || input.displayName || fallbackShortName || '').trim();
+  if (shortName) normalized.shortName = normalizeStageShortName(shortName);
+  if (['进行中', '高风险', '阻塞', '已完成'].includes(input.status)) normalized.status = input.status;
+  if (Number.isFinite(Number(input.progressDelta))) {
+    normalized.progressDelta = Math.max(-30, Math.min(30, Number(input.progressDelta)));
+  } else if (scope === 'progress') {
+    normalized.progressDelta = activities.length ? Math.min(8, activities.length * 2) : 1;
+  }
+  if (Array.isArray(input.checklist)) {
+    normalized.checklist = input.checklist
+      .filter((item) => item && item.title)
+      .slice(0, 8)
+      .map((item) => ({
+        id: String(item.id || createId('stage_node')).replace(/[^\w-]/g, '_').slice(0, 64),
+        title: String(item.title || '').trim().slice(0, 32),
+        owner: String(item.owner || '未指定').trim().slice(0, 32),
+        keywords: Array.isArray(item.keywords) ? item.keywords.slice(0, 10).map((keyword) => String(keyword).trim()).filter(Boolean) : [],
+        acceptance: String(item.acceptance || item.title || '').trim().slice(0, 160),
+        ...(item.phaseId ? { phaseId: String(item.phaseId).replace(/[^\w-]/g, '_').slice(0, 64) } : {})
+      }));
+  }
+  return Object.keys(normalized).length ? normalized : null;
+}
+
+export function inferStageShortNameFromActivities(activities = []) {
+  const text = activities.map((activity) => `${activity.title || ''} ${(activity.files || []).join(' ')}`).join(' ').toLowerCase();
+  if (/trtc|asr|session|usersig|课堂/.test(text)) return 'MVP / TRTC 联调';
+  if (/review|block|escalate|审阅/.test(text)) return 'AI Review 闭环';
+  if (/standup|meeting|晚会|分工/.test(text)) return '晚会分工闭环';
+  return '';
+}
+
+export function applyPlanAdjustmentToStage(store, adjustment) {
+  const stageUpdate = adjustment?.stageUpdate;
+  if (!stageUpdate) return store;
+  const currentStage = normalizeStageName(store.currentStage || {});
+  const nextStage = {
+    ...currentStage,
+    shortName: stageUpdate.shortName || currentStage.shortName,
+    status: stageUpdate.status || currentStage.status,
+    progress: Math.max(0, Math.min(100, Number(currentStage.progress) + (Number(stageUpdate.progressDelta) || 0))),
+    updatedAt: new Date().toISOString()
+  };
+  if (Array.isArray(stageUpdate.checklist) && stageUpdate.checklist.length) {
+    const existing = Array.isArray(currentStage.checklist) ? currentStage.checklist : [];
+    const byId = new Map(existing.map((item) => [item.id, item]));
+    stageUpdate.checklist.forEach((item) => {
+      byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
+    });
+    nextStage.checklist = [...byId.values()];
+  }
+  if (Array.isArray(stageUpdate.phases) && stageUpdate.phases.length) {
+    nextStage.phases = stageUpdate.phases;
+  }
+  const effectivePhases = nextStage.phases?.length ? nextStage.phases : defaultPhases;
+  if (Array.isArray(nextStage.checklist)) {
+    nextStage.checklist = reassignChecklistPhaseIds(nextStage.checklist, effectivePhases, {});
+  }
+  return {
+    ...store,
+    currentStage: normalizeStageName(nextStage)
+  };
+}
+
+export function buildPlanAdjustmentRecord(adjustment, activities, source) {
+  return {
+    id: createId('adjust'),
+    date: todayText(),
+    trigger: activities.map((activity) => activity.title).join('; '),
+    triggerCount: activities.length,
+    source,
+    ...adjustment,
+    appliedAt: adjustment.status === 'auto_applied' && adjustment.stageUpdate ? new Date().toISOString() : undefined,
+    createdAt: new Date().toISOString()
+  };
+}
+
+export async function persistPlanAdjustment(adjustment, activities, source) {
+  if (!adjustment) return null;
+  const record = buildPlanAdjustmentRecord(adjustment, activities, source);
+  await updateStore((draft) => {
+    let nextDraft = draft;
+    if (record.status === 'auto_applied') {
+      nextDraft = applyPlanAdjustmentToStage(draft, record);
+    }
+    nextDraft.planAdjustments = nextDraft.planAdjustments || [];
+    nextDraft.planAdjustments.unshift(record);
+    nextDraft.planAdjustments = nextDraft.planAdjustments.slice(0, 50);
+    return nextDraft;
+  });
+  return record;
+}
+
+export function inferAdjustmentScope(text, activities = []) {
+  const raw = `${text || ''} ${activities.map((a) => a.title || '').join(' ')}`;
+  if (/延期|里程碑|阶段目标|转派|负责人|排期|范围|降级|上线|发布|阻塞/i.test(raw)) return 'major';
+  if (/进度|完成|提交|同步|证据/i.test(raw)) return 'progress';
+  return 'minor';
+}
+
+export function summarizeAdjustmentImpact(scope, activities = []) {
+  if (scope === 'major') return '可能影响阶段目标、负责人或排期。';
+  if (scope === 'progress') return '只更新任务进度信号和 commit 证据。';
+  return `影响 ${activities.length || 1} 条 commit 对应的当天跟进项。`;
 }
