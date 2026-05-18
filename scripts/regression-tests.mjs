@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { migrateStore } from '../server/store.js';
 import { aggregateDeliverableProgress, buildStageChecklist } from '../server/services/stageChecklist.js';
 import { dispatchRoutes } from '../server/routes/index.js';
@@ -51,6 +52,56 @@ const legacyStage = {
     }
   ]
 };
+
+await test('mobile app shell exposes bottom navigation and safe touch layout', async () => {
+  const [html, css] = await Promise.all([
+    readFile(new URL('../index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../src/styles.css', import.meta.url), 'utf8')
+  ]);
+
+  assert.match(html, /class="mobile-app-nav"/);
+  assert.match(html, /aria-label="移动端主导航"/);
+  assert.match(html, /data-route="overview"[\s\S]*总览/);
+  assert.match(html, /data-route="assignment"[\s\S]*任务/);
+  assert.match(html, /data-route="reviews"[\s\S]*审阅/);
+  assert.match(html, /data-route="pc-workspace"[\s\S]*我的/);
+
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.mobile-app-nav/);
+  assert.match(css, /padding-bottom:\s*calc\(8px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(css, /min-height:\s*44px/);
+  assert.doesNotMatch(css, /\.mobile-app-nav\s*\{[^}]*overflow-x:\s*auto/);
+});
+
+await test('mobile auth and dashboard keep phone-first density', async () => {
+  const [css, app] = await Promise.all([
+    readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
+    readFile(new URL('../src/app.js', import.meta.url), 'utf8')
+  ]);
+  const renderTasksSource = app.slice(
+    app.indexOf('function renderTasks()'),
+    app.indexOf('function renderActivities()')
+  );
+
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*body:not\(\.authenticated\) \.auth-shell[\s\S]*height:\s*100dvh/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.auth-hero[\s\S]*min-height:\s*0/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.auth-features[\s\S]*display:\s*none/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.auth-panel > form/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.auth-panel > form\.auth-form[\s\S]*display:\s*grid/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.auth-form[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.auth-code-field[\s\S]*grid-template-columns:\s*1fr/);
+
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-title-card[\s\S]*grid-column:\s*span 8/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-health[\s\S]*grid-column:\s*span 4/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.health-ring-wrap[\s\S]*width:\s*44px/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-grid > \.metric-card:nth-child\(4\)[\s\S]*grid-column:\s*span 6/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-grid > \.metric-card:nth-child\(6\)[\s\S]*grid-column:\s*span 6/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-tasks \.task-table\.compact \.overview-task-row[\s\S]*display:\s*grid/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-tasks \.task-table\.compact \.overview-task-row[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-tasks \.task-table\.compact \.task-row-actions[\s\S]*justify-self:\s*end/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-tasks \.task-table\.compact \.task-row-actions \.claim-inline-btn[\s\S]*min-width:\s*58px/);
+  assert.match(renderTasksSource, /class="claim-inline-btn"/);
+  assert.doesNotMatch(renderTasksSource, /detail-btn/);
+});
 
 await test('phase1 migration creates top-level phases and deliverables without breaking old checklist', () => {
   const migrated = migrateStore({
