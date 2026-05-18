@@ -1458,7 +1458,6 @@ function renderTasks() {
             <span>${escapeHtml(task.due || '未设置')}</span>
           </div>
           <div class="task-row-actions">
-            <button class="icon-btn detail-btn" data-task-id="${escapeHtml(task.id)}" aria-label="查看任务详情">↗</button>
             ${!isDone ? `<button class="claim-inline-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">领取</button>` : ''}
           </div>
         </div>
@@ -1467,9 +1466,6 @@ function renderTasks() {
     ${state.tasks.length > 5 ? '<button class="text-link-btn" type="button" data-route="assignment">查看全部任务领取</button>' : ''}
   `;
 
-  table.querySelectorAll('.detail-btn').forEach((btn) => {
-    btn.addEventListener('click', () => openTaskDetail(btn.dataset.taskId));
-  });
   table.querySelectorAll('.claim-inline-btn').forEach((btn) => {
     btn.addEventListener('click', () =>
       claimTask(btn.dataset.taskId, btn.dataset.taskTitle).catch((e) => toast(e.message))
@@ -3349,6 +3345,25 @@ function setRoute(route) {
     // 一级导航按钮（无自身 route 的分组按钮）通过 data-nav-parent 匹配
     const isParentActive = item.classList.contains('nav-primary') && !item.dataset.route && item.dataset.navParent === activeParent;
     item.classList.toggle('active', isRouteActive || isParentActive);
+  });
+  const mobileRouteMap = {
+    overview: 'overview',
+    'risk-detail': 'overview',
+    roadmap: 'overview',
+    assignment: 'assignment',
+    'task-detail': 'assignment',
+    standup: 'assignment',
+    reviews: 'reviews',
+    planning: 'reviews',
+    'pc-workspace': 'pc-workspace',
+    'pc-profile': 'pc-workspace',
+    'pc-account': 'pc-workspace'
+  };
+  const mobileRoute = mobileRouteMap[route] || route;
+  document.querySelectorAll('.mobile-app-nav-item').forEach((item) => {
+    const isActive = item.dataset.route === mobileRoute;
+    item.classList.toggle('active', isActive);
+    item.setAttribute('aria-current', isActive ? 'page' : 'false');
   });
   if (route === 'account-admin') {
     renderAccountAdmin().catch((error) => toast(error.message));
