@@ -5,7 +5,7 @@
 **Sprint：** 1.5a（thin slice）
 **Spec：** [docs/superpowers/specs/2026-05-18-ai-task-recommendation-design.md](./superpowers/specs/2026-05-18-ai-task-recommendation-design.md)
 **Branch：** `claude/quirky-moser-d4bda9`
-**当前状态：** 🟡 Phase 5 完成（前端 panel + 事件接入），等待 Phase 6 E2E 验证
+**当前状态：** 🟢 Sprint 1.5a thin slice 完成
 **最后更新：** 2026-05-18
 
 ---
@@ -14,13 +14,13 @@
 
 | # | Phase | 状态 | 提交 SHA | 关键产出 |
 |---|------|------|---------|---------|
-| 0 | spec & plan | 🟡 进行中 | - | spec + implementation plan |
+| 0 | spec & plan | ✅ 完成 | - | spec + implementation plan |
 | 1 | 数据模型 + migrateStore | ✅ 完成 | `d3aaf25` | store.dailyTaskSuggestions + aiPromptTraces, assignment 加字段 |
 | 2 | 推荐引擎 service | ✅ 完成 | `01bba95` | server/services/dailyTaskSuggester.js |
 | 3 | API endpoints | ✅ 完成 | `7074c1e` | GET/POST recommendations 3 个 |
 | 4 | 调度器接入 17:45 | ✅ 完成 | `e2fd9e2` | scheduler.js 加生成步 |
 | 5 | 前端 panel 改造 | ✅ 完成 | `a2f1c2a` + `b13c639` | index.html + src/app.js |
-| 6 | E2E smoke 验证 | ⚪ 待开始 | - | 烟雾测试通过 |
+| 6 | E2E smoke 验证 | ✅ 完成 | `d77a7c4` | 烟测通过 + 修复同用户重复 accept 幂等性 bug |
 
 图例：⚪ 待开始 / 🟡 进行中 / ✅ 完成 / ❌ 阻塞
 
@@ -63,7 +63,8 @@
 
 ## 已知 issues / 偏离设计的地方
 
-(空，待 implementer 添加)
+- E2E 烟测中无 `ANTHROPIC_API_KEY` 环境变量，LLM 排序路径未经 HTTP 真实端到端验证（503 失败路径已确认）；happy-path 通过手工注入 `dailyTaskSuggestions` 候选 + 调用 `/accept` 完成验证。生产环境带 key 上线后建议复跑一次完整 refresh→accept。
+- 修复 commit `d77a7c4`：同一用户对已 owner 的任务重复 POST `/accept` 之前会重复创建 assignment；现已幂等返回原 assignment + `idempotent:true`。
 
 ---
 
