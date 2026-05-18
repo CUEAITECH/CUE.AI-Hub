@@ -75,9 +75,12 @@ export async function generateDailyTaskSuggestions(forDate, userId, store, optio
   let parseError = null;
   let parsedCandidates = [];
 
+  // AbortController：超时时取消底层 HTTP，避免 zombie socket（之前 Promise.race 只 reject，不取消）
+  const abortController = new AbortController();
+  const timeoutHandle = setTimeout(() => abortController.abort(), LLM_TIMEOUT_MS);
   try {
     rawOutput = await Promise.race([
-      callClaude(SYSTEM_PROMPT, userPromptSnapshot),
+      callClaude(SYSTEM_PROMPT, userPromptSnapshot, { signal: abortController.signal }),
       timeoutAfter(LLM_TIMEOUT_MS)
     ]);
     if (!rawOutput) {
@@ -97,6 +100,8 @@ export async function generateDailyTaskSuggestions(forDate, userId, store, optio
       durationMs: Date.now() - startedAt
     });
     throw err instanceof LLMUnavailableError ? err : new LLMUnavailableError(parseError, err);
+  } finally {
+    clearTimeout(timeoutHandle);
   }
 
   // 4. 写成功 trace
