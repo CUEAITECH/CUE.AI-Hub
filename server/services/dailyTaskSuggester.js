@@ -46,7 +46,7 @@ export async function generateDailyTaskSuggestions(forDate, userId, store, optio
 
   // 1. 召回候选池
   const excludedTaskIds = collectSupersededTaskIds(forDate, userId, store);
-  const takenTaskIds = collectAcceptedTaskIds(forDate, store);
+  const takenTaskIds = collectOwnedTaskIds(store);
   const eligible = (store.tasks || []).filter((t) => (
     t.status === 'pending'
     && (t.owner === '待认领' || !t.owner)
@@ -66,7 +66,10 @@ export async function generateDailyTaskSuggestions(forDate, userId, store, optio
     throw new LLMUnavailableError('ANTHROPIC_API_KEY 未配置');
   }
 
-  const userPromptSnapshot = buildUserPrompt(eligible, userContext);
+  const deliverableTitleById = new Map(
+    (store.deliverables || []).map((d) => [d.id, d.title])
+  );
+  const userPromptSnapshot = buildUserPrompt(eligible, userContext, deliverableTitleById);
   const startedAt = Date.now();
   let rawOutput = null;
   let parseError = null;
@@ -131,8 +134,8 @@ function collectSupersededTaskIds(forDate, userId, store) {
   return set;
 }
 
-function collectAcceptedTaskIds(forDate, store) {
-  // 接受过的任务（owner 已经不是"待认领"了），用 task.owner 判定 + assignments 反查
+function collectOwnedTaskIds(store) {
+  // 已被任何人领走的任务（owner != '待认领'），不再进入推荐池
   const set = new Set();
   for (const t of store.tasks || []) {
     if (t.owner && t.owner !== '待认领') set.add(t.id);
@@ -166,13 +169,13 @@ function buildUserContext(userId, store) {
   return { name: userName, recentCommitMsgs, recentCommitFiles, currentTasks };
 }
 
-function buildUserPrompt(eligible, userContext) {
+function buildUserPrompt(eligible, userContext, deliverableTitleById) {
   const tasksBlock = eligible.map((t) => ({
     id: t.id,
     title: t.title,
     acceptance: (t.acceptance || '').slice(0, 120),
     sourceDoc: t.sourceDoc || '',
-    deliverableTitle: t.deliverableId ? t.deliverableId : null,
+    deliverableTitle: t.deliverableId ? (deliverableTitleById.get(t.deliverableId) || null) : null,
     priority: t.priority || ''
   }));
   return [
