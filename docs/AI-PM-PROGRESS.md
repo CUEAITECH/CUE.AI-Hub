@@ -5,7 +5,7 @@
 **Sprint：** 1.5a（thin slice）
 **Spec：** [docs/superpowers/specs/2026-05-18-ai-task-recommendation-design.md](./superpowers/specs/2026-05-18-ai-task-recommendation-design.md)
 **Branch：** `claude/quirky-moser-d4bda9`
-**当前状态：** 🟡 spec 已写，等待 user review 后进入 writing-plans
+**当前状态：** 🟡 Phase 1 完成（数据模型已落库），等待 Phase 2 推荐引擎实施
 **最后更新：** 2026-05-18
 
 ---
@@ -15,7 +15,7 @@
 | # | Phase | 状态 | 提交 SHA | 关键产出 |
 |---|------|------|---------|---------|
 | 0 | spec & plan | 🟡 进行中 | - | spec + implementation plan |
-| 1 | 数据模型 + migrateStore | ⚪ 待开始 | - | store.dailyTaskSuggestions + aiPromptTraces, assignment 加字段 |
+| 1 | 数据模型 + migrateStore | ✅ 完成 | `612452b` | store.dailyTaskSuggestions + aiPromptTraces, assignment 加字段 |
 | 2 | 推荐引擎 service | ⚪ 待开始 | - | server/services/dailyTaskSuggester.js |
 | 3 | API endpoints | ⚪ 待开始 | - | GET/POST recommendations 3 个 |
 | 4 | 调度器接入 17:45 | ⚪ 待开始 | - | scheduler.js 加生成步 |

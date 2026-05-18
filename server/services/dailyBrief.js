@@ -255,7 +255,9 @@ export function normalizeAssignment(input, store) {
     createdAt: input.createdAt || now,
     updatedAt: now,
     brief: input.brief || null,
-    briefGeneratedBy: input.briefGeneratedBy || null
+    briefGeneratedBy: input.briefGeneratedBy || null,
+    aiSuggested: Boolean(input.aiSuggested),
+    aiSuggestionRef: input.aiSuggestionRef || null
   }, store);
 }
 
