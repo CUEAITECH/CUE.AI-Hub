@@ -126,6 +126,19 @@ export function createRecommendationRoutes({
         sendJson(res, 409, { error: 'task already taken', acceptedBy: task.owner });
         return true;
       }
+      // 幂等：如果当前用户已经在 candidate 里点过 accept，直接返回已有 assignment，不再重复写
+      if (task.owner === user.name) {
+        const existingCand = store.dailyTaskSuggestions?.[date]?.[user.id]?.candidates
+          ?.find((c) => c.taskId === taskId && c.status === 'accepted' && c.acceptedAssignmentId);
+        if (existingCand) {
+          const existingAssignment = (store.assignments || [])
+            .find((a) => a.id === existingCand.acceptedAssignmentId);
+          if (existingAssignment) {
+            sendJson(res, 200, { assignment: existingAssignment, candidate: existingCand, idempotent: true });
+            return true;
+          }
+        }
+      }
 
       // 原子更新：task.owner + 创建 assignment + candidate.status=accepted
       let assignment = null;
