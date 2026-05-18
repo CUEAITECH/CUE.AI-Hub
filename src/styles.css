@@ -2877,6 +2877,18 @@ select:focus {
   font-size: 12px;
   line-height: 1.3;
   background: rgba(18, 18, 18, 0.06);
+  border: 0;
+  cursor: default;
+}
+
+.attendance-pill.is-editable {
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.attendance-pill.is-editable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(18, 18, 18, 0.08);
 }
 
 .attendance-pill.tone-ok,

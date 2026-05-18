@@ -63,6 +63,24 @@ export function createSystemRoutes({
       return true;
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/auth/me') {
+      const store = await loadStore();
+      const projectId = String(url.searchParams.get('projectId') || (store.projects || [])[0]?.id || 'cue_ai_classroom').trim();
+      const session = verifySessionToken(getSessionToken(req));
+      if (!session) {
+        sendJson(res, 401, { ok: false, error: 'not authenticated' });
+        return true;
+      }
+      const me = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
+      if (!me) {
+        sendJson(res, 401, { ok: false, error: 'session user not found' });
+        return true;
+      }
+      const project = (store.projects || []).find((p) => p.id === projectId) || null;
+      sendJson(res, 200, { ok: true, user: sanitizeUserForProject(me, projectId, project) });
+      return true;
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/auth/login') {
       const { json } = await readBody(req);
       const username = String(json?.username || '').trim();

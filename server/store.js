@@ -109,7 +109,7 @@ function defaultTeamUsers(now) {
   const password = process.env.HUB_LOGIN_PASSWORD || '123456';
   return [
     { id: 'user_tian_jiaming', username: '田家铭', name: '田家铭', role: 'developer', projectIds: ['*'], projectRoles: { '*': 'developer' }, password },
-    { id: 'user_lin_shiqi', username: '林世棋', name: '林世棋', role: 'developer', projectIds: ['*'], projectRoles: { '*': 'developer' }, password },
+    { id: 'user_lin_shiqi', username: '林世棋', name: '林世棋', role: 'hr_manager', projectIds: ['*'], projectRoles: { '*': 'hr_manager' }, password },
     { id: 'user_hu_jiatao', username: '胡佳涛', name: '胡佳涛', role: 'developer', projectIds: ['*'], projectRoles: { '*': 'developer' }, password },
     { id: 'user_luo_zikuan', username: '罗子宽', name: '罗子宽', role: 'developer', projectIds: ['*'], projectRoles: { '*': 'developer' }, password }
   ].map((user) => normalizeUserRecord(user, now));
@@ -157,9 +157,9 @@ function syncDefaultTeamUsers(users, now) {
       ...users[index],
       username: teamUser.username,
       name: teamUser.name,
-      role: 'developer',
+      role: teamUser.role,
       projectIds: Array.isArray(users[index].projectIds) && users[index].projectIds.length ? users[index].projectIds : teamUser.projectIds,
-      projectRoles: { ...(users[index].projectRoles || {}), '*': 'developer' },
+      projectRoles: { ...(users[index].projectRoles || {}), '*': teamUser.role },
       active: users[index].active !== false,
       updatedAt: now
     };

@@ -488,8 +488,7 @@ async function login(event) {
   });
   sessionStorage.setItem('cueHubSessionToken', payload.token || '');
   sessionStorage.setItem('cueHubAuthenticated', 'true');
-  sessionStorage.setItem('cueHubUser', payload.user?.name || payload.user?.username || username);
-  sessionStorage.setItem('cueHubUserRole', payload.user?.projectRole || payload.user?.role || 'developer');
+  syncSessionUser(payload.user || { name: username, role: 'developer' });
   syncCurrentProject(projectId);
   setAuthVisible(true);
   await loadState();
@@ -526,6 +525,25 @@ function currentSessionUsername() {
 
 function currentSessionName() {
   return sessionStorage.getItem('cueHubUser') || '';
+}
+
+function syncSessionUser(user = {}) {
+  if (!user || typeof user !== 'object') return;
+  if (user.name || user.username) {
+    sessionStorage.setItem('cueHubUser', user.name || user.username);
+  }
+  if (user.projectRole || user.role) {
+    sessionStorage.setItem('cueHubUserRole', user.projectRole || user.role);
+  }
+}
+
+async function refreshSessionUserRole() {
+  const projectId = getCurrentProjectId() || localStorage.getItem('cue_currentProjectId') || '';
+  if (!sessionStorage.getItem('cueHubSessionToken')) return null;
+  const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+  const payload = await api(`/api/auth/me${query}`).catch(() => null);
+  if (payload?.user) syncSessionUser(payload.user);
+  return payload?.user || null;
 }
 
 function addDays(dateText, days) {
@@ -704,6 +722,19 @@ async function updateProjectUserFromAdminPage(userId, patch) {
     body: JSON.stringify({ projectId, ...patch })
   });
   setText('#adminPageRegisterHint', `已更新 ${payload.user?.name || payload.user?.username || '账号'}。`);
+  const currentName = currentSessionName();
+  const currentUsername = currentSessionUsername();
+  if (payload.user && (
+    payload.user.name === currentName
+    || payload.user.username === currentName
+    || payload.user.name === currentUsername
+    || payload.user.username === currentUsername
+  )) {
+    syncSessionUser(payload.user);
+    renderAll();
+  } else {
+    await refreshSessionUserRole();
+  }
   await renderAccountAdmin();
 }
 
@@ -2727,6 +2758,24 @@ function upsertAttendanceRecord(records = [], record) {
   return next;
 }
 
+function openAttendanceEditor({ owner = '', kind = 'meeting', record = null, date = '' } = {}) {
+  if (!currentUserCanManageAttendance()) {
+    toast('当前账号只有查看权限');
+    return;
+  }
+  const ownerEl = document.querySelector('#attendanceOwner');
+  const kindEl = document.querySelector('#attendanceKind');
+  const statusEl = document.querySelector('#attendanceStatus');
+  const noteEl = document.querySelector('#attendanceNote');
+  const meetingDateEl = document.querySelector('#meetingDate');
+  if (meetingDateEl && date) meetingDateEl.value = date;
+  if (ownerEl) ownerEl.value = owner;
+  if (kindEl) kindEl.value = kind;
+  if (statusEl) statusEl.value = record?.actualStatus || record?.reportedStatus || record?.status || 'normal';
+  if (noteEl) noteEl.value = record?.note || '';
+  document.querySelector('#attendanceManagerForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 function attendanceWeeklyScoreForRecord(kind, record) {
   const reported = record?.reportedStatus || record?.status || '';
   const actual = record?.actualStatus || record?.status || '';
@@ -2856,7 +2905,7 @@ function renderAttendanceBoard() {
   summary.innerHTML = `
     <div><span>统计周</span><b>${escapeHtml(weekStart)} ~ ${escapeHtml(days[days.length - 1] || addDays(weekStart, 6))}</b></div>
     <div><span>参与成员</span><b>${members.length}</b></div>
-    <div><span>可编辑角色</span><b>创始人 / 开发者 / 人事</b></div>
+    <div><span>可编辑角色</span><b>Admin / 人事管理</b></div>
     <div><span>评分维度</span><b>任务反馈 / 晚会出勤 / 请假</b></div>
   `;
 
@@ -2892,8 +2941,8 @@ function renderAttendanceBoard() {
       ${row.dayRows.map((day) => `
         <td>
           <div class="attendance-day-cell">
-            <span class="attendance-pill tone-${day.task.tone}">任务 ${escapeHtml(day.task.label)}</span>
-            <span class="attendance-pill tone-${day.meeting.tone}">晚会 ${escapeHtml(day.meeting.label)}</span>
+            <button type="button" class="attendance-pill tone-${day.task.tone}${currentUserCanManageAttendance() ? ' is-editable' : ''}" data-action="edit-attendance-cell" data-owner="${escapeHtml(row.member.name)}" data-date="${escapeHtml(day.date)}" data-kind="task_completion">任务 ${escapeHtml(day.task.label)}</button>
+            <button type="button" class="attendance-pill tone-${day.meeting.tone}${currentUserCanManageAttendance() ? ' is-editable' : ''}" data-action="edit-attendance-cell" data-owner="${escapeHtml(row.member.name)}" data-date="${escapeHtml(day.date)}" data-kind="meeting">晚会 ${escapeHtml(day.meeting.label)}</button>
             <small>${day.dayScore} 分</small>
           </div>
         </td>
@@ -2961,6 +3010,7 @@ function renderAll() {
 
 async function loadState() {
   const storedProjectId = localStorage.getItem('cue_currentProjectId') || state.currentProjectId || '';
+  await refreshSessionUserRole();
   const payload = await api(storedProjectId ? `/api/state?projectId=${encodeURIComponent(storedProjectId)}` : '/api/state');
   state.tasks = payload.tasks || [];
   state.members = payload.members || [];
@@ -3889,6 +3939,17 @@ function bindEvents() {
   document.querySelector('#attendanceManagerForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     submitAttendanceRecord().catch((err) => toast(err.message));
+  });
+  document.querySelector('#attendanceTableWrap')?.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-action="edit-attendance-cell"]');
+    if (!button) return;
+    const owner = button.dataset.owner || '';
+    const date = button.dataset.date || '';
+    const kind = button.dataset.kind || 'meeting';
+    const record = (state.weeklyAttendance?.records || []).find((item) => (
+      item.owner === owner && item.date === date && item.kind === kind
+    )) || null;
+    openAttendanceEditor({ owner, date, kind, record });
   });
 
   document.querySelector('[data-action="generate-plan"]').addEventListener('click', () => {
