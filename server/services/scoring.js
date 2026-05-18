@@ -290,8 +290,9 @@ export function buildDailyScores(store, { projectId = DEFAULT_PROJECT_ID, date =
 
 export function buildWeeklyScores(store, { projectId = DEFAULT_PROJECT_ID, date = shanghaiDate(), totalBonus = 0, attendanceBonusBase = 0 } = {}) {
   const today = shanghaiDate();
+  const endDate = date < today ? date : today;
   const dates = weekDates(date)
-    .filter((item) => item <= today && isCompanyWorkday(item));
+    .filter((item) => item <= endDate && isCompanyWorkday(item));
   const byOwner = new Map();
   for (const day of dates) {
     for (const row of buildDailyScores(store, { projectId, date: day, totalBonus, attendanceBonusBase }).rows) {

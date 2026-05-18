@@ -3434,6 +3434,14 @@ function toast(message) {
 
 function bindEvents() {
   setLoginMode(loginMode);
+  const resetMobileSecondaryNav = () => {
+    const topbar = document.querySelector('#topbar');
+    const toggle = document.querySelector('[data-action="toggle-mobile-secondary-nav"]');
+    topbar?.classList.remove('mobile-sub-open');
+    toggle?.setAttribute('aria-expanded', 'false');
+    const label = toggle?.querySelector('span');
+    if (label) label.textContent = '更多';
+  };
   document.querySelectorAll('[data-login-mode]').forEach((button) => {
     button.addEventListener('click', () => setLoginMode(button.dataset.loginMode));
   });
@@ -3512,9 +3520,19 @@ function bindEvents() {
       openProjectDropdown();
     }
   });
+  document.querySelector('[data-action="toggle-mobile-secondary-nav"]')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const topbar = document.querySelector('#topbar');
+    const expanded = !topbar?.classList.contains('mobile-sub-open');
+    topbar?.classList.toggle('mobile-sub-open', expanded);
+    const toggle = event.currentTarget;
+    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    toggle.querySelector('span').textContent = expanded ? '收起' : '更多';
+  });
 
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#topbarProjectWrap')) closeProjectDropdown();
+    if (!e.target.closest('#topbar') && !e.target.closest('.mobile-app-nav')) resetMobileSecondaryNav();
   });
   document.querySelector('#adminPageUserList')?.addEventListener('click', (event) => {
     const target = event.target;
@@ -3598,6 +3616,7 @@ function bindEvents() {
     document.querySelectorAll('.header-sub-group').forEach((group) => {
       group.classList.remove('active');
     });
+    resetMobileSecondaryNav();
   }
 
   document.querySelectorAll('.nav .nav-primary:not([data-route])').forEach((btn) => {
