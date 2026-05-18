@@ -5,3 +5,4 @@ server/data/db.backup.json
 *.log
 .env
 .claude/
+.superpowers/

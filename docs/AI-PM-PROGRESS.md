@@ -47,11 +47,12 @@
 
 ---
 
-## 进行中 / 待办
+## Sprint 1.5a 收尾后的下一步
 
-- [ ] User review spec
-- [ ] Invoke writing-plans skill → 产出 implementation plan
-- [ ] Phase 1 实施
+- [ ] 配 `ANTHROPIC_API_KEY` 上生产环境
+- [ ] 团队试用 1-2 周收集 PMF 指标（接受率 / 刷新率 / aiPromptTraces 质量）
+- [ ] 根据反馈决定是否启动 **Sprint 1.5b**（换一个 / 看全部 / 今天没任务）
+- [ ] 根据反馈决定是否启动 **Sprint 1.5c**（全员视图 / 概览 banner / WeCom 适配）
 
 ---
 
@@ -65,6 +66,9 @@
 
 - E2E 烟测中无 `ANTHROPIC_API_KEY` 环境变量，LLM 排序路径未经 HTTP 真实端到端验证（503 失败路径已确认）；happy-path 通过手工注入 `dailyTaskSuggestions` 候选 + 调用 `/accept` 完成验证。生产环境带 key 上线后建议复跑一次完整 refresh→accept。
 - 修复 commit `d77a7c4`：同一用户对已 owner 的任务重复 POST `/accept` 之前会重复创建 assignment；现已幂等返回原 assignment + `idempotent:true`。
+- **Promise.race socket leak**（已知，未修）：`dailyTaskSuggester.js` 用 `Promise.race(callClaude, timeoutAfter(12s))`，超时后底层 Anthropic SDK HTTP 请求继续跑直到 SDK 自己 timeout（默认 10 分钟）。每用户最多 1 个 zombie socket / 12s，4 人 batch 影响有限。修复需要给 `callClaude` 加 `AbortSignal` 支持，留作后续 callClaude 改造时一并处理。
+- **scheduler 17:45 单进程假设**：`lastEveningReportDate` 是 in-memory guard，scale 到多实例时需要分布式锁。当前单进程部署 OK。
+- **bindEvents 重复调用风险**：新增的全局 click delegation 如果 `bindEvents` 被调用 2 次（目前不会，但 hot-reload 类场景会），accept 会触发多次。当前 bindEvents 只在启动调一次，无影响。
 
 ---
 
