@@ -2727,6 +2727,176 @@ select:focus {
 .meeting-attendance-row.is-late b { color: var(--amber); }
 .meeting-attendance-row.is-missing b { color: var(--red); }
 
+.meeting-kpis-compact {
+  margin-bottom: 10px;
+}
+
+.attendance-manager-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.attendance-manager-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.attendance-manager-form select,
+.attendance-manager-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(18, 18, 18, 0.12);
+  background: #fff;
+  color: var(--text);
+}
+
+.attendance-manager-form .attendance-manager-note {
+  grid-column: 1 / span 2;
+}
+
+.attendance-manager-form button {
+  align-self: end;
+}
+
+.meeting-attendance-readonly {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.attendance-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.attendance-policy-copy {
+  display: grid;
+  gap: 10px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.attendance-board {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.attendance-ranking-list {
+  display: grid;
+  gap: 8px;
+}
+
+.attendance-ranking-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(18, 18, 18, 0.08);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.attendance-ranking-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.attendance-ranking-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.attendance-ranking-row b {
+  font-size: 22px;
+}
+
+.attendance-table-wrap {
+  overflow: auto;
+}
+
+.attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 960px;
+}
+
+.attendance-table th,
+.attendance-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(18, 18, 18, 0.08);
+  vertical-align: top;
+}
+
+.attendance-table th {
+  text-align: left;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.attendance-table th small {
+  display: block;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.attendance-name-cell strong,
+.attendance-name-cell span {
+  display: block;
+}
+
+.attendance-name-cell span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.attendance-day-cell {
+  display: grid;
+  gap: 6px;
+}
+
+.attendance-day-cell small,
+.attendance-score-cell {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.attendance-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.3;
+  background: rgba(18, 18, 18, 0.06);
+}
+
+.attendance-pill.tone-ok,
+.attendance-pill.tone-leave {
+  background: rgba(22, 163, 74, 0.12);
+  color: #166534;
+}
+
+.attendance-pill.tone-warn,
+.attendance-pill.tone-late {
+  background: rgba(245, 158, 11, 0.14);
+  color: #92400e;
+}
+
+.attendance-pill.tone-risk,
+.attendance-pill.tone-absent {
+  background: rgba(220, 38, 38, 0.12);
+  color: #991b1b;
+}
+
 .meeting-target-row p {
   margin-top: 2px;
   color: var(--muted);

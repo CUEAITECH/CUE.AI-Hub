@@ -24,6 +24,21 @@ function resolveProjectId(store, url, json = {}) {
   return String(json?.projectId || url.searchParams.get('projectId') || store.projects?.[0]?.id || 'cue_ai_classroom').trim();
 }
 
+function addDays(dateText, days) {
+  const [year, month, day] = String(dateText).split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function weekStartMonday(dateText) {
+  const [year, month, day] = String(dateText).split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() - dayOfWeek + 1);
+  return date.toISOString().slice(0, 10);
+}
+
 export function createScoringRoutes({
   loadStore,
   updateStore,
@@ -32,6 +47,10 @@ export function createScoringRoutes({
   sendError,
   todayText
 }) {
+  function byProject(items = [], projectId = '') {
+    return projectId ? items.filter((item) => !item.projectId || item.projectId === projectId) : items;
+  }
+
   return async function scoringRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/scoring/daily') {
       const store = await loadStore();
@@ -79,6 +98,33 @@ export function createScoringRoutes({
       const daily = buildDailyScores(store, { projectId, date });
       const row = daily.rows.find((item) => item.owner === owner) || null;
       sendJson(res, 200, { date, projectId, owner, row });
+      return true;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/attendance/records') {
+      const store = await loadStore();
+      const projectId = resolveProjectId(store, url);
+      const date = url.searchParams.get('date') || todayText();
+      const records = byProject(store.attendanceRecords || [], projectId)
+        .filter((item) => item.date === date)
+        .sort((a, b) => {
+          const ownerDiff = String(a.owner || '').localeCompare(String(b.owner || ''), 'zh-CN');
+          if (ownerDiff !== 0) return ownerDiff;
+          return String(a.kind || '').localeCompare(String(b.kind || ''));
+        });
+      sendJson(res, 200, { projectId, date, records });
+      return true;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/attendance/weekly') {
+      const store = await loadStore();
+      const projectId = resolveProjectId(store, url);
+      const date = url.searchParams.get('date') || todayText();
+      const weekStart = weekStartMonday(date);
+      const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+      const records = byProject(store.attendanceRecords || [], projectId)
+        .filter((item) => days.includes(item.date));
+      sendJson(res, 200, { projectId, date, weekStart, days, records });
       return true;
     }
 

@@ -518,6 +518,7 @@ export function createSystemRoutes({
             activities: byProject(store.activities || []),
             assignments: byProject(store.assignments || []),
             standups: byProject(store.standups || []),
+            attendanceRecords: byProject(store.attendanceRecords || []),
             alerts: byProject(store.alerts || []),
             deliverables: byProject(store.deliverables || []),
             phases: byProject(store.phases || [])

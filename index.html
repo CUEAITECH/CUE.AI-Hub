@@ -106,6 +106,7 @@
             <button class="nav-item" type="button" data-route="roadmap">路径图</button>
             <button class="nav-item" type="button" data-route="ai-pm">AI PM</button>
             <button class="nav-item" type="button" data-route="meeting">晚会闭环</button>
+            <button class="nav-item" type="button" data-route="attendance">考勤统计</button>
             <button class="nav-item" type="button" data-route="account-admin">账号管理</button>
           </div>
           <div class="header-sub-group" data-sub="execution">
@@ -663,12 +664,46 @@
               <article class="meeting-panel">
                 <div class="meeting-panel-head">
                   <div>
-                    <span>企微考勤</span>
-                    <strong>18:30-19:00 晚会打卡</strong>
+                    <span>出勤统计</span>
+                    <strong>企微回传 + 人工补录</strong>
                   </div>
                 </div>
+                <div class="meeting-kpis meeting-kpis-compact" id="attendanceSummary">
+                  <div><span>晚会出席</span><b>待同步</b></div>
+                  <div><span>任务反馈</span><b>待同步</b></div>
+                  <div><span>数据来源</span><b>待同步</b></div>
+                </div>
+                <form class="attendance-manager-form" id="attendanceManagerForm" style="display:none">
+                  <label>
+                    成员
+                    <select id="attendanceOwner"></select>
+                  </label>
+                  <label>
+                    类型
+                    <select id="attendanceKind">
+                      <option value="meeting">晚会出席</option>
+                      <option value="task_completion">任务完成</option>
+                    </select>
+                  </label>
+                  <label>
+                    状态
+                    <select id="attendanceStatus">
+                      <option value="normal">正常</option>
+                      <option value="delayed">延迟</option>
+                      <option value="approved_leave">提前请假</option>
+                      <option value="temporary_leave">临时请假</option>
+                      <option value="absent">缺勤</option>
+                    </select>
+                  </label>
+                  <label class="attendance-manager-note">
+                    备注
+                    <input type="text" id="attendanceNote" placeholder="例如：企微漏报，人工补录" />
+                  </label>
+                  <button type="submit" class="pc-btn-primary">保存出勤</button>
+                </form>
+                <p class="meeting-attendance-readonly" id="attendanceReadOnlyHint">当前账号为只读，可查看企微回传和人工补录后的出勤结果。</p>
                 <div class="meeting-attendance-list" id="meetingAttendanceList">
-                  <div class="empty-state">等待企微机器人 18:30-19:00 上报晚会打卡。</div>
+                  <div class="empty-state">等待企微机器人回传或人工补录出勤结果。</div>
                 </div>
               </article>
 
@@ -710,6 +745,63 @@
                   </div>
                 </div>
                 <pre class="report-box" id="meetingEveningReport">点击「生成晚会对账」后，这里会输出前一天任务领取、当前提交、AI Review 风险和会后跟进建议。</pre>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="attendance">
+          <section class="workspace-shell attendance-shell">
+            <div class="assign-page-header">
+              <div class="pc-header-crumb">
+                <span class="pc-header-parent">指挥</span>
+                <span class="pc-header-sep">/</span>
+                <h2>考勤统计</h2>
+              </div>
+              <div class="pc-header-actions">
+                <label class="meeting-date-inline">
+                  <input id="attendanceWeekDate" type="date" aria-label="考勤周" />
+                </label>
+              </div>
+            </div>
+
+            <div class="meeting-kpis" id="attendanceWeeklySummary">
+              <div><span>统计周</span><b>待加载</b></div>
+              <div><span>参与成员</span><b>待加载</b></div>
+              <div><span>可编辑角色</span><b>Admin / 人事管理</b></div>
+              <div><span>评分维度</span><b>任务反馈 / 晚会出勤 / 请假</b></div>
+            </div>
+
+            <article class="workspace-card attendance-policy-card">
+              <div class="workspace-card-head">
+                <span>规则说明</span>
+                <strong>机器人播报与考勤口径</strong>
+              </div>
+              <div class="attendance-policy-copy">
+                <p><b>任务完成确认：</b>每日 17:00-18:00 在群里由机器人提示“姓名正常完成 / 姓名延迟完成”。延迟完成默认要求第二个工作日补齐；若后续请假，连续工作日按一个评分窗口取平均。</p>
+                <p><b>晚会出席确认：</b>每日 18:25 前在群里回复“姓名正常出席 / 姓名延迟出席”。18:25-18:35 回复按临时请假/迟到处理；18:35 后无记录默认缺勤，可由人事管理补录。</p>
+              </div>
+            </article>
+
+            <div class="attendance-board">
+              <article class="workspace-card attendance-ranking-card">
+                <div class="workspace-card-head">
+                  <span>周排行</span>
+                  <strong>考勤得分一目了然</strong>
+                </div>
+                <div class="attendance-ranking-list" id="attendanceRankingList">
+                  <div class="empty-state">正在加载本周考勤排行…</div>
+                </div>
+              </article>
+
+              <article class="workspace-card attendance-table-card">
+                <div class="workspace-card-head">
+                  <span>周考勤表</span>
+                  <strong>按人查看每日反馈 / 出席 / 请假</strong>
+                </div>
+                <div class="attendance-table-wrap" id="attendanceTableWrap">
+                  <div class="empty-state">正在加载本周考勤表…</div>
+                </div>
               </article>
             </div>
           </section>

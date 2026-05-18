@@ -29,6 +29,8 @@ const state = {
   reviewQueue: [],
   scoring: { date: '', rows: [] },
   weeklyScoring: { rows: [] },
+  attendanceRecords: [],
+  weeklyAttendance: { days: [], records: [], weekStart: '' },
   scoreRankingTab: 'daily',
   myScoring: null,
   currentProjectId: localStorage.getItem('cue_currentProjectId') || '',
@@ -524,6 +526,21 @@ function currentSessionUsername() {
 
 function currentSessionName() {
   return sessionStorage.getItem('cueHubUser') || '';
+}
+
+function addDays(dateText, days) {
+  const [year, month, day] = String(dateText).split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function weekStartMonday(dateText = getTodayText()) {
+  const [year, month, day] = String(dateText).split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() - dayOfWeek + 1);
+  return date.toISOString().slice(0, 10);
 }
 
 async function loadProjectUsers() {
@@ -2679,35 +2696,125 @@ function renderMeetingReconciliation() {
   `).join('');
 }
 
+function attendanceStatusLabel(status) {
+  return {
+    normal: '正常',
+    delayed: '延迟',
+    approved_leave: '提前请假',
+    temporary_leave: '临时请假',
+    absent: '缺勤'
+  }[status] || '未确认';
+}
+
+function attendanceKindLabel(kind) {
+  return kind === 'task_completion' ? '任务完成' : '晚会出席';
+}
+
+function attendanceRowClass(status) {
+  if (status === 'normal' || status === 'approved_leave') return 'is-present';
+  if (status === 'delayed' || status === 'temporary_leave') return 'is-late';
+  return 'is-missing';
+}
+
+function upsertAttendanceRecord(records = [], record) {
+  const next = (records || []).filter((item) => !(
+    item.owner === record.owner
+    && item.kind === record.kind
+    && item.date === record.date
+    && (item.projectId || getCurrentProjectId()) === (record.projectId || getCurrentProjectId())
+  ));
+  next.unshift(record);
+  return next;
+}
+
+function attendanceWeeklyScoreForRecord(kind, record) {
+  const reported = record?.reportedStatus || record?.status || '';
+  const actual = record?.actualStatus || record?.status || '';
+  if (actual === 'approved_leave' && reported === 'approved_leave') return 10;
+  if (actual === 'temporary_leave' || reported === 'temporary_leave') return 7;
+  if ((reported === 'normal' || reported === 'delayed') && (actual === 'normal' || actual === 'delayed')) return 10;
+  if ((!reported || reported === 'absent') && (actual === 'normal' || actual === 'delayed')) return 7;
+  if ((reported === 'normal' || reported === 'delayed') && (!actual || actual === 'absent')) return 4;
+  return 0;
+}
+
+function attendanceCellSummary(record, kind) {
+  if (!record) return { label: '未记录', tone: 'absent', score: 0 };
+  const reported = record.reportedStatus || record.status || '';
+  const actual = record.actualStatus || record.status || '';
+  const score = attendanceWeeklyScoreForRecord(kind, record);
+  if (actual === 'approved_leave' && reported === 'approved_leave') return { label: '请假', tone: 'leave', score };
+  if (actual === 'temporary_leave' || reported === 'temporary_leave') return { label: '临时请假', tone: 'late', score };
+  if ((reported === 'normal' || reported === 'delayed') && (actual === 'normal' || actual === 'delayed')) {
+    return { label: reported === 'delayed' ? '已说明延迟' : '正常', tone: 'ok', score };
+  }
+  if ((!reported || reported === 'absent') && (actual === 'normal' || actual === 'delayed')) return { label: '未报但完成', tone: 'warn', score };
+  if ((reported === 'normal' || reported === 'delayed') && (!actual || actual === 'absent')) return { label: '已报未完成', tone: 'risk', score };
+  return { label: kind === 'meeting' ? '缺勤' : '未完成', tone: 'absent', score };
+}
+
 function renderMeetingAttendance() {
   const list = document.querySelector('#meetingAttendanceList');
   if (!list) return;
   const date = getMeetingDate();
-  const { attendanceStart, attendanceEnd } = getMeetingWindow(date);
-  const standups = state.standups.filter((standup) => standup.date === date);
-  const byOwner = new Map(standups.map((standup) => [standup.owner, standup]));
-  const members = state.members.length ? state.members : standups.map((standup) => ({ name: standup.owner, role: '' }));
+  const records = (state.attendanceRecords || []).filter((item) => item.date === date);
+  const byOwnerKind = new Map(records.map((item) => [`${item.owner}|${item.kind}`, item]));
+  const members = state.members.length ? state.members : records.map((item) => ({ name: item.owner, role: '' }));
+  const summary = document.querySelector('#attendanceSummary');
+  const canManage = currentUserCanManageAttendance();
+  const form = document.querySelector('#attendanceManagerForm');
+  const readOnlyHint = document.querySelector('#attendanceReadOnlyHint');
 
   if (!members.length) {
     list.innerHTML = '<div class="empty-state">暂无成员数据。</div>';
+    if (summary) summary.innerHTML = '';
     return;
   }
 
-  list.innerHTML = members.map((member) => {
-    const standup = byOwner.get(member.name);
-    const createdAt = new Date(standup?.createdAt || '');
-    const checkedInWindow = standup && createdAt >= attendanceStart && createdAt <= attendanceEnd;
-    const status = checkedInWindow ? '已打卡' : standup ? '窗口外上报' : '未上报';
-    return `
-      <div class="meeting-attendance-row ${checkedInWindow ? 'is-present' : standup ? 'is-late' : 'is-missing'}">
-        <div>
-          <strong>${escapeHtml(member.name)}</strong>
-          <span>${escapeHtml(member.role || status)}</span>
-        </div>
-        <b>${status}</b>
-        <small>${standup ? formatDateTime(standup.createdAt) : '18:30-19:00 未收到企微上报'}</small>
-      </div>
+  const meetingDone = members.filter((member) => {
+    const record = byOwnerKind.get(`${member.name}|meeting`);
+    return record && record.status !== 'absent';
+  }).length;
+  const taskDone = members.filter((member) => {
+    const record = byOwnerKind.get(`${member.name}|task_completion`);
+    return record && record.status !== 'absent';
+  }).length;
+
+  if (summary) {
+    summary.innerHTML = `
+      <div><span>晚会出席</span><b>${meetingDone}/${members.length}</b></div>
+      <div><span>任务反馈</span><b>${taskDone}/${members.length}</b></div>
+      <div><span>数据来源</span><b>企微 + 人工补录</b></div>
     `;
+  }
+
+  if (form) form.style.display = canManage ? '' : 'none';
+  if (readOnlyHint) readOnlyHint.style.display = canManage ? 'none' : '';
+
+  list.innerHTML = members.flatMap((member) => {
+    const meeting = byOwnerKind.get(`${member.name}|meeting`);
+    const task = byOwnerKind.get(`${member.name}|task_completion`);
+    return [
+      {
+        kind: 'meeting',
+        record: meeting,
+        helper: meeting ? formatDateTime(meeting.updatedAt || meeting.recordedAt) : '暂无出席记录'
+      },
+      {
+        kind: 'task_completion',
+        record: task,
+        helper: task ? formatDateTime(task.updatedAt || task.recordedAt) : '暂无任务完成反馈'
+      }
+    ].map(({ kind, record, helper }) => `
+      <div class="meeting-attendance-row ${attendanceRowClass(record?.status)}">
+        <div>
+          <strong>${escapeHtml(member.name)} · ${attendanceKindLabel(kind)}</strong>
+          <span>${escapeHtml(member.role || '')}${record?.source ? ` · ${escapeHtml(record.source === 'wecom' ? '企微' : '人工')}` : ''}</span>
+        </div>
+        <b>${escapeHtml(attendanceStatusLabel(record?.status || 'absent'))}</b>
+        <small>${escapeHtml(helper)}${record?.editedBy ? ` · 编辑 ${record.editedBy}` : ''}${record?.note ? ` · ${record.note}` : ''}</small>
+      </div>
+    `);
   }).join('');
 }
 
@@ -2732,9 +2839,90 @@ function renderMeetingTargets() {
   `).join('');
 }
 
+function renderAttendanceBoard() {
+  const weekInput = document.querySelector('#attendanceWeekDate');
+  if (weekInput && !weekInput.value) weekInput.value = getTodayText();
+  const wrap = document.querySelector('#attendanceTableWrap');
+  const ranking = document.querySelector('#attendanceRankingList');
+  const summary = document.querySelector('#attendanceWeeklySummary');
+  if (!wrap || !ranking || !summary) return;
+
+  const days = state.weeklyAttendance?.days || [];
+  const records = state.weeklyAttendance?.records || [];
+  const weekStart = state.weeklyAttendance?.weekStart || weekStartMonday(weekInput?.value || getTodayText());
+  const members = state.members.length ? state.members : [...new Set(records.map((item) => item.owner))].map((name) => ({ name, role: '' }));
+  const recordMap = new Map(records.map((item) => [`${item.owner}|${item.date}|${item.kind}`, item]));
+
+  summary.innerHTML = `
+    <div><span>统计周</span><b>${escapeHtml(weekStart)} ~ ${escapeHtml(days[days.length - 1] || addDays(weekStart, 6))}</b></div>
+    <div><span>参与成员</span><b>${members.length}</b></div>
+    <div><span>可编辑角色</span><b>创始人 / 开发者 / 人事</b></div>
+    <div><span>评分维度</span><b>任务反馈 / 晚会出勤 / 请假</b></div>
+  `;
+
+  const rows = members.map((member) => {
+    const dayRows = days.map((date) => {
+      const task = attendanceCellSummary(recordMap.get(`${member.name}|${date}|task_completion`), 'task_completion');
+      const meeting = attendanceCellSummary(recordMap.get(`${member.name}|${date}|meeting`), 'meeting');
+      const dayScore = Math.round((task.score + meeting.score) / 2);
+      return { date, task, meeting, dayScore };
+    });
+    const weeklyScore = dayRows.length ? Math.round(dayRows.reduce((sum, row) => sum + row.dayScore, 0) / dayRows.length) : 0;
+    const leaveCount = dayRows.filter((row) => row.task.label.includes('请假') || row.meeting.label.includes('请假')).length;
+    return { member, dayRows, weeklyScore, leaveCount };
+  }).sort((a, b) => b.weeklyScore - a.weeklyScore || a.member.name.localeCompare(b.member.name, 'zh-CN'));
+
+  ranking.innerHTML = rows.length ? rows.map((row, index) => `
+    <div class="attendance-ranking-row">
+      <div>
+        <strong>${index + 1}. ${escapeHtml(row.member.name)}</strong>
+        <span>${escapeHtml(row.member.role || '成员')} · 请假 ${row.leaveCount} 次</span>
+      </div>
+      <b>${row.weeklyScore}</b>
+    </div>
+  `).join('') : '<div class="empty-state">本周暂无考勤数据。</div>';
+
+  const headerCells = days.map((date) => `<th>${escapeHtml(date.slice(5))}<small>任务 / 晚会</small></th>`).join('');
+  const bodyRows = rows.map((row) => `
+    <tr>
+      <td class="attendance-name-cell">
+        <strong>${escapeHtml(row.member.name)}</strong>
+        <span>${escapeHtml(row.member.role || '成员')}</span>
+      </td>
+      ${row.dayRows.map((day) => `
+        <td>
+          <div class="attendance-day-cell">
+            <span class="attendance-pill tone-${day.task.tone}">任务 ${escapeHtml(day.task.label)}</span>
+            <span class="attendance-pill tone-${day.meeting.tone}">晚会 ${escapeHtml(day.meeting.label)}</span>
+            <small>${day.dayScore} 分</small>
+          </div>
+        </td>
+      `).join('')}
+      <td class="attendance-score-cell">${row.weeklyScore}</td>
+    </tr>
+  `).join('');
+
+  wrap.innerHTML = rows.length ? `
+    <table class="attendance-table">
+      <thead>
+        <tr>
+          <th>成员</th>
+          ${headerCells}
+          <th>周均分</th>
+        </tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+  ` : '<div class="empty-state">本周暂无考勤表数据。</div>';
+}
+
 function renderMeeting() {
   const meetingDate = document.querySelector('#meetingDate');
   if (meetingDate && !meetingDate.value) meetingDate.value = getTodayText();
+  const ownerSelect = document.querySelector('#attendanceOwner');
+  if (ownerSelect) {
+    setOptions('#attendanceOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
+  }
   // Task 5.2: AI 推荐替换旧的会后领取表单
   renderMeetingRecommendations();
   renderMeetingReport();
@@ -2764,6 +2952,7 @@ function renderAll() {
   renderPlanAdjustments();
   renderAiPm();
   renderMeeting();
+  renderAttendanceBoard();
   renderPcWorkspace();
   renderPcProfile();
 }
@@ -2784,6 +2973,7 @@ async function loadState() {
   state.activities = payload.activities || [];
   state.assignments = payload.assignments || [];
   state.standups = payload.standups || [];
+  state.attendanceRecords = payload.attendanceRecords || [];
   state.eveningReports = payload.eveningReports || {};
   state.currentStage = payload.currentStage || {};
   state.metrics = payload.metrics || {};
@@ -2798,14 +2988,16 @@ async function loadState() {
 
   // 并行加载站会、配置、计划调整建议（assignments 已在 /api/state 全量返回，不重复拉）
   const projectQuery = getCurrentProjectId() ? `?projectId=${encodeURIComponent(getCurrentProjectId())}` : '';
-  const [standupPayload, config, adjustPayload, eveningPayload, checklistPayload, scoringPayload, weeklyScoringPayload] = await Promise.all([
+  const attendanceDate = document.querySelector('#attendanceWeekDate')?.value || getTodayText();
+  const [standupPayload, config, adjustPayload, eveningPayload, checklistPayload, scoringPayload, weeklyScoringPayload, weeklyAttendancePayload] = await Promise.all([
     api('/api/standups').catch(() => ({ standups: [] })),
     api('/api/config').catch(() => ({})),
     api('/api/plan-adjustments').catch(() => ({ adjustments: [] })),
     api('/api/reports/evening').catch(() => ({ report: null })),
     api(`/api/stage/checklist${projectQuery}`).catch(() => null),
     api(`/api/scoring/daily${projectQuery}`).catch(() => ({ rows: [] })),
-    api(`/api/scoring/weekly${projectQuery}`).catch(() => ({ rows: [] }))
+    api(`/api/scoring/weekly${projectQuery}`).catch(() => ({ rows: [] })),
+    api(`/api/attendance/weekly${projectQuery}${projectQuery ? '&' : '?'}date=${encodeURIComponent(attendanceDate)}`).catch(() => ({ days: [], records: [], weekStart: '' }))
   ]);
 
   state.standups = standupPayload.standups || [];
@@ -2814,6 +3006,7 @@ async function loadState() {
   state.stageChecklist = checklistPayload || state.stageChecklist;
   state.scoring = scoringPayload || { rows: [] };
   state.weeklyScoring = weeklyScoringPayload || { rows: [] };
+  state.weeklyAttendance = weeklyAttendancePayload || { days: [], records: [], weekStart: '' };
   state.myScoring = (state.scoring.rows || []).find((row) => row.owner === currentSessionName()) || null;
   if (eveningPayload.report) {
     state.eveningReports = {
@@ -3267,6 +3460,53 @@ async function syncSignals() {
   toast('已同步本地任务、审阅和风险信号');
 }
 
+async function submitAttendanceRecord() {
+  if (!currentUserCanManageAttendance()) {
+    toast('当前账号只有查看权限');
+    return;
+  }
+  const owner = document.querySelector('#attendanceOwner')?.value || '';
+  const kind = document.querySelector('#attendanceKind')?.value || 'meeting';
+  const status = document.querySelector('#attendanceStatus')?.value || 'normal';
+  const date = document.querySelector('#meetingDate')?.value || getTodayText();
+  const note = document.querySelector('#attendanceNote')?.value || '';
+  if (!owner) {
+    toast('请选择成员');
+    return;
+  }
+  const payload = await api('/api/attendance/records', {
+    method: 'POST',
+    body: JSON.stringify({
+      projectId: getCurrentProjectId(),
+      date,
+      owner,
+      kind,
+      status,
+      note
+    })
+  });
+  if (payload.record) {
+    state.attendanceRecords = upsertAttendanceRecord(state.attendanceRecords, payload.record);
+  }
+  if (payload.scoring) {
+    state.scoring = payload.scoring;
+    state.myScoring = (state.scoring.rows || []).find((row) => row.owner === currentSessionName()) || null;
+  }
+  document.querySelector('#attendanceManagerForm')?.reset();
+  renderMeetingAttendance();
+  await refreshWeeklyAttendance();
+  renderMyScoreBreakdown();
+  toast(`已更新 ${owner} 的${kind === 'task_completion' ? '任务反馈' : '晚会出席'}状态`);
+}
+
+async function refreshWeeklyAttendance() {
+  const projectId = getCurrentProjectId();
+  const date = document.querySelector('#attendanceWeekDate')?.value || getTodayText();
+  const query = `?projectId=${encodeURIComponent(projectId)}&date=${encodeURIComponent(date)}`;
+  state.weeklyAttendance = await api(`/api/attendance/weekly${query}`).catch(() => state.weeklyAttendance);
+  renderAttendanceBoard();
+}
+
 async function syncCueAiGit(options = {}) {
   const projectId = getCurrentProjectId();
   const project = state.projects.find((p) => p.id === projectId);
@@ -3337,6 +3577,7 @@ function setRoute(route) {
     roadmap: 'command',
     'ai-pm': 'command',
     meeting: 'command',
+    attendance: 'command',
     'account-admin': 'command',
     'risk-detail': 'overview',
     planning: 'execution',
@@ -3361,6 +3602,7 @@ function setRoute(route) {
     overview: 'overview',
     'risk-detail': 'overview',
     roadmap: 'overview',
+    attendance: 'overview',
     assignment: 'assignment',
     'task-detail': 'assignment',
     standup: 'assignment',
@@ -3640,6 +3882,13 @@ function bindEvents() {
 
   document.querySelector('#meetingDate')?.addEventListener('change', () => {
     renderMeeting();
+  });
+  document.querySelector('#attendanceWeekDate')?.addEventListener('change', () => {
+    refreshWeeklyAttendance().catch((err) => toast(err.message));
+  });
+  document.querySelector('#attendanceManagerForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitAttendanceRecord().catch((err) => toast(err.message));
   });
 
   document.querySelector('[data-action="generate-plan"]').addEventListener('click', () => {
