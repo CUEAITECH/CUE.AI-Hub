@@ -387,6 +387,7 @@ startScheduler({
   writeProgressToGitHub,
   importDocsForProject,
   refreshAnalysisIntoStore,
+  generateDailyTaskSuggestions,
   isWeComAvailable,
   sendWeComMarkdown,
   todayText,

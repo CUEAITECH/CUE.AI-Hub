@@ -10,6 +10,7 @@ export function startScheduler(deps) {
     writeProgressToGitHub,
     importDocsForProject,
     refreshAnalysisIntoStore,
+    generateDailyTaskSuggestions,
     isWeComAvailable,
     sendWeComMarkdown,
     todayText,
@@ -215,6 +216,57 @@ export function startScheduler(deps) {
         }
       } catch (err) {
         console.error('[Scheduler] 批量 update-docs 失败:', err.message);
+      }
+
+      // 17:45 为所有活跃用户预生成明日推荐（独立 LLM 调用，per-user）
+      try {
+        const recStore = await loadStore();
+        // forDate = 明天，为晚会后明天的工作做准备
+        const tomorrow = (() => {
+          const d = new Date(Date.now() + 24 * 3600 * 1000);
+          const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
+          }).formatToParts(d);
+          const get = (t) => parts.find((p) => p.type === t)?.value;
+          return `${get('year')}-${get('month')}-${get('day')}`;
+        })();
+        const activeUsers = (recStore.users || []).filter(
+          (u) => u.active !== false && u.role !== 'admin'
+        );
+        let ok = 0;
+        let failed = 0;
+        for (const user of activeUsers) {
+          try {
+            const result = await generateDailyTaskSuggestions(tomorrow, user.id, recStore, { triggeredBy: 'scheduler' });
+            await updateStore((draft) => {
+              draft.dailyTaskSuggestions = draft.dailyTaskSuggestions || {};
+              draft.dailyTaskSuggestions[tomorrow] = draft.dailyTaskSuggestions[tomorrow] || {};
+              draft.dailyTaskSuggestions[tomorrow][user.id] = {
+                generatedAt: new Date().toISOString(),
+                generatedBy: 'scheduler',
+                pool: result.pool,
+                candidates: result.candidates
+              };
+              return draft;
+            });
+            ok++;
+          } catch (err) {
+            failed++;
+            console.error(`[Scheduler] 推荐生成失败 ${user.username || user.id}:`, err.message);
+          }
+        }
+        console.log(`[Scheduler] 推荐已生成：${ok} 个用户，${failed} 个失败（forDate=${tomorrow}）`);
+        if (failed > 0 && isWeComAvailable()) {
+          await sendWeComMarkdown([
+            `## ⚠️ AI 推荐生成部分失败`,
+            ``,
+            `成功 ${ok} 人，失败 ${failed} 人（forDate=${tomorrow}）`,
+            ``,
+            `检查 ANTHROPIC_API_KEY 配置或服务可用性。`
+          ].join('\n')).catch((e) => console.error('[Scheduler] 推荐失败告警推送失败:', e.message));
+        }
+      } catch (err) {
+        console.error('[Scheduler] 批量推荐生成失败:', err.message);
       }
     }
 
