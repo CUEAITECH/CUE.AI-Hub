@@ -18,7 +18,7 @@
 | 1 | 数据模型 + migrateStore | ✅ 完成 | `d3aaf25` | store.dailyTaskSuggestions + aiPromptTraces, assignment 加字段 |
 | 2 | 推荐引擎 service | ✅ 完成 | `01bba95` | server/services/dailyTaskSuggester.js |
 | 3 | API endpoints | ✅ 完成 | `7074c1e` | GET/POST recommendations 3 个 |
-| 4 | 调度器接入 17:45 | ✅ 完成 | `<commit>` | scheduler.js 加生成步 |
+| 4 | 调度器接入 17:45 | ✅ 完成 | `e2fd9e2` | scheduler.js 加生成步 |
 | 5 | 前端 panel 改造 | ⚪ 待开始 | - | index.html + src/app.js |
 | 6 | E2E smoke 验证 | ⚪ 待开始 | - | 烟雾测试通过 |
 
