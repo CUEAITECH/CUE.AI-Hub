@@ -91,6 +91,11 @@ import { createReportRoutes } from './routes/reportRoutes.js';
 import { createPlanningRoutes } from './routes/planningRoutes.js';
 import { createWebhookRoutes } from './routes/webhookRoutes.js';
 import { createScoringRoutes } from './routes/scoringRoutes.js';
+import { createRecommendationRoutes } from './routes/recommendationRoutes.js';
+import {
+  generateDailyTaskSuggestions,
+  LLMUnavailableError
+} from './services/dailyTaskSuggester.js';
 import { startScheduler, runStartupPhaseCorrection } from './scheduler.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -231,6 +236,16 @@ const routeModules = [
     sendJson,
     sendError,
     todayText
+  }),
+  createRecommendationRoutes({
+    loadStore,
+    updateStore,
+    readBody,
+    sendJson,
+    sendError,
+    generateDailyTaskSuggestions,
+    LLMUnavailableError,
+    normalizeAssignment
   }),
   createTaskRoutes({
     loadStore,
