@@ -52,7 +52,8 @@ store.dailyTaskSuggestions = {
           hint: '<60 字内实施提示>',           // AI 给的实施建议
           status: 'pending' | 'accepted' | 'superseded',
           actedAt: null | '<ISO datetime>',   // 用户操作时间（accepted）
-          acceptedAssignmentId: null | '<assignment id>'  // 桥到 assignments 表
+          acceptedAssignmentId: null | '<assignment id>',  // 桥到 assignments 表
+          traceId: 'trace_xxx'                // 桥到 aiPromptTraces，便于 PMF 归因
         }
         // 共 ≤ 3 个，按 score 降序
       ]
@@ -77,10 +78,37 @@ store.dailyTaskSuggestions = {
 
 同一用户同一 `forDate` 下 `status=superseded` 的 candidates，下次刷新时**从该用户的候选池里排除**。跨日 reset，不带历史。
 
-### 2.5 migrateStore 默认
+### 2.5 LLM 调用日志（解锁 prompt 迭代）
+
+```js
+store.aiPromptTraces = [
+  {
+    traceId: 'trace_<random>',
+    feature: 'daily-task-suggestion',     // 留作未来其他 AI feature 复用
+    userId: '<user id>',
+    forDate: '2026-05-19',
+    triggeredBy: 'scheduler' | 'manual',
+    systemPromptHash: '<sha256 8 字符>',    // 标 prompt 版本，跨期对比
+    userPromptSnapshot: '<完整输入文本>',    // 脱敏后保存
+    rawOutput: '<LLM 返回原文>',
+    parsedCandidates: [                    // 解析成功的部分
+      { taskId, score, reason, hint }
+    ],
+    parseError: null | '<错误信息>',
+    durationMs: 4523,
+    timestamp: '<ISO>'
+  }
+]
+```
+
+**保留策略：** 最近 200 条（约 1-2 个月，4 人团队），更老的自动清理。
+**追加更新：** 不直接挂用户动作，从 `dailyTaskSuggestions` 的 candidates.status 反查即可（通过 traceId 关联）。
+
+### 2.6 migrateStore 默认
 
 ```js
 draft.dailyTaskSuggestions = draft.dailyTaskSuggestions || {};
+draft.aiPromptTraces = draft.aiPromptTraces || [];
 ```
 
 assignments 表的新字段在 normalize 时填默认 `false` / `null`，老数据零迁移。
@@ -126,7 +154,7 @@ assignments 表的新字段在 normalize 时填默认 `false` / `null`，老数�
 **body：** `{ "date": "2026-05-19" }`
 **行为：** 对当前用户在该 date 触发重新生成。老 candidates 全标 `superseded`，新的覆盖。
 **返回：** 同 GET 的形态，包含新 candidates。
-**Timeout 策略：** 同步等 LLM 最多 12s（实际 5-8s）。超时则规则降级，确保 200 必返回新 candidates。前端用 spinner 覆盖等待。
+**Timeout 策略：** 同步等 LLM 最多 12s（实际 5-8s）。超时返回 503，前端显示"AI 暂不可用"提示（不做规则降级，详见 §4.4）。前端用 spinner 覆盖等待。
 
 ### 3.3 POST `/api/recommendations/:taskId/accept`
 
@@ -195,25 +223,45 @@ const eligible = store.tasks.filter(t =>
 
 System prompt 上有 `cache_control: { type: 'ephemeral' }`。
 
-### 4.4 规则降级
+### 4.4 LLM 失败处理：fail loud，不做规则降级
 
-LLM 不可用（缺 `ANTHROPIC_API_KEY` / 调用失败 / JSON 解析失败）时：
+**决策（PMF 阶段）：** LLM 不可用时直接报错，让用户立刻知道而不是用劣化兜底掩盖问题。
+
+理由：规则推荐质量差会污染 PMF 数据（"接受率低"分不清是 LLM 差还是规则差），且让团队对 AI 推荐失去信心。宁可暂时没推荐也不要假推荐。
+
+**实现：**
+- `generateDailyTaskSuggestions` 失败时抛 `LLMUnavailableError`，调用方负责处理
+- 调度器 17:45 失败 → 日志 + 企微告警（推到机器人）："今日 AI 推荐生成失败，请人工排查 ANTHROPIC_API_KEY 或服务可用性"
+- 手动刷新 API 失败 → 返回 503 + 错误消息，前端 UI 显示红色 banner："AI 推荐暂不可用：<错误>。可手动从任务池领取，或稍后重试。"
+- 数据：失败时不写 `dailyTaskSuggestions[forDate][userId]`，避免污染历史
+
+**何时重新引入规则兜底：**
+- PMF 验证后，LLM 失败成为常态（成本/可用性问题）才考虑
+- 届时规则版作为独立的 "fallback mode"，UI 明确标"由规则推荐"，与 LLM 推荐区分
+
+### 4.5 LLM 调用 trace 记录
+
+`generateDailyTaskSuggestions` 内部：每次 `callClaude` 完成后（成功或解析失败都记），追加一条到 `store.aiPromptTraces`。
 
 ```js
-function ruleScore(task, userContext) {
-  let score = 50;
-  if (taskTagsOverlapWithRecent(task, userContext)) score += 30;
-  if (task.priority === 'P0') score += 10;
-  if (task.priority === 'P1') score += 5;
-  if (task.deliverableId && isCurrentStageDeliverable(task.deliverableId, store)) score += 10;
-  if (task.sourceDoc) score += 5;
-  return Math.min(100, score);
-}
+await updateStore((draft) => {
+  draft.aiPromptTraces = draft.aiPromptTraces || [];
+  draft.aiPromptTraces.unshift({
+    traceId, feature: 'daily-task-suggestion',
+    userId, forDate, triggeredBy,
+    systemPromptHash: sha256(SYSTEM_PROMPT).slice(0, 8),
+    userPromptSnapshot, rawOutput,
+    parsedCandidates, parseError,
+    durationMs, timestamp
+  });
+  draft.aiPromptTraces = draft.aiPromptTraces.slice(0, 200);  // 保留最近 200 条
+  return draft;
+});
 ```
 
-reason 用模板填空：`"该任务关键词 <X> 与你最近 commits 中 <Y> 模块重合"`。不智能但不空。
+candidate 数据里加 `traceId` 字段（在 §2.1 candidates 内补一行），方便从用户动作反查 trace。
 
-### 4.5 forDate 默认值
+### 4.6 forDate 默认值
 
 - 调度器 17:45 自动跑：`forDate = todayText()` + 1 天（明天）
 - 用户手动刷新：`forDate = 用户传的 date`（前端默认 = 明天）
@@ -340,9 +388,9 @@ import('./server/services/dailyTaskSuggester.js').then(async (m) => {
 
 ---
 
-## 8. PMF 指标（功能上线后即可统计）
+## 8. PMF 指标 + Prompt 迭代方法论
 
-通过 `store.dailyTaskSuggestions` 直接算：
+### 8.1 通过 store.dailyTaskSuggestions 直接算的指标
 
 | 指标 | 计算 |
 |---|---|
@@ -352,6 +400,26 @@ import('./server/services/dailyTaskSuggester.js').then(async (m) => {
 | 任务完成率 | `assignments where aiSuggested=true and status=已完成` |
 | 撤销率 | accept 后 24h 内人工改 task owner 或撤销的比例 |
 
+### 8.2 通过 store.aiPromptTraces 做 prompt 迭代
+
+每周 review：
+1. **最差 10 条** — 候选全被 superseded 或 accept 后撤销的 trace
+2. **最好 10 条** — 接受后任务真完成的 trace
+3. 看 `userPromptSnapshot` 找模式：
+   - 是 user context 太薄？ → 加字段
+   - 是 task feature 不够？ → 加字段
+   - 是 system prompt rule 漏了？ → 加 rule（同时 systemPromptHash 变化，可对照前后周指标）
+
+每次只动 1 个杠杆（system prompt / user context / task features），留对照组。
+
+### 8.3 短期 vs 中期 vs 长期迭代
+
+| 阶段 | 方法 | 成本 |
+|---|---|---|
+| Sprint 1.5a（本期） | trace 落库 + 周手动 grep | 0 额外（trace 加进 spec） |
+| Sprint 1.5b | refresh 弹 1-click rubric（太难/不熟/冲突/其他）| 1 天 |
+| 成熟期 | A/B 测试基础设施 + automated eval | 1+ 周 |
+
 每周自动生成"AI 推荐周报"推到企微（Sprint 1.5c 范围）。
 
 ---
@@ -360,7 +428,7 @@ import('./server/services/dailyTaskSuggester.js').then(async (m) => {
 
 | 风险 | 缓解 |
 |---|---|
-| LLM 调用失败 | 规则降级；前端显示"AI 暂不可用，用规则推荐" |
+| LLM 调用失败 | 不降级。前端红色 banner "AI 暂不可用"；调度器失败推企微告警；保留 PMF 数据纯净度（详见 §4.4） |
 | 候选池为空 | 显示"任务池暂时没有匹配你的任务，建议刷新 docs"，附"同步 docs"按钮 |
 | 推荐质量差 | PMF 指标里"刷新率"暴露问题；prompt 迭代 |
 | 多人同时点同一任务 | 409 + UI 灰态 + 自动刷新 |

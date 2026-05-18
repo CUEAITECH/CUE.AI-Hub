@@ -15,7 +15,7 @@
 | # | Phase | 状态 | 提交 SHA | 关键产出 |
 |---|------|------|---------|---------|
 | 0 | spec & plan | 🟡 进行中 | - | spec + implementation plan |
-| 1 | 数据模型 + migrateStore | ⚪ 待开始 | - | store.dailyTaskSuggestions, assignment 加字段 |
+| 1 | 数据模型 + migrateStore | ⚪ 待开始 | - | store.dailyTaskSuggestions + aiPromptTraces, assignment 加字段 |
 | 2 | 推荐引擎 service | ⚪ 待开始 | - | server/services/dailyTaskSuggester.js |
 | 3 | API endpoints | ⚪ 待开始 | - | GET/POST recommendations 3 个 |
 | 4 | 调度器接入 17:45 | ⚪ 待开始 | - | scheduler.js 加生成步 |
@@ -42,6 +42,8 @@
 | Q8 | superseded 排除：同 forDate 内排除，跨日 reset | spec §2.4 |
 | Q9 | 任务冲突：UI 灰态 + 409 兜底，不自动补位 | spec §3.3 |
 | Q10 | 实施范围：thin slice 6 Phase（不含 swap/看全部/全员/banner/WeCom）| spec §7 |
+| Q11 | LLM 失败：fail loud，不做规则降级（保 PMF 数据纯净度）| spec §4.4 |
+| Q12 | 加 `store.aiPromptTraces` 落 LLM 输入/输出日志，解锁 prompt 迭代 | spec §2.5, §4.5, §8.2 |
 
 ---
 
