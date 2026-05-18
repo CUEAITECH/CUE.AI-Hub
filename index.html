@@ -684,18 +684,14 @@
                 <div class="meeting-panel-head">
                   <div>
                     <span>会后领取</span>
-                    <strong>每人已领取任务</strong>
+                    <strong>🤖 AI 今日推荐</strong>
                   </div>
-                  <button type="button" data-action="create-assignment">记录领取</button>
+                  <button type="button" data-action="refresh-recommendations" class="pc-btn-ghost">🔄 刷新推荐</button>
                 </div>
-                <div class="meeting-claim-form">
-                  <select id="meetingAssignmentOwner" aria-label="领取人"></select>
-                  <select id="meetingAssignmentTask" aria-label="领取任务"></select>
-                  <input id="meetingAssignmentNote" type="text" aria-label="领取说明" placeholder="补充会后领取说明（可选）" />
+                <div class="recommendation-list" id="meetingRecommendationList">
+                  <div class="empty-state">推荐加载中…</div>
                 </div>
-                <div class="meeting-assignment-list" id="meetingAssignmentList">
-                  <div class="empty-state">会后还没有领取记录。成员在企微领取后会同步到这里，也可以临时手动补录。</div>
-                </div>
+                <div class="recommendation-meta" id="meetingRecommendationMeta"></div>
               </article>
 
               <article class="meeting-panel meeting-panel-main">
