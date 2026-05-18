@@ -15,7 +15,7 @@
 | # | Phase | 状态 | 提交 SHA | 关键产出 |
 |---|------|------|---------|---------|
 | 0 | spec & plan | 🟡 进行中 | - | spec + implementation plan |
-| 1 | 数据模型 + migrateStore | ✅ 完成 | `612452b` | store.dailyTaskSuggestions + aiPromptTraces, assignment 加字段 |
+| 1 | 数据模型 + migrateStore | ✅ 完成 | `d3aaf25` | store.dailyTaskSuggestions + aiPromptTraces, assignment 加字段 |
 | 2 | 推荐引擎 service | ⚪ 待开始 | - | server/services/dailyTaskSuggester.js |
 | 3 | API endpoints | ⚪ 待开始 | - | GET/POST recommendations 3 个 |
 | 4 | 调度器接入 17:45 | ⚪ 待开始 | - | scheduler.js 加生成步 |
