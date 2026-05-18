@@ -54,22 +54,41 @@ const legacyStage = {
 };
 
 await test('mobile app shell exposes bottom navigation and safe touch layout', async () => {
-  const [html, css] = await Promise.all([
+  const [html, css, app] = await Promise.all([
     readFile(new URL('../index.html', import.meta.url), 'utf8'),
-    readFile(new URL('../src/styles.css', import.meta.url), 'utf8')
+    readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
+    readFile(new URL('../src/app.js', import.meta.url), 'utf8')
   ]);
+  const mobileCss = css.slice(css.indexOf('@media (max-width: 620px)'));
 
   assert.match(html, /class="mobile-app-nav"/);
   assert.match(html, /aria-label="移动端主导航"/);
+  assert.match(html, /class="mobile-more-toggle"/);
+  assert.match(html, /aria-controls="headerSub"/);
+  assert.match(html, /data-action="toggle-mobile-secondary-nav"/);
   assert.match(html, /data-route="overview"[\s\S]*总览/);
   assert.match(html, /data-route="assignment"[\s\S]*任务/);
   assert.match(html, /data-route="reviews"[\s\S]*审阅/);
   assert.match(html, /data-route="pc-workspace"[\s\S]*我的/);
+  ['roadmap', 'ai-pm', 'meeting', 'account-admin', 'planning', 'standup', 'report', 'automation', 'pc-profile', 'pc-account'].forEach((route) => {
+    assert.match(html, new RegExp(`data-route="${route}"`));
+  });
 
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.mobile-app-nav/);
   assert.match(css, /padding-bottom:\s*calc\(8px \+ env\(safe-area-inset-bottom\)\)/);
   assert.match(css, /min-height:\s*44px/);
   assert.doesNotMatch(css, /\.mobile-app-nav\s*\{[^}]*overflow-x:\s*auto/);
+  assert.doesNotMatch(mobileCss, /\.header-right,\s*\.header-sub\s*\{[\s\S]*display:\s*none\s*!important/);
+  assert.match(mobileCss, /\.mobile-more-toggle\s*\{[\s\S]*display:\s*inline-flex/);
+  assert.match(mobileCss, /\.topbar\.mobile-sub-open\s+\.header-sub\s*\{[\s\S]*display:\s*flex\s*!important/);
+  assert.match(mobileCss, /\.header-sub-group\s*\{[\s\S]*display:\s*flex\s*!important/);
+  assert.match(mobileCss, /#topbarProjectName\s*\{[\s\S]*display:\s*block/);
+  assert.match(mobileCss, /\.topbar\.mobile-sub-open\s+\.mobile-more-toggle\s*\{[\s\S]*background:\s*var\(--accent-subtle\)/);
+  assert.match(mobileCss, /max-width:\s*min\(62vw,\s*238px\)/);
+  assert.match(mobileCss, /min-height:\s*44px/);
+  assert.match(app, /toggle-mobile-secondary-nav/);
+  assert.match(app, /mobile-sub-open/);
+  assert.match(app, /aria-expanded/);
 });
 
 await test('mobile auth and dashboard keep phone-first density', async () => {
