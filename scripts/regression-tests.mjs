@@ -122,6 +122,20 @@ await test('mobile auth and dashboard keep phone-first density', async () => {
   assert.doesNotMatch(renderTasksSource, /detail-btn/);
 });
 
+await test('mobile responsive stylesheet is not swallowed by recommendation error rule', async () => {
+  const [html, css] = await Promise.all([
+    readFile(new URL('../index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../src/styles.css', import.meta.url), 'utf8')
+  ]);
+  const recommendationErrorStart = css.indexOf('.recommendation-error {');
+  const mobileResponsiveStart = css.indexOf('/* mobile responsive (PR #23) */');
+  assert.ok(recommendationErrorStart > -1);
+  assert.ok(mobileResponsiveStart > recommendationErrorStart);
+  assert.match(css.slice(recommendationErrorStart, mobileResponsiveStart), /}\s*$/);
+  assert.match(html, /src\/styles\.css\?v=20260519-mobile-css-fix/);
+  assert.match(html, /src\/app\.js\?v=20260519-mobile-css-fix/);
+});
+
 await test('phase1 migration creates top-level phases and deliverables without breaking old checklist', () => {
   const migrated = migrateStore({
     currentStage: legacyStage,

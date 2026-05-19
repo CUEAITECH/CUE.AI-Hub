@@ -6444,6 +6444,7 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 .recommendation-error {
   background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 6px;
   font-size: 12px; margin: 8px;
+}
 /* mobile responsive (PR #23) */
 @media (max-width: 620px) {
   body {
