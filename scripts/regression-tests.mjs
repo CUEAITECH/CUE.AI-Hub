@@ -1026,6 +1026,49 @@ await test('wecom command returns daily and weekly score rankings', async () => 
   assert.match(responsePayload.result, /个工作日/);
 });
 
+await test('wecom command records attendance bot replies', async () => {
+  let requestJson = {};
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'Cue Classroom' }],
+    members: [{ name: '林世棋' }],
+    attendanceRecords: []
+  });
+  let responsePayload = null;
+  const route = createWeComRoutes({
+    createId: (prefix) => `${prefix}_fixed`,
+    loadStore: async () => store,
+    updateStore: async (mutator) => {
+      store = await mutator(structuredClone(store));
+      return store;
+    },
+    readBody: async () => ({ json: requestJson }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    isWeComAvailable: () => true,
+    sendWeComMarkdown: async () => true,
+    scanRisks: () => [],
+    buildMetrics: () => ({}),
+    todayText: () => '2026-05-19',
+    normalizeStandup,
+    normalizeTask: (task) => task,
+    generateAssignmentBrief: async () => ({ generatedBy: 'test' })
+  });
+
+  requestJson = { text: '@cue项目中枢 林世棋正常出席', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.match(responsePayload.result, /已记录 林世棋 晚会出席：正常/);
+  assert.equal(store.attendanceRecords.length, 1);
+  assert.equal(store.attendanceRecords[0].owner, '林世棋');
+  assert.equal(store.attendanceRecords[0].kind, 'meeting');
+  assert.equal(store.attendanceRecords[0].status, 'normal');
+
+  requestJson = { text: '<@bot> 林世棋正常完成', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/attendance'));
+  assert.match(responsePayload.result, /已记录 林世棋 任务完成：正常/);
+  assert.equal(store.attendanceRecords.length, 2);
+  assert.equal(store.attendanceRecords[0].kind, 'task_completion');
+});
+
 // ===== Phase 5：reset 后行为 + 防幽灵 deliverable + 模糊去重 =====
 
 await test('reset semantics: migrateStore preserves empty deliverables when explicitly cleared', () => {

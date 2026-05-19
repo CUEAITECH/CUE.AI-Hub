@@ -423,7 +423,8 @@ function statusFromMessage(text, kind, now = new Date()) {
     if (/延迟完成/.test(text)) return STATUS.DELAYED;
   }
   if (kind === 'meeting') {
-    if (/正常出席|延迟出席/.test(text)) {
+    if (/正常出席/.test(text)) return STATUS.NORMAL;
+    if (/延迟出席/.test(text)) {
       const hm = new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Asia/Shanghai',
         hour: '2-digit',
@@ -440,7 +441,13 @@ function statusFromMessage(text, kind, now = new Date()) {
 
 export function parseAttendanceMessage(text = '', now = new Date()) {
   const raw = String(text || '').trim();
-  const owner = raw.replace(/@[^\s]+/g, '').match(/^(.+?)(正常完成|延迟完成|正常出席|延迟出席|提前请假|临时请假|缺勤)/)?.[1]?.trim() || '';
+  const normalized = raw
+    .replace(/<@[^>]+>/g, ' ')
+    .replace(/@[^\s]+\s+/g, ' ')
+    .replace(/@[^\s]+$/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const owner = normalized.match(/^(.+?)(正常完成|延迟完成|正常出席|延迟出席|提前请假|临时请假|缺勤)/)?.[1]?.trim() || '';
   const kind = /正常完成|延迟完成/.test(raw) ? 'task_completion' : 'meeting';
   const status = statusFromMessage(raw, kind, now);
   if (!owner || !status) return null;

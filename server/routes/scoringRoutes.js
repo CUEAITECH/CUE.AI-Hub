@@ -3,8 +3,7 @@ import {
   buildMonthlyScores,
   buildWeeklyScores,
   canManageAttendance,
-  normalizeAttendanceRecord,
-  parseAttendanceMessage
+  normalizeAttendanceRecord
 } from '../services/scoring.js';
 import { roleForProject, verifySessionToken } from '../services/auth.js';
 
@@ -163,37 +162,6 @@ export function createScoringRoutes({
         record,
         scoring: buildDailyScores(next, { projectId, date: record.date })
       });
-      return true;
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/wecom/attendance') {
-      const { json } = await readBody(req);
-      const store = await loadStore();
-      const projectId = resolveProjectId(store, url, json);
-      const parsed = parseAttendanceMessage(json?.text || json?.content || json?.message || '');
-      if (!parsed) {
-        sendJson(res, 200, { result: '未识别考勤格式。请发送：姓名正常完成 / 姓名延迟完成 / 姓名正常出席 / 姓名延迟出席 / 姓名临时请假 / 姓名缺勤' });
-        return true;
-      }
-      const record = normalizeAttendanceRecord({
-        ...parsed,
-        projectId,
-        date: json?.date || todayText(),
-        source: 'wecom'
-      });
-      await updateStore((draft) => {
-        draft.attendanceRecords = draft.attendanceRecords || [];
-        draft.attendanceRecords = draft.attendanceRecords.filter((item) => !(
-          item.projectId === record.projectId
-          && item.date === record.date
-          && item.owner === record.owner
-          && item.kind === record.kind
-        ));
-        draft.attendanceRecords.unshift(record);
-        draft.attendanceRecords = draft.attendanceRecords.slice(0, 2000);
-        return draft;
-      });
-      sendJson(res, 200, { result: `已记录 ${record.owner} ${record.kind === 'meeting' ? '晚会出席' : '任务完成'}：${record.status}`, record });
       return true;
     }
 

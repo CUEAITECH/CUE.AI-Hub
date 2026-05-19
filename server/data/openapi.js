@@ -341,6 +341,38 @@ export function buildOpenApiSpec(serverUrl) {
         }
       },
 
+      '/api/wecom/attendance': {
+        post: {
+          operationId: 'recordAttendanceViaWecom',
+          summary: '企业微信内记录考勤反馈',
+          description: '把企业微信成员回复写入考勤统计。支持"姓名正常完成"、"姓名延迟完成"、"姓名正常出席"、"姓名延迟出席"、"姓名临时请假"、"姓名缺勤"；消息前带 @机器人 或 <@bot> 也会自动忽略。',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: {
+              type: 'object',
+              required: ['text'],
+              properties: {
+                text: { type: 'string', description: '成员原始回复文本，例如：林世棋正常出席；也兼容 content / message 字段。' },
+                content: { type: 'string', description: '同 text，兼容企业微信字段配置。' },
+                message: { type: 'string', description: '同 text，兼容企业微信字段配置。' },
+                projectId: { type: 'string', description: '项目 ID；不传时使用默认项目。' },
+                date: { type: 'string', description: '考勤日期 YYYY-MM-DD；不传时使用当天。' }
+              }
+            }}}
+          },
+          responses: {
+            '200': { description: '记录结果', content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                result: { type: 'string', description: '可直接回复给成员的记录结果。' },
+                projectId: { type: 'string', description: '记录所属项目 ID。' },
+                record: { type: 'object', description: '写入的考勤记录。' }
+              }
+            }}}}
+          }
+        }
+      },
+
       '/api/wecom/progress': {
         post: {
           operationId: 'updateTaskProgressByKeyword',

@@ -1,5 +1,10 @@
 import { bindAssignmentToExplicitRefs } from '../services/bindingEngine.js';
-import { buildDailyScores, buildWeeklyScores } from '../services/scoring.js';
+import {
+  buildDailyScores,
+  buildWeeklyScores,
+  normalizeAttendanceRecord,
+  parseAttendanceMessage
+} from '../services/scoring.js';
 
 function formatShanghaiTime(value) {
   if (!value) return '暂无';
@@ -175,6 +180,22 @@ function scopeStoreToProject(store, projectId) {
   };
 }
 
+function attendanceKindLabel(kind) {
+  return kind === 'meeting' ? '晚会出席' : '任务完成';
+}
+
+function attendanceStatusLabel(status) {
+  return {
+    normal: '正常',
+    delayed: '延迟说明',
+    reported_incomplete: '已汇报未完成/未按时出席',
+    unreported_done: '未汇报但已完成/已出席',
+    temp_leave: '临时请假/迟到',
+    approved_leave: '提前请假',
+    absent: '缺勤'
+  }[status] || status;
+}
+
 export function createWeComRoutes({
   createId,
   loadStore,
@@ -191,6 +212,37 @@ export function createWeComRoutes({
   normalizeTask,
   generateAssignmentBrief
 }) {
+  async function recordWeComAttendance(json = {}, url) {
+    const store = await loadStore();
+    const { projectId } = resolveProjectContext(store, url, json);
+    const text = String(json?.text || json?.content || json?.message || '').trim();
+    const parsed = parseAttendanceMessage(text);
+    if (!parsed) return null;
+    const record = normalizeAttendanceRecord({
+      ...parsed,
+      projectId,
+      date: String(json?.date || url.searchParams.get('date') || todayText()).trim(),
+      source: 'wecom'
+    });
+    await updateStore((draft) => {
+      draft.attendanceRecords = draft.attendanceRecords || [];
+      draft.attendanceRecords = draft.attendanceRecords.filter((item) => !(
+        item.projectId === record.projectId
+        && item.date === record.date
+        && item.owner === record.owner
+        && item.kind === record.kind
+      ));
+      draft.attendanceRecords.unshift(record);
+      draft.attendanceRecords = draft.attendanceRecords.slice(0, 2000);
+      return draft;
+    });
+    return {
+      projectId,
+      record,
+      result: `已记录 ${record.owner} ${attendanceKindLabel(record.kind)}：${attendanceStatusLabel(record.status)}`
+    };
+  }
+
   return async function wecomRoutes(req, res, url) {
     if (req.method === 'POST' && url.pathname === '/api/wecom/push') {
       if (!isWeComAvailable()) {
@@ -255,6 +307,11 @@ export function createWeComRoutes({
     if (req.method === 'POST' && url.pathname === '/api/wecom/command') {
       const { json } = await readBody(req);
       const text = String(json?.text || json?.content || json?.message || '').trim();
+      const attendance = await recordWeComAttendance(json, url);
+      if (attendance) {
+        sendJson(res, 200, attendance);
+        return true;
+      }
       const type = resolveRankingType(text);
       if (type) {
         const store = await loadStore();
@@ -270,6 +327,19 @@ export function createWeComRoutes({
       sendJson(res, 200, {
         result: '未识别指令。可发送：每日排名 / 每周排名 / 今日评分 / 周榜。'
       });
+      return true;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/wecom/attendance') {
+      const { json } = await readBody(req);
+      const attendance = await recordWeComAttendance(json, url);
+      if (!attendance) {
+        sendJson(res, 200, {
+          result: '未识别考勤格式。请发送：姓名正常完成 / 姓名延迟完成 / 姓名正常出席 / 姓名延迟出席 / 姓名临时请假 / 姓名缺勤'
+        });
+        return true;
+      }
+      sendJson(res, 200, attendance);
       return true;
     }
 
