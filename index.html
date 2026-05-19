@@ -775,6 +775,42 @@
               <div><span>评分维度</span><b>任务反馈 / 晚会出勤 / 请假</b></div>
             </div>
 
+            <form class="attendance-manager-form attendance-page-editor" id="weeklyAttendanceManagerForm" style="display:none">
+              <label>
+                日期
+                <input type="date" id="weeklyAttendanceDate" />
+              </label>
+              <label>
+                成员
+                <select id="weeklyAttendanceOwner"></select>
+              </label>
+              <label>
+                类型
+                <select id="weeklyAttendanceKind">
+                  <option value="meeting">晚会出席</option>
+                  <option value="task_completion">任务完成</option>
+                </select>
+              </label>
+              <label>
+                状态
+                <select id="weeklyAttendanceStatus">
+                  <option value="normal">正常</option>
+                  <option value="delayed">延迟</option>
+                  <option value="unreported_done">未汇报但完成/出席</option>
+                  <option value="reported_incomplete">已汇报但未完成/未出席</option>
+                  <option value="approved_leave">提前请假</option>
+                  <option value="temp_leave">临时请假</option>
+                  <option value="absent">缺勤</option>
+                </select>
+              </label>
+              <div class="attendance-option-panel" id="weeklyAttendanceOptionPanel"></div>
+              <label class="attendance-manager-note">
+                备注
+                <input type="text" id="weeklyAttendanceNote" placeholder="例如：企微漏报，人工补录" />
+              </label>
+              <button type="submit" class="pc-btn-primary">保存出勤</button>
+            </form>
+
             <article class="workspace-card attendance-policy-card">
               <div class="workspace-card-head">
                 <span>规则说明</span>

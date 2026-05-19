@@ -2825,26 +2825,64 @@ function openAttendanceEditor({ owner = '', kind = 'meeting', record = null, dat
     toast('当前账号只有查看权限');
     return;
   }
-  const ownerEl = document.querySelector('#attendanceOwner');
-  const kindEl = document.querySelector('#attendanceKind');
-  const statusEl = document.querySelector('#attendanceStatus');
-  const noteEl = document.querySelector('#attendanceNote');
-  const meetingDateEl = document.querySelector('#meetingDate');
-  if (meetingDateEl && date) meetingDateEl.value = date;
+  fillAttendanceEditor({
+    formSelector: '#attendanceManagerForm',
+    ownerSelector: '#attendanceOwner',
+    kindSelector: '#attendanceKind',
+    statusSelector: '#attendanceStatus',
+    noteSelector: '#attendanceNote',
+    optionPanelSelector: '#attendanceOptionPanel',
+    dateSelector: '#meetingDate',
+    owner,
+    kind,
+    record,
+    date
+  });
+}
+
+function openWeeklyAttendanceEditor({ owner = '', kind = 'meeting', record = null, date = '' } = {}) {
+  if (!currentUserCanManageAttendance()) {
+    toast('当前账号只有查看权限');
+    return;
+  }
+  fillAttendanceEditor({
+    formSelector: '#weeklyAttendanceManagerForm',
+    ownerSelector: '#weeklyAttendanceOwner',
+    kindSelector: '#weeklyAttendanceKind',
+    statusSelector: '#weeklyAttendanceStatus',
+    noteSelector: '#weeklyAttendanceNote',
+    optionPanelSelector: '#weeklyAttendanceOptionPanel',
+    dateSelector: '#weeklyAttendanceDate',
+    owner,
+    kind,
+    record,
+    date
+  });
+}
+
+function fillAttendanceEditor({ formSelector, ownerSelector, kindSelector, statusSelector, noteSelector, optionPanelSelector, dateSelector, owner = '', kind = 'meeting', record = null, date = '' }) {
+  const form = document.querySelector(formSelector);
+  const ownerEl = document.querySelector(ownerSelector);
+  const kindEl = document.querySelector(kindSelector);
+  const statusEl = document.querySelector(statusSelector);
+  const noteEl = document.querySelector(noteSelector);
+  const dateEl = document.querySelector(dateSelector);
+  if (form) form.style.display = '';
+  if (dateEl && date) dateEl.value = date;
   if (ownerEl) ownerEl.value = owner;
   if (kindEl) kindEl.value = kind;
   if (statusEl) statusEl.value = normalizeAttendanceStatusValue(record?.actualStatus || record?.reportedStatus || record?.status || 'normal');
   if (noteEl) noteEl.value = record?.note || '';
-  renderAttendanceOptionPanel(kind, statusEl?.value || 'normal');
-  document.querySelector('#attendanceManagerForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  renderAttendanceOptionPanel(kind, statusEl?.value || 'normal', optionPanelSelector);
+  form?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function normalizeAttendanceStatusValue(status = '') {
   return status === 'temporary_leave' ? 'temp_leave' : status;
 }
 
-function renderAttendanceOptionPanel(kind = 'meeting', selectedStatus = 'normal') {
-  const panel = document.querySelector('#attendanceOptionPanel');
+function renderAttendanceOptionPanel(kind = 'meeting', selectedStatus = 'normal', selector = '#attendanceOptionPanel') {
+  const panel = document.querySelector(selector);
   if (!panel) return;
   const normalizedSelected = normalizeAttendanceStatusValue(selectedStatus);
   panel.innerHTML = attendanceStatusOptions(kind).map((option) => `
@@ -2975,6 +3013,10 @@ function renderMeetingTargets() {
 function renderAttendanceBoard() {
   const weekInput = document.querySelector('#attendanceWeekDate');
   if (weekInput && !weekInput.value) weekInput.value = getTodayText();
+  const ownerSelect = document.querySelector('#weeklyAttendanceOwner');
+  if (ownerSelect) {
+    setOptions('#weeklyAttendanceOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
+  }
   const wrap = document.querySelector('#attendanceTableWrap');
   const ranking = document.querySelector('#attendanceRankingList');
   const summary = document.querySelector('#attendanceWeeklySummary');
@@ -3597,16 +3639,23 @@ async function syncSignals() {
   toast('已同步本地任务、审阅和风险信号');
 }
 
-async function submitAttendanceRecord() {
+async function submitAttendanceRecord({
+  ownerSelector = '#attendanceOwner',
+  kindSelector = '#attendanceKind',
+  statusSelector = '#attendanceStatus',
+  dateSelector = '#meetingDate',
+  noteSelector = '#attendanceNote',
+  formSelector = '#attendanceManagerForm'
+} = {}) {
   if (!currentUserCanManageAttendance()) {
     toast('当前账号只有查看权限');
     return;
   }
-  const owner = document.querySelector('#attendanceOwner')?.value || '';
-  const kind = document.querySelector('#attendanceKind')?.value || 'meeting';
-  const status = document.querySelector('#attendanceStatus')?.value || 'normal';
-  const date = document.querySelector('#meetingDate')?.value || getTodayText();
-  const note = document.querySelector('#attendanceNote')?.value || '';
+  const owner = document.querySelector(ownerSelector)?.value || '';
+  const kind = document.querySelector(kindSelector)?.value || 'meeting';
+  const status = document.querySelector(statusSelector)?.value || 'normal';
+  const date = document.querySelector(dateSelector)?.value || getTodayText();
+  const note = document.querySelector(noteSelector)?.value || '';
   if (!owner) {
     toast('请选择成员');
     return;
@@ -3629,7 +3678,7 @@ async function submitAttendanceRecord() {
     state.scoring = payload.scoring;
     state.myScoring = (state.scoring.rows || []).find((row) => row.owner === currentSessionName()) || null;
   }
-  document.querySelector('#attendanceManagerForm')?.reset();
+  document.querySelector(formSelector)?.reset();
   renderMeetingAttendance();
   await refreshWeeklyAttendance();
   renderMyScoreBreakdown();
@@ -4027,6 +4076,17 @@ function bindEvents() {
     e.preventDefault();
     submitAttendanceRecord().catch((err) => toast(err.message));
   });
+  document.querySelector('#weeklyAttendanceManagerForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitAttendanceRecord({
+      ownerSelector: '#weeklyAttendanceOwner',
+      kindSelector: '#weeklyAttendanceKind',
+      statusSelector: '#weeklyAttendanceStatus',
+      dateSelector: '#weeklyAttendanceDate',
+      noteSelector: '#weeklyAttendanceNote',
+      formSelector: '#weeklyAttendanceManagerForm'
+    }).catch((err) => toast(err.message));
+  });
   document.querySelector('#attendanceKind')?.addEventListener('change', (e) => {
     const status = document.querySelector('#attendanceStatus')?.value || 'normal';
     renderAttendanceOptionPanel(e.target.value || 'meeting', status);
@@ -4044,6 +4104,23 @@ function bindEvents() {
     if (statusEl) statusEl.value = status;
     renderAttendanceOptionPanel(kind, status);
   });
+  document.querySelector('#weeklyAttendanceKind')?.addEventListener('change', (e) => {
+    const status = document.querySelector('#weeklyAttendanceStatus')?.value || 'normal';
+    renderAttendanceOptionPanel(e.target.value || 'meeting', status, '#weeklyAttendanceOptionPanel');
+  });
+  document.querySelector('#weeklyAttendanceStatus')?.addEventListener('change', (e) => {
+    const kind = document.querySelector('#weeklyAttendanceKind')?.value || 'meeting';
+    renderAttendanceOptionPanel(kind, e.target.value || 'normal', '#weeklyAttendanceOptionPanel');
+  });
+  document.querySelector('#weeklyAttendanceOptionPanel')?.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-action="select-attendance-status"]');
+    if (!button) return;
+    const status = button.dataset.status || 'normal';
+    const statusEl = document.querySelector('#weeklyAttendanceStatus');
+    const kind = document.querySelector('#weeklyAttendanceKind')?.value || 'meeting';
+    if (statusEl) statusEl.value = status;
+    renderAttendanceOptionPanel(kind, status, '#weeklyAttendanceOptionPanel');
+  });
   document.querySelector('#attendanceTableWrap')?.addEventListener('click', (e) => {
     const button = e.target.closest('[data-action="edit-attendance-cell"]');
     if (!button) return;
@@ -4053,7 +4130,7 @@ function bindEvents() {
     const record = (state.weeklyAttendance?.records || []).find((item) => (
       item.owner === owner && item.date === date && item.kind === kind
     )) || null;
-    openAttendanceEditor({ owner, date, kind, record });
+    openWeeklyAttendanceEditor({ owner, date, kind, record });
   });
   document.querySelector('#meetingAttendanceList')?.addEventListener('click', (e) => {
     const button = e.target.closest('[data-action="edit-attendance-cell"]');
