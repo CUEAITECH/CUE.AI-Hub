@@ -8,6 +8,7 @@ import { createSystemRoutes } from '../server/routes/systemRoutes.js';
 import { createProjectRoutes } from '../server/routes/projectRoutes.js';
 import { createWeComRoutes } from '../server/routes/wecomRoutes.js';
 import { createTaskRoutes } from '../server/routes/taskRoutes.js';
+import { startScheduler } from '../server/scheduler.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
 import { normalizeAssignment, normalizeStandup } from '../server/services/dailyBrief.js';
 import { generateAssignmentBrief } from '../server/services/assignmentBrief.js';
@@ -1067,6 +1068,83 @@ await test('wecom command records attendance bot replies', async () => {
   assert.match(responsePayload.result, /已记录 林世棋 任务完成：正常/);
   assert.equal(store.attendanceRecords.length, 2);
   assert.equal(store.attendanceRecords[0].kind, 'task_completion');
+});
+
+await test('scheduler prompts use unified WeCom bot name', async () => {
+  const originalSetInterval = globalThis.setInterval;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalDate = globalThis.Date;
+  const callbacks = [];
+  const sentMessages = [];
+  globalThis.setInterval = (fn) => {
+    callbacks.push(fn);
+    return callbacks.length;
+  };
+  globalThis.setTimeout = () => 0;
+  try {
+    const FakeDate = class extends originalDate {
+      constructor(...args) {
+        return args.length ? new originalDate(...args) : new originalDate('2026-05-19T17:00:00+08:00');
+      }
+      static now() {
+        return new originalDate('2026-05-19T17:00:00+08:00').getTime();
+      }
+    };
+    FakeDate.UTC = originalDate.UTC;
+    FakeDate.parse = originalDate.parse;
+    globalThis.Date = FakeDate;
+
+    startScheduler({
+      loadStore: async () => ({ projects: [], members: [], users: [] }),
+      updateStore: async (mutator) => mutator({ projects: [], members: [], users: [], attendanceRecords: [] }),
+      createId: (prefix) => `${prefix}_fixed`,
+      syncGitHubProjectIntoStore: async () => ({}),
+      hasGitHubConfig: () => false,
+      generateEveningReport: async () => ({}),
+      buildProgressMarkdown: () => '',
+      writeProgressToGitHub: async () => ({}),
+      importDocsForProject: async () => ({}),
+      refreshAnalysisIntoStore: async () => ({}),
+      generateDailyTaskSuggestions: async () => [],
+      isWeComAvailable: () => true,
+      sendWeComMarkdown: async (message) => {
+        sentMessages.push(message);
+        return true;
+      },
+      todayText: () => '2026-05-19',
+      isCompanyWorkday: () => true,
+      githubSyncIntervalMinutes: 0,
+      githubSyncLimit: 20,
+      githubSyncDiffLimit: 5,
+      meetingHour: 18,
+      hubUrl: 'https://hub.cueai.top',
+      wecomBotName: 'CUE项目中枢'
+    });
+    assert.ok(callbacks.length >= 1);
+    await callbacks[0]();
+    await new Promise((resolve) => originalSetTimeout(resolve, 0));
+    assert.match(sentMessages[0], /@CUE项目中枢/);
+    assert.match(sentMessages[0], /示例：@CUE项目中枢 林世棋正常完成/);
+
+    globalThis.Date = class extends originalDate {
+      constructor(...args) {
+        return args.length ? new originalDate(...args) : new originalDate('2026-05-19T18:00:00+08:00');
+      }
+      static now() {
+        return new originalDate('2026-05-19T18:00:00+08:00').getTime();
+      }
+    };
+    globalThis.Date.UTC = originalDate.UTC;
+    globalThis.Date.parse = originalDate.parse;
+    await callbacks[0]();
+    await new Promise((resolve) => originalSetTimeout(resolve, 0));
+    assert.match(sentMessages[1], /@CUE项目中枢/);
+    assert.match(sentMessages[1], /示例：@CUE项目中枢 林世棋正常出席/);
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.Date = originalDate;
+  }
 });
 
 // ===== Phase 5：reset 后行为 + 防幽灵 deliverable + 模糊去重 =====

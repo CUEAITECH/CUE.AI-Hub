@@ -55,7 +55,8 @@ export function createSystemRoutes({
   cueApiKey,
   isWeComAvailable,
   meetingHour,
-  hubUrl
+  hubUrl,
+  wecomBotName = 'CUE项目中枢'
 }) {
   return async function systemRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/health') {
@@ -585,7 +586,8 @@ export function createSystemRoutes({
         wecomEnabled: isWeComAvailable(),
         llmEnabled: Boolean(process.env.ANTHROPIC_API_KEY),
         meetingHour,
-        hubUrl
+        hubUrl,
+        wecomBotName
       });
       return true;
     }

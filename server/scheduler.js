@@ -19,7 +19,8 @@ export function startScheduler(deps) {
     githubSyncLimit,
     githubSyncDiffLimit,
     meetingHour,
-    hubUrl
+    hubUrl,
+    wecomBotName = 'CUE项目中枢'
   } = deps;
 
   let lastEveningReportDate = '';
@@ -81,9 +82,11 @@ export function startScheduler(deps) {
         await sendWeComMarkdown([
           `## ${today} 今日任务完成确认`,
           '',
-          '请在 17:00-18:00 之间 @bot 回复：',
+          `请在 17:00-18:00 之间 @${wecomBotName} 回复：`,
           '- 姓名正常完成',
           '- 姓名延迟完成',
+          '',
+          `示例：@${wecomBotName} 林世棋正常完成`,
           '',
           '延迟完成默认要求第二个工作日补齐；如果后续请假，系统会把连续工作日作为一个评分窗口取平均。'
         ].join('\n')).catch((err) =>
@@ -98,9 +101,11 @@ export function startScheduler(deps) {
         await sendWeComMarkdown([
           `## ${today} 晚会出席确认`,
           '',
-          '请在 18:25 前 @bot 回复：',
+          `请在 18:25 前 @${wecomBotName} 回复：`,
           '- 姓名正常出席',
           '- 姓名延迟出席',
+          '',
+          `示例：@${wecomBotName} 林世棋正常出席`,
           '',
           '18:25-18:35 回复按临时请假/迟到处理；18:35 后仍无记录默认缺勤，可由人事管理补录。'
         ].join('\n')).catch((err) =>
