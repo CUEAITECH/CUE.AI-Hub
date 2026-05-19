@@ -17,6 +17,7 @@ import {
   verifySessionToken
 } from '../services/auth.js';
 import { isSmtpConfigured, sendVerificationEmail } from '../services/mailer.js';
+import { canManageAttendance } from '../services/scoring.js';
 
 function getSessionUser(req, users, projectId) {
   const session = verifySessionToken(getSessionToken(req));
@@ -545,10 +546,22 @@ export function createSystemRoutes({
         : store;
       const alerts = scanRisks(scopedStore);
       const currentStage = normalizeStageName(scopedStore.currentStage || {});
+      const session = verifySessionToken(getSessionToken(req));
+      const rawCurrentUser = session
+        ? (store.users || []).find((user) => user.id === session.sub && user.active !== false)
+        : null;
+      const currentProject = (store.projects || []).find((project) => project.id === projectId) || null;
+      const currentUser = rawCurrentUser
+        ? sanitizeUserForProject(rawCurrentUser, projectId || (store.projects || [])[0]?.id || '', currentProject)
+        : null;
       sendJson(res, 200, {
         ...scopedStore,
         projects: store.projects || [],
         currentProjectId: projectId || (store.projects || [])[0]?.id || '',
+        currentUser,
+        permissions: {
+          canManageAttendance: currentUser ? canManageAttendance(currentUser, projectId || (store.projects || [])[0]?.id || '') : false
+        },
         currentStage,
         alerts,
         metrics: buildMetrics(scopedStore, alerts),

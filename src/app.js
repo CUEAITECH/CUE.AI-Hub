@@ -31,6 +31,8 @@ const state = {
   weeklyScoring: { rows: [] },
   attendanceRecords: [],
   weeklyAttendance: { days: [], records: [], weekStart: '' },
+  permissions: { canManageAttendance: false },
+  currentUser: null,
   scoreRankingTab: 'daily',
   myScoring: null,
   currentProjectId: localStorage.getItem('cue_currentProjectId') || '',
@@ -509,7 +511,16 @@ function currentUserCanManageAccounts() {
 }
 
 function currentUserCanManageAttendance() {
-  return ['admin', 'hr_manager'].includes(currentSessionRole());
+  if (state.permissions?.canManageAttendance) return true;
+  const role = currentSessionRole();
+  const currentUser = (state.users || []).find((user) => (
+    user.name === currentSessionName() || user.username === currentSessionUsername()
+  ));
+  const projectId = getCurrentProjectId();
+  return ['admin', 'hr_manager'].includes(role)
+    || ['admin', 'hr_manager'].includes(currentUser?.projectRole || currentUser?.role || '')
+    || currentUser?.projectRoles?.[projectId] === 'hr_manager'
+    || currentUser?.projectRoles?.['*'] === 'hr_manager';
 }
 
 function roleLabel(role) {
@@ -2771,16 +2782,21 @@ function openAttendanceEditor({ owner = '', kind = 'meeting', record = null, dat
   if (meetingDateEl && date) meetingDateEl.value = date;
   if (ownerEl) ownerEl.value = owner;
   if (kindEl) kindEl.value = kind;
-  if (statusEl) statusEl.value = record?.actualStatus || record?.reportedStatus || record?.status || 'normal';
+  if (statusEl) statusEl.value = normalizeAttendanceStatusValue(record?.actualStatus || record?.reportedStatus || record?.status || 'normal');
   if (noteEl) noteEl.value = record?.note || '';
   document.querySelector('#attendanceManagerForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  toast(`正在编辑 ${owner} ${attendanceKindLabel(kind)}（${date || getMeetingDate()}）`);
+}
+
+function normalizeAttendanceStatusValue(status = '') {
+  return status === 'temporary_leave' ? 'temp_leave' : status;
 }
 
 function attendanceWeeklyScoreForRecord(kind, record) {
   const reported = record?.reportedStatus || record?.status || '';
   const actual = record?.actualStatus || record?.status || '';
   if (actual === 'approved_leave' && reported === 'approved_leave') return 10;
-  if (actual === 'temporary_leave' || reported === 'temporary_leave') return 7;
+  if (actual === 'temp_leave' || reported === 'temp_leave') return 7;
   if ((reported === 'normal' || reported === 'delayed') && (actual === 'normal' || actual === 'delayed')) return 10;
   if ((!reported || reported === 'absent') && (actual === 'normal' || actual === 'delayed')) return 7;
   if ((reported === 'normal' || reported === 'delayed') && (!actual || actual === 'absent')) return 4;
@@ -2793,7 +2809,7 @@ function attendanceCellSummary(record, kind) {
   const actual = record.actualStatus || record.status || '';
   const score = attendanceWeeklyScoreForRecord(kind, record);
   if (actual === 'approved_leave' && reported === 'approved_leave') return { label: '请假', tone: 'leave', score };
-  if (actual === 'temporary_leave' || reported === 'temporary_leave') return { label: '临时请假', tone: 'late', score };
+  if (actual === 'temp_leave' || reported === 'temp_leave') return { label: '临时请假', tone: 'late', score };
   if ((reported === 'normal' || reported === 'delayed') && (actual === 'normal' || actual === 'delayed')) {
     return { label: reported === 'delayed' ? '已说明延迟' : '正常', tone: 'ok', score };
   }
@@ -2855,14 +2871,14 @@ function renderMeetingAttendance() {
         helper: task ? formatDateTime(task.updatedAt || task.recordedAt) : '暂无任务完成反馈'
       }
     ].map(({ kind, record, helper }) => `
-      <div class="meeting-attendance-row ${attendanceRowClass(record?.status)}">
+      <button type="button" class="meeting-attendance-row ${attendanceRowClass(record?.status)}${canManage ? ' is-editable' : ''}" data-action="edit-attendance-cell" data-owner="${escapeHtml(member.name)}" data-date="${escapeHtml(date)}" data-kind="${escapeHtml(kind)}">
         <div>
           <strong>${escapeHtml(member.name)} · ${attendanceKindLabel(kind)}</strong>
           <span>${escapeHtml(member.role || '')}${record?.source ? ` · ${escapeHtml(record.source === 'wecom' ? '企微' : '人工')}` : ''}</span>
         </div>
         <b>${escapeHtml(attendanceStatusLabel(record?.status || 'absent'))}</b>
         <small>${escapeHtml(helper)}${record?.editedBy ? ` · 编辑 ${record.editedBy}` : ''}${record?.note ? ` · ${record.note}` : ''}</small>
-      </div>
+      </button>
     `);
   }).join('');
 }
@@ -3024,6 +3040,9 @@ async function loadState() {
   state.assignments = payload.assignments || [];
   state.standups = payload.standups || [];
   state.attendanceRecords = payload.attendanceRecords || [];
+  state.currentUser = payload.currentUser || state.currentUser || null;
+  state.permissions = payload.permissions || state.permissions || { canManageAttendance: false };
+  if (state.currentUser) syncSessionUser(state.currentUser);
   state.eveningReports = payload.eveningReports || {};
   state.currentStage = payload.currentStage || {};
   state.metrics = payload.metrics || {};
@@ -3531,7 +3550,7 @@ async function submitAttendanceRecord() {
       date,
       owner,
       kind,
-      status,
+      status: normalizeAttendanceStatusValue(status),
       note
     })
   });
@@ -3947,6 +3966,17 @@ function bindEvents() {
     const date = button.dataset.date || '';
     const kind = button.dataset.kind || 'meeting';
     const record = (state.weeklyAttendance?.records || []).find((item) => (
+      item.owner === owner && item.date === date && item.kind === kind
+    )) || null;
+    openAttendanceEditor({ owner, date, kind, record });
+  });
+  document.querySelector('#meetingAttendanceList')?.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-action="edit-attendance-cell"]');
+    if (!button) return;
+    const owner = button.dataset.owner || '';
+    const date = button.dataset.date || getMeetingDate();
+    const kind = button.dataset.kind || 'meeting';
+    const record = (state.attendanceRecords || []).find((item) => (
       item.owner === owner && item.date === date && item.kind === kind
     )) || null;
     openAttendanceEditor({ owner, date, kind, record });

@@ -2715,12 +2715,26 @@ select:focus {
 .meeting-reconcile-status .danger { color: var(--red); }
 
 .meeting-attendance-row {
+  width: 100%;
   grid-template-columns: minmax(0, 1fr) auto;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: default;
 }
 
 .meeting-attendance-row small {
   grid-column: 1 / -1;
   color: var(--dim);
+}
+
+.meeting-attendance-row.is-editable {
+  cursor: pointer;
+}
+
+.meeting-attendance-row.is-editable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(18, 18, 18, 0.08);
 }
 
 .meeting-attendance-row.is-present b { color: var(--green); }
