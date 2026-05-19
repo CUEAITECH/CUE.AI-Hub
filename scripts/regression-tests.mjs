@@ -171,7 +171,8 @@ await test('scoring combines contribution score and separate attendance points',
   };
   const result = buildDailyScores(store, { projectId: 'cue_ai_classroom', date: '2026-05-15', totalBonus: 10000, attendanceBonusBase: 500 });
   assert.equal(result.rows.length, 1);
-  assert.equal(result.rows[0].attendancePoints, 10);
+  assert.equal(result.rows[0].attendanceRaw, 10);
+  assert.equal(result.rows[0].attendancePoints, 30);
   assert.equal(result.rows[0].attendanceBonusEstimate, 500);
   assert.ok(result.rows[0].baseBonusEstimate > 0);
 });
