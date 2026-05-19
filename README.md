@@ -331,7 +331,9 @@ Review 分 = clamp(20 - 未处理 Block 扣分 - 未处理 Escalate 扣分, 0, 2
 | `normal` | 10 | 10 |
 | `delayed` | 10 | 8 |
 | `approved_leave` | 10 | 10 |
-| `temporary_leave` | 7 | 7 |
+| `temp_leave` / `temporary_leave` | 7 | 7 |
+| `unreported_done` | 7 | 7 |
+| `reported_incomplete` | 4 | 4 |
 | `absent` | 0 | 0 |
 | 其他 / 未知 | 6 | 6 |
 

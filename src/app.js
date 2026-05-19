@@ -2743,7 +2743,10 @@ function attendanceStatusLabel(status) {
     normal: '正常',
     delayed: '延迟',
     approved_leave: '提前请假',
+    temp_leave: '临时请假',
     temporary_leave: '临时请假',
+    unreported_done: '未汇报但完成/出席',
+    reported_incomplete: '已汇报但未完成/未出席',
     absent: '缺勤'
   }[status] || '未确认';
 }
@@ -2754,8 +2757,56 @@ function attendanceKindLabel(kind) {
 
 function attendanceRowClass(status) {
   if (status === 'normal' || status === 'approved_leave') return 'is-present';
-  if (status === 'delayed' || status === 'temporary_leave') return 'is-late';
+  if (status === 'delayed' || status === 'temp_leave' || status === 'temporary_leave' || status === 'unreported_done') return 'is-late';
   return 'is-missing';
+}
+
+function attendanceStatusOptions(kind = 'meeting') {
+  const isTask = kind === 'task_completion';
+  return [
+    {
+      status: 'normal',
+      score: 10,
+      title: isTask ? '已汇报且任务完成' : '已汇报且正常出席',
+      detail: isTask ? '17:00-18:00 内正常完成，不扣分。' : '18:25 前正常出席，不扣分。'
+    },
+    {
+      status: 'delayed',
+      score: 10,
+      title: isTask ? '已说明延迟完成' : '已说明延迟出席',
+      detail: isTask ? '窗口内说明延迟，后续按规则窗口补齐，不扣分。' : '18:25 前说明延迟出席，不扣分。'
+    },
+    {
+      status: 'unreported_done',
+      score: 7,
+      title: isTask ? '未汇报但任务完成' : '未汇报但正常出席',
+      detail: '小幅扣分，适合企微漏报、忘记按窗口反馈但实际完成/出席。'
+    },
+    {
+      status: 'reported_incomplete',
+      score: 4,
+      title: isTask ? '已汇报但任务未完成' : '已汇报但未正常出席',
+      detail: '中等扣分，适合有反馈但事实未达成。'
+    },
+    {
+      status: 'absent',
+      score: 0,
+      title: isTask ? '未汇报且未完成' : '未汇报且未正常出席',
+      detail: '扣分最多，作为缺勤/未完成记录。'
+    },
+    {
+      status: 'approved_leave',
+      score: 10,
+      title: '提前请假',
+      detail: '提前请假不扣出勤原始分。'
+    },
+    {
+      status: 'temp_leave',
+      score: 7,
+      title: isTask ? '临时请假' : '临时请假/迟到',
+      detail: isTask ? '轻扣分。' : '18:25-18:35 之间说明按临时请假/迟到处理。'
+    }
+  ];
 }
 
 function upsertAttendanceRecord(records = [], record) {
@@ -2784,12 +2835,25 @@ function openAttendanceEditor({ owner = '', kind = 'meeting', record = null, dat
   if (kindEl) kindEl.value = kind;
   if (statusEl) statusEl.value = normalizeAttendanceStatusValue(record?.actualStatus || record?.reportedStatus || record?.status || 'normal');
   if (noteEl) noteEl.value = record?.note || '';
+  renderAttendanceOptionPanel(kind, statusEl?.value || 'normal');
   document.querySelector('#attendanceManagerForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  toast(`正在编辑 ${owner} ${attendanceKindLabel(kind)}（${date || getMeetingDate()}）`);
 }
 
 function normalizeAttendanceStatusValue(status = '') {
   return status === 'temporary_leave' ? 'temp_leave' : status;
+}
+
+function renderAttendanceOptionPanel(kind = 'meeting', selectedStatus = 'normal') {
+  const panel = document.querySelector('#attendanceOptionPanel');
+  if (!panel) return;
+  const normalizedSelected = normalizeAttendanceStatusValue(selectedStatus);
+  panel.innerHTML = attendanceStatusOptions(kind).map((option) => `
+    <button type="button" class="attendance-option-card${option.status === normalizedSelected ? ' is-selected' : ''}" data-action="select-attendance-status" data-status="${escapeHtml(option.status)}">
+      <strong>${escapeHtml(option.title)}</strong>
+      <b>${option.score} 分</b>
+      <span>${escapeHtml(option.detail)}</span>
+    </button>
+  `).join('');
 }
 
 function attendanceWeeklyScoreForRecord(kind, record) {
@@ -2797,6 +2861,8 @@ function attendanceWeeklyScoreForRecord(kind, record) {
   const actual = record?.actualStatus || record?.status || '';
   if (actual === 'approved_leave' && reported === 'approved_leave') return 10;
   if (actual === 'temp_leave' || reported === 'temp_leave') return 7;
+  if (actual === 'unreported_done' || reported === 'unreported_done') return 7;
+  if (actual === 'reported_incomplete' || reported === 'reported_incomplete') return 4;
   if ((reported === 'normal' || reported === 'delayed') && (actual === 'normal' || actual === 'delayed')) return 10;
   if ((!reported || reported === 'absent') && (actual === 'normal' || actual === 'delayed')) return 7;
   if ((reported === 'normal' || reported === 'delayed') && (!actual || actual === 'absent')) return 4;
@@ -2810,6 +2876,8 @@ function attendanceCellSummary(record, kind) {
   const score = attendanceWeeklyScoreForRecord(kind, record);
   if (actual === 'approved_leave' && reported === 'approved_leave') return { label: '请假', tone: 'leave', score };
   if (actual === 'temp_leave' || reported === 'temp_leave') return { label: '临时请假', tone: 'late', score };
+  if (actual === 'unreported_done' || reported === 'unreported_done') return { label: kind === 'meeting' ? '未报但出席' : '未报但完成', tone: 'warn', score };
+  if (actual === 'reported_incomplete' || reported === 'reported_incomplete') return { label: kind === 'meeting' ? '已报未出席' : '已报未完成', tone: 'risk', score };
   if ((reported === 'normal' || reported === 'delayed') && (actual === 'normal' || actual === 'delayed')) {
     return { label: reported === 'delayed' ? '已说明延迟' : '正常', tone: 'ok', score };
   }
@@ -3958,6 +4026,23 @@ function bindEvents() {
   document.querySelector('#attendanceManagerForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     submitAttendanceRecord().catch((err) => toast(err.message));
+  });
+  document.querySelector('#attendanceKind')?.addEventListener('change', (e) => {
+    const status = document.querySelector('#attendanceStatus')?.value || 'normal';
+    renderAttendanceOptionPanel(e.target.value || 'meeting', status);
+  });
+  document.querySelector('#attendanceStatus')?.addEventListener('change', (e) => {
+    const kind = document.querySelector('#attendanceKind')?.value || 'meeting';
+    renderAttendanceOptionPanel(kind, e.target.value || 'normal');
+  });
+  document.querySelector('#attendanceOptionPanel')?.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-action="select-attendance-status"]');
+    if (!button) return;
+    const status = button.dataset.status || 'normal';
+    const statusEl = document.querySelector('#attendanceStatus');
+    const kind = document.querySelector('#attendanceKind')?.value || 'meeting';
+    if (statusEl) statusEl.value = status;
+    renderAttendanceOptionPanel(kind, status);
   });
   document.querySelector('#attendanceTableWrap')?.addEventListener('click', (e) => {
     const button = e.target.closest('[data-action="edit-attendance-cell"]');

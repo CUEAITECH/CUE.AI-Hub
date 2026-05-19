@@ -690,11 +690,14 @@
                     <select id="attendanceStatus">
                       <option value="normal">正常</option>
                       <option value="delayed">延迟</option>
+                      <option value="unreported_done">未汇报但完成/出席</option>
+                      <option value="reported_incomplete">已汇报但未完成/未出席</option>
                       <option value="approved_leave">提前请假</option>
                       <option value="temp_leave">临时请假</option>
                       <option value="absent">缺勤</option>
                     </select>
                   </label>
+                  <div class="attendance-option-panel" id="attendanceOptionPanel"></div>
                   <label class="attendance-manager-note">
                     备注
                     <input type="text" id="attendanceNote" placeholder="例如：企微漏报，人工补录" />

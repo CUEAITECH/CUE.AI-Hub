@@ -2773,6 +2773,49 @@ select:focus {
   grid-column: 1 / span 2;
 }
 
+.attendance-option-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.attendance-option-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(18, 18, 18, 0.1);
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.attendance-option-card b {
+  color: var(--accent);
+}
+
+.attendance-option-card span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.attendance-option-card:hover {
+  border-color: rgba(18, 18, 18, 0.22);
+  transform: translateY(-1px);
+}
+
+.attendance-option-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(18, 18, 18, 0.08);
+  background: rgba(18, 18, 18, 0.03);
+}
+
 .attendance-manager-form button {
   align-self: end;
 }

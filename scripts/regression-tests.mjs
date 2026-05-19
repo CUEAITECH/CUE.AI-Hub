@@ -253,7 +253,7 @@ await test('attendance parser recognizes task and meeting bot replies', async ()
   assert.equal(task.status, 'normal');
   const meeting = parseAttendanceMessage('Alice延迟出席', new Date('2026-05-15T18:30:00+08:00'));
   assert.equal(meeting.kind, 'meeting');
-  assert.equal(meeting.status, 'temporary_leave');
+  assert.equal(meeting.status, 'temp_leave');
 });
 
 await test('phase0 compatibility keeps buildStageChecklist reading currentStage checklist', () => {

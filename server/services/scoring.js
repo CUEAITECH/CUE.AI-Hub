@@ -4,7 +4,10 @@ const STATUS = {
   NORMAL: 'normal',
   DELAYED: 'delayed',
   APPROVED_LEAVE: 'approved_leave',
-  TEMP_LEAVE: 'temporary_leave',
+  TEMP_LEAVE: 'temp_leave',
+  LEGACY_TEMP_LEAVE: 'temporary_leave',
+  UNREPORTED_DONE: 'unreported_done',
+  REPORTED_INCOMPLETE: 'reported_incomplete',
   ABSENT: 'absent'
 };
 
@@ -114,7 +117,8 @@ function attendanceFor(store, projectId, date, owner, kind) {
 
 function resolvedAttendanceStatus(record, field = 'reportedStatus') {
   if (!record) return '';
-  return record[field] || record.status || '';
+  const status = record[field] || record.status || '';
+  return status === STATUS.LEGACY_TEMP_LEAVE ? STATUS.TEMP_LEAVE : status;
 }
 
 function standupFor(store, projectId, date, owner) {
@@ -216,6 +220,9 @@ function attendanceLabel(status) {
     [STATUS.DELAYED]: '延迟',
     [STATUS.APPROVED_LEAVE]: '提前请假',
     [STATUS.TEMP_LEAVE]: '临时请假',
+    [STATUS.LEGACY_TEMP_LEAVE]: '临时请假',
+    [STATUS.UNREPORTED_DONE]: '未汇报但完成/出席',
+    [STATUS.REPORTED_INCOMPLETE]: '已汇报但未完成/未出席',
     [STATUS.ABSENT]: '缺勤'
   }[status] || '未确认';
 }
@@ -228,6 +235,12 @@ function scoreMeetingAttendance(record) {
   }
   if (actual === STATUS.TEMP_LEAVE || reported === STATUS.TEMP_LEAVE) {
     return { score: 7, detail: '临时请假/18:25-18:35 之间说明情况，轻扣分' };
+  }
+  if (actual === STATUS.UNREPORTED_DONE || reported === STATUS.UNREPORTED_DONE) {
+    return { score: 7, detail: '未在窗口内汇报，但实际正常/延迟出席，小幅扣分' };
+  }
+  if (actual === STATUS.REPORTED_INCOMPLETE || reported === STATUS.REPORTED_INCOMPLETE) {
+    return { score: 4, detail: '已汇报但未正常出席，中等扣分' };
   }
   if ((reported === STATUS.NORMAL || reported === STATUS.DELAYED) && (actual === STATUS.NORMAL || actual === STATUS.DELAYED)) {
     return { score: 10, detail: reported === STATUS.DELAYED ? '已在窗口内说明延迟出席，不扣分' : '已正常汇报且正常出席' };
@@ -249,6 +262,12 @@ function scoreTaskCompletionAttendance(record) {
   }
   if (actual === STATUS.TEMP_LEAVE || reported === STATUS.TEMP_LEAVE) {
     return { score: 7, detail: '临时请假，按轻扣分处理' };
+  }
+  if (actual === STATUS.UNREPORTED_DONE || reported === STATUS.UNREPORTED_DONE) {
+    return { score: 7, detail: '未在 17:00-18:00 内汇报，但任务实际完成，小幅扣分' };
+  }
+  if (actual === STATUS.REPORTED_INCOMPLETE || reported === STATUS.REPORTED_INCOMPLETE) {
+    return { score: 4, detail: '已汇报但任务未完成，中等扣分' };
   }
   if ((reported === STATUS.NORMAL || reported === STATUS.DELAYED) && (actual === STATUS.NORMAL || actual === STATUS.DELAYED)) {
     return { score: 10, detail: reported === STATUS.DELAYED ? '已在 17:00-18:00 内说明延迟完成，不扣分' : '已正常汇报且任务完成' };
@@ -456,9 +475,13 @@ export function parseAttendanceMessage(text = '', now = new Date()) {
 
 export function normalizeAttendanceRecord(input = {}) {
   const now = new Date().toISOString();
-  const status = Object.values(STATUS).includes(input.status) ? input.status : STATUS.ABSENT;
-  const reportedStatus = Object.values(STATUS).includes(input.reportedStatus) ? input.reportedStatus : status;
-  const actualStatus = Object.values(STATUS).includes(input.actualStatus) ? input.actualStatus : reportedStatus;
+  const normalizeStatus = (value, fallback = STATUS.ABSENT) => {
+    const status = value === STATUS.LEGACY_TEMP_LEAVE ? STATUS.TEMP_LEAVE : value;
+    return Object.values(STATUS).includes(status) ? status : fallback;
+  };
+  const status = normalizeStatus(input.status);
+  const reportedStatus = normalizeStatus(input.reportedStatus, status);
+  const actualStatus = normalizeStatus(input.actualStatus, reportedStatus);
   return {
     id: input.id || `attendance_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     projectId: input.projectId || DEFAULT_PROJECT_ID,
