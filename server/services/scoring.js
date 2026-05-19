@@ -500,10 +500,11 @@ export function normalizeAttendanceRecord(input = {}) {
   };
 }
 
-export function canManageAttendance(user = {}, projectId = '') {
+export function canManageAttendance(user = {}, projectId = '', project = null) {
   const role = user.projectRole || user.role || '';
   return ['admin', 'hr_manager'].includes(role)
     || user.role === 'admin'
+    || Boolean(project?.founderId && user.id && project.founderId === user.id)
     || user.projectRoles?.[projectId] === 'hr_manager'
     || user.projectRoles?.['*'] === 'hr_manager';
 }

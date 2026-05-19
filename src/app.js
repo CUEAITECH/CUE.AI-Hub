@@ -2908,9 +2908,13 @@ function attendanceCellSummary(record, kind) {
 function renderInlineAttendanceOptions({ owner, date, kind, selectedStatus = 'normal' }) {
   const normalizedSelected = normalizeAttendanceStatusValue(selectedStatus);
   return `
-    <div class="attendance-inline-editor" data-owner="${escapeHtml(owner)}" data-date="${escapeHtml(date)}" data-kind="${escapeHtml(kind)}">
+    <div class="attendance-floating-editor" data-owner="${escapeHtml(owner)}" data-date="${escapeHtml(date)}" data-kind="${escapeHtml(kind)}">
+      <div class="attendance-floating-head">
+        <strong>${escapeHtml(owner)} · ${escapeHtml(date)} · ${escapeHtml(attendanceKindLabel(kind))}</strong>
+        <button type="button" data-action="close-attendance-popover" aria-label="关闭">×</button>
+      </div>
       ${attendanceStatusOptions(kind).map((option) => `
-        <button type="button" class="attendance-inline-option${option.status === normalizedSelected ? ' is-selected' : ''}" data-action="save-inline-attendance" data-status="${escapeHtml(option.status)}">
+        <button type="button" class="attendance-floating-option${option.status === normalizedSelected ? ' is-selected' : ''}" data-action="save-inline-attendance" data-status="${escapeHtml(option.status)}">
           <strong>${escapeHtml(option.title)}</strong>
           <b>${option.score} 分</b>
           <span>${escapeHtml(option.detail)}</span>
@@ -2918,6 +2922,43 @@ function renderInlineAttendanceOptions({ owner, date, kind, selectedStatus = 'no
       `).join('')}
     </div>
   `;
+}
+
+function closeAttendancePopover() {
+  document.querySelector('#attendanceFloatingEditor')?.remove();
+  state.inlineAttendanceEditor = null;
+}
+
+function positionAttendancePopover(anchor, popover) {
+  const rect = anchor.getBoundingClientRect();
+  const width = Math.min(360, Math.max(280, window.innerWidth - 24));
+  popover.style.width = `${width}px`;
+  let left = rect.left + window.scrollX;
+  const maxLeft = window.scrollX + window.innerWidth - width - 12;
+  left = Math.max(window.scrollX + 12, Math.min(left, maxLeft));
+  const top = rect.bottom + window.scrollY + 8;
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+}
+
+function openAttendancePopover(anchor, { owner, date, kind, record }) {
+  if (!currentUserCanManageAttendance()) {
+    toast('当前账号只有查看权限');
+    return;
+  }
+  closeAttendancePopover();
+  state.inlineAttendanceEditor = { owner, date, kind };
+  const wrapper = document.createElement('div');
+  wrapper.id = 'attendanceFloatingEditor';
+  wrapper.className = 'attendance-floating-popover';
+  wrapper.innerHTML = renderInlineAttendanceOptions({
+    owner,
+    date,
+    kind,
+    selectedStatus: record?.actualStatus || record?.reportedStatus || record?.status || 'normal'
+  });
+  document.body.appendChild(wrapper);
+  positionAttendancePopover(anchor, wrapper);
 }
 
 function renderMeetingAttendance() {
@@ -3023,7 +3064,7 @@ function renderAttendanceBoard() {
   summary.innerHTML = `
     <div><span>统计周</span><b>${escapeHtml(weekStart)} ~ ${escapeHtml(days[days.length - 1] || addDays(weekStart, 6))}</b></div>
     <div><span>参与成员</span><b>${members.length}</b></div>
-    <div><span>可编辑角色</span><b>Admin / 人事管理</b></div>
+    <div><span>可编辑角色</span><b>Admin / 创始人 / 人事管理</b></div>
     <div><span>评分维度</span><b>任务反馈 / 晚会出勤 / 请假</b></div>
   `;
 
@@ -3062,16 +3103,6 @@ function renderAttendanceBoard() {
             <button type="button" class="attendance-pill tone-${day.task.tone}${currentUserCanManageAttendance() ? ' is-editable' : ''}" data-action="edit-attendance-cell" data-owner="${escapeHtml(row.member.name)}" data-date="${escapeHtml(day.date)}" data-kind="task_completion">任务 ${escapeHtml(day.task.label)}</button>
             <button type="button" class="attendance-pill tone-${day.meeting.tone}${currentUserCanManageAttendance() ? ' is-editable' : ''}" data-action="edit-attendance-cell" data-owner="${escapeHtml(row.member.name)}" data-date="${escapeHtml(day.date)}" data-kind="meeting">晚会 ${escapeHtml(day.meeting.label)}</button>
             <small>${day.dayScore} 分</small>
-            ${state.inlineAttendanceEditor
-              && state.inlineAttendanceEditor.owner === row.member.name
-              && state.inlineAttendanceEditor.date === day.date
-                ? renderInlineAttendanceOptions({
-                    owner: row.member.name,
-                    date: day.date,
-                    kind: state.inlineAttendanceEditor.kind,
-                    selectedStatus: recordMap.get(`${row.member.name}|${day.date}|${state.inlineAttendanceEditor.kind}`)?.status || 'normal'
-                  })
-                : ''}
           </div>
         </td>
       `).join('')}
@@ -4107,7 +4138,7 @@ function bindEvents() {
   document.querySelector('#attendanceTableWrap')?.addEventListener('click', (e) => {
     const inlineOption = e.target.closest('[data-action="save-inline-attendance"]');
     if (inlineOption) {
-      const editor = inlineOption.closest('.attendance-inline-editor');
+      const editor = inlineOption.closest('.attendance-floating-editor');
       const owner = editor?.dataset.owner || '';
       const date = editor?.dataset.date || '';
       const kind = editor?.dataset.kind || 'meeting';
@@ -4120,14 +4151,10 @@ function bindEvents() {
     const owner = button.dataset.owner || '';
     const date = button.dataset.date || '';
     const kind = button.dataset.kind || 'meeting';
-    const current = state.inlineAttendanceEditor;
-    state.inlineAttendanceEditor = current
-      && current.owner === owner
-      && current.date === date
-      && current.kind === kind
-        ? null
-        : { owner, date, kind };
-    renderAttendanceBoard();
+    const record = (state.weeklyAttendance?.records || []).find((item) => (
+      item.owner === owner && item.date === date && item.kind === kind
+    )) || null;
+    openAttendancePopover(button, { owner, date, kind, record });
   });
   document.querySelector('#meetingAttendanceList')?.addEventListener('click', (e) => {
     const button = e.target.closest('[data-action="edit-attendance-cell"]');
@@ -4139,6 +4166,17 @@ function bindEvents() {
       item.owner === owner && item.date === date && item.kind === kind
     )) || null;
     openAttendanceEditor({ owner, date, kind, record });
+  });
+  document.addEventListener('click', (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.closest('#attendanceFloatingEditor') || target.closest('[data-action="edit-attendance-cell"]')) return;
+    closeAttendancePopover();
+  });
+  document.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-action="close-attendance-popover"]');
+    if (!button) return;
+    closeAttendancePopover();
   });
 
   document.querySelector('[data-action="generate-plan"]').addEventListener('click', () => {

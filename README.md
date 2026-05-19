@@ -413,7 +413,7 @@ Review 分 = clamp(20 - 未处理 Block 扣分 - 未处理 Escalate 扣分, 0, 2
   - 晚会出勤
 - 同时展示请假情况和周均考勤分排行，便于人事和管理者一眼识别异常成员。
 - 当前权限口径：
-  - `admin` 和 `hr_manager` 可修改出勤记录
+  - `admin`、项目创始人和 `hr_manager` 可修改出勤记录
   - `project_admin` 和 `developer` 仅可读取出勤状况
 
 ### 每周评分

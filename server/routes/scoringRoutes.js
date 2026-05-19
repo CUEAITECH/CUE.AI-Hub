@@ -132,7 +132,8 @@ export function createScoringRoutes({
       const before = await loadStore();
       const projectId = resolveProjectId(before, url, json);
       const sessionUser = getSessionUser(req, before.users || [], projectId);
-      if (!sessionUser || !canManageAttendance(sessionUser, projectId)) {
+      const project = (before.projects || []).find((item) => item.id === projectId) || null;
+      if (!sessionUser || !canManageAttendance(sessionUser, projectId, project)) {
         sendError(res, 403, 'attendance manager required');
         return true;
       }

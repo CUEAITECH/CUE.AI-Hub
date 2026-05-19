@@ -560,7 +560,7 @@ export function createSystemRoutes({
         currentProjectId: projectId || (store.projects || [])[0]?.id || '',
         currentUser,
         permissions: {
-          canManageAttendance: currentUser ? canManageAttendance(currentUser, projectId || (store.projects || [])[0]?.id || '') : false
+          canManageAttendance: currentUser ? canManageAttendance(currentUser, projectId || (store.projects || [])[0]?.id || '', currentProject) : false
         },
         currentStage,
         alerts,
