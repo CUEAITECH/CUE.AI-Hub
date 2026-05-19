@@ -33,6 +33,24 @@ function resolveRankingType(input = '') {
   return '';
 }
 
+function normalizeCommandText(input = '') {
+  return String(input || '')
+    .replace(/<@[^>]+>/g, ' ')
+    .replace(/@[^\s]+\s+/g, ' ')
+    .replace(/@[^\s]+$/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function resolveWeComCommand(input = '') {
+  const text = normalizeCommandText(input).toLowerCase();
+  if (!text || /^(帮助|菜单|指令|命令|help|commands?)$/.test(text)) return 'help';
+  if (/任务完成统计|任务统计|完成统计|completion/.test(text)) return 'task_completion_stats';
+  if (/晚会统计|晚会出席统计|出席统计|会议统计|meeting/.test(text)) return 'meeting_stats';
+  if (/考勤统计|今日考勤|出勤统计|attendance/.test(text)) return 'attendance_stats';
+  return '';
+}
+
 function buildWeComScoreRanking(store, { projectId, type = 'daily', date, todayText }) {
   const rankingDate = date || todayText();
   const payload = type === 'weekly'
@@ -196,6 +214,96 @@ function attendanceStatusLabel(status) {
   }[status] || status;
 }
 
+function collectProjectMembers(store, projectId) {
+  const members = new Set([
+    ...(store.members || []).map((member) => member.name).filter(Boolean),
+    ...(store.users || [])
+      .filter((user) => user.role !== 'admin' && user.active !== false && ((user.projectIds || []).includes('*') || (user.projectIds || []).includes(projectId)))
+      .map((user) => user.name || user.username)
+      .filter(Boolean)
+  ]);
+  return [...members].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+}
+
+function buildAttendanceCommandHelp() {
+  return [
+    '# CUE项目中枢指令菜单',
+    '',
+    '可直接 @CUE项目中枢 发送以下指令，不需要进入大模型自由问答：',
+    '- 每日排名',
+    '- 每周排名',
+    '- 晚会统计',
+    '- 任务完成统计',
+    '- 今日考勤',
+    '- 林世棋正常完成',
+    '- 林世棋延迟完成',
+    '- 林世棋正常出席',
+    '- 林世棋延迟出席',
+    '',
+    '建议把“每日排名 / 每周排名 / 晚会统计 / 任务完成统计 / 今日考勤”配置成企业微信智能机器人的快捷按钮。'
+  ].join('\n');
+}
+
+function buildAttendanceStats(store, { projectId, date, kind = '' }) {
+  const targetDate = date;
+  const scopedRecords = (store.attendanceRecords || [])
+    .filter((record) => (!record.projectId || record.projectId === projectId) && record.date === targetDate)
+    .filter((record) => !kind || record.kind === kind);
+  const latestByKey = new Map();
+  for (const record of scopedRecords) {
+    latestByKey.set(`${record.owner}|${record.kind}`, record);
+  }
+  const records = [...latestByKey.values()].sort((a, b) =>
+    a.kind.localeCompare(b.kind) || a.owner.localeCompare(b.owner, 'zh-CN')
+  );
+  const members = collectProjectMembers(store, projectId);
+  const kinds = kind ? [kind] : ['task_completion', 'meeting'];
+  const expectedKeys = members.flatMap((owner) => kinds.map((itemKind) => `${owner}|${itemKind}`));
+  const missing = expectedKeys
+    .filter((key) => !latestByKey.has(key))
+    .map((key) => {
+      const [owner, itemKind] = key.split('|');
+      return `${owner}${kinds.length > 1 ? `(${attendanceKindLabel(itemKind)})` : ''}`;
+    });
+  const counts = {};
+  for (const record of records) {
+    counts[record.status] = (counts[record.status] || 0) + 1;
+  }
+  const title = kind === 'meeting'
+    ? '晚会出席统计'
+    : kind === 'task_completion'
+      ? '任务完成统计'
+      : '今日考勤统计';
+  const lines = [
+    `# ${targetDate} ${title}`,
+    '',
+    `项目记录：${records.length} 条；未记录：${missing.length} 项`,
+    `状态分布：${Object.entries(counts).map(([status, count]) => `${attendanceStatusLabel(status)} ${count}`).join(' / ') || '暂无记录'}`,
+    ''
+  ];
+  if (missing.length) {
+    lines.push(`未记录：${missing.slice(0, 12).join('、')}${missing.length > 12 ? ` 等 ${missing.length} 项` : ''}`);
+    lines.push('');
+  }
+  lines.push('明细：');
+  if (!records.length) {
+    lines.push('- 暂无考勤记录');
+  } else {
+    lines.push(...records.slice(0, 30).map((record) =>
+      `- ${record.owner} ${attendanceKindLabel(record.kind)}：${attendanceStatusLabel(record.status)}${record.source ? `（${record.source === 'wecom' ? '企微' : record.source}）` : ''}`
+    ));
+  }
+  return {
+    projectId,
+    date: targetDate,
+    kind: kind || 'all',
+    records,
+    missing,
+    counts,
+    summary: lines.join('\n')
+  };
+}
+
 export function createWeComRoutes({
   createId,
   loadStore,
@@ -312,6 +420,28 @@ export function createWeComRoutes({
         sendJson(res, 200, attendance);
         return true;
       }
+      const command = resolveWeComCommand(text);
+      if (command === 'help') {
+        const result = buildAttendanceCommandHelp();
+        sendJson(res, 200, { type: 'help', result, summary: result });
+        return true;
+      }
+      if (['meeting_stats', 'task_completion_stats', 'attendance_stats'].includes(command)) {
+        const store = await loadStore();
+        const { projectId } = resolveProjectContext(store, url, json);
+        const date = String(json?.date || url.searchParams.get('date') || todayText()).trim();
+        const kind = command === 'meeting_stats'
+          ? 'meeting'
+          : command === 'task_completion_stats'
+            ? 'task_completion'
+            : '';
+        const payload = buildAttendanceStats(store, { projectId, date, kind });
+        if (json?.push && isWeComAvailable()) {
+          await sendWeComMarkdown(payload.summary);
+        }
+        sendJson(res, 200, { ...payload, type: command, result: payload.summary });
+        return true;
+      }
       const type = resolveRankingType(text);
       if (type) {
         const store = await loadStore();
@@ -325,7 +455,7 @@ export function createWeComRoutes({
         return true;
       }
       sendJson(res, 200, {
-        result: '未识别指令。可发送：每日排名 / 每周排名 / 今日评分 / 周榜。'
+        result: '未识别指令。可发送：菜单 / 每日排名 / 每周排名 / 晚会统计 / 任务完成统计 / 今日考勤 / 姓名正常出席 / 姓名正常完成。'
       });
       return true;
     }

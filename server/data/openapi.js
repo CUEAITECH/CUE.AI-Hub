@@ -373,6 +373,42 @@ export function buildOpenApiSpec(serverUrl) {
         }
       },
 
+      '/api/wecom/command': {
+        post: {
+          operationId: 'handleWeComDeterministicCommand',
+          summary: '企业微信模块化指令入口',
+          description: '不调用大语言模型，直接按固定指令返回结果或写入考勤。适合配置成智能机器人按钮/快捷指令：菜单、每日排名、每周排名、晚会统计、任务完成统计、今日考勤，以及"姓名正常完成/姓名正常出席"等考勤回复。',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: {
+              type: 'object',
+              required: ['text'],
+              properties: {
+                text: { type: 'string', description: '成员原始指令，例如：每日排名、晚会统计、林世棋正常出席。也兼容 content / message 字段。' },
+                content: { type: 'string', description: '同 text，兼容企业微信字段配置。' },
+                message: { type: 'string', description: '同 text，兼容企业微信字段配置。' },
+                projectId: { type: 'string', description: '项目 ID；不传时使用默认项目。' },
+                date: { type: 'string', description: '查询/记录日期 YYYY-MM-DD；不传时使用当天。' },
+                push: { type: 'boolean', description: '是否把结果再通过 webhook 推送到群里。' }
+              }
+            }}}
+          },
+          responses: {
+            '200': { description: '指令结果', content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                type: { type: 'string', description: '命中的指令类型。' },
+                result: { type: 'string', description: '可直接回复给成员的中文结果。' },
+                summary: { type: 'string', description: '同 result，部分接口兼容字段。' },
+                record: { type: 'object', description: '考勤写入时返回的记录。' },
+                records: { type: 'array', description: '统计类指令命中的记录列表。' },
+                missing: { type: 'array', description: '统计类指令中尚未记录的成员/事项。' }
+              }
+            }}}}
+          }
+        }
+      },
+
       '/api/wecom/progress': {
         post: {
           operationId: 'updateTaskProgressByKeyword',

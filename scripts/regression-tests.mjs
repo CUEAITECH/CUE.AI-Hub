@@ -1070,6 +1070,63 @@ await test('wecom command records attendance bot replies', async () => {
   assert.equal(store.attendanceRecords[0].kind, 'task_completion');
 });
 
+await test('wecom command handles deterministic attendance stats and menu', async () => {
+  let requestJson = {};
+  const store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', name: 'Cue Classroom' }],
+    members: [{ name: '林世棋' }, { name: '田家铭' }],
+    users: [],
+    attendanceRecords: [
+      { id: 'att_1', date: '2026-05-19', owner: '林世棋', kind: 'meeting', status: 'normal', projectId: 'cue_ai_classroom', source: 'wecom' },
+      { id: 'att_2', date: '2026-05-19', owner: '林世棋', kind: 'task_completion', status: 'normal', projectId: 'cue_ai_classroom', source: 'wecom' },
+      { id: 'att_3', date: '2026-05-19', owner: '田家铭', kind: 'meeting', status: 'temp_leave', projectId: 'cue_ai_classroom', source: 'wecom' }
+    ]
+  });
+  let responsePayload = null;
+  const route = createWeComRoutes({
+    createId: (prefix) => `${prefix}_fixed`,
+    loadStore: async () => store,
+    updateStore: async (mutator) => mutator(structuredClone(store)),
+    readBody: async () => ({ json: requestJson }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    isWeComAvailable: () => true,
+    sendWeComMarkdown: async () => true,
+    scanRisks: () => [],
+    buildMetrics: () => ({}),
+    todayText: () => '2026-05-19',
+    normalizeStandup,
+    normalizeTask: (task) => task,
+    generateAssignmentBrief: async () => ({ generatedBy: 'test' })
+  });
+
+  requestJson = { text: '@cue项目中枢 菜单', projectId: 'cue_ai_classroom' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.equal(responsePayload.type, 'help');
+  assert.match(responsePayload.result, /晚会统计/);
+  assert.match(responsePayload.result, /任务完成统计/);
+
+  requestJson = { text: '@cue项目中枢 晚会统计', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.equal(responsePayload.type, 'meeting_stats');
+  assert.equal(responsePayload.records.length, 2);
+  assert.match(responsePayload.result, /林世棋 晚会出席：正常/);
+  assert.match(responsePayload.result, /田家铭 晚会出席：临时请假\/迟到/);
+
+  requestJson = { text: '@cue项目中枢 任务完成统计', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.equal(responsePayload.type, 'task_completion_stats');
+  assert.equal(responsePayload.records.length, 1);
+  assert.ok(responsePayload.missing.includes('田家铭'));
+
+  requestJson = { text: '@cue项目中枢 今日考勤', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.equal(responsePayload.type, 'attendance_stats');
+  assert.equal(responsePayload.records.length, 3);
+  assert.ok(responsePayload.missing.includes('田家铭(任务完成)'));
+  assert.match(responsePayload.result, /未记录：\d+ 项/);
+});
+
 await test('scheduler prompts use unified WeCom bot name', async () => {
   const originalSetInterval = globalThis.setInterval;
   const originalSetTimeout = globalThis.setTimeout;
