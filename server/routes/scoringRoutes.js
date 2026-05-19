@@ -38,6 +38,13 @@ function weekStartMonday(dateText) {
   return date.toISOString().slice(0, 10);
 }
 
+function isCompanyWorkday(dateText) {
+  const [year, month, day] = String(dateText).split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = date.getUTCDay();
+  return dayOfWeek !== 3 && dayOfWeek !== 6;
+}
+
 export function createScoringRoutes({
   loadStore,
   updateStore,
@@ -120,7 +127,8 @@ export function createScoringRoutes({
       const projectId = resolveProjectId(store, url);
       const date = url.searchParams.get('date') || todayText();
       const weekStart = weekStartMonday(date);
-      const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+      const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index))
+        .filter((day) => isCompanyWorkday(day));
       const records = byProject(store.attendanceRecords || [], projectId)
         .filter((item) => days.includes(item.date));
       sendJson(res, 200, { projectId, date, weekStart, days, records });

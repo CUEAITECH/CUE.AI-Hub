@@ -8,6 +8,7 @@ import { createSystemRoutes } from '../server/routes/systemRoutes.js';
 import { createProjectRoutes } from '../server/routes/projectRoutes.js';
 import { createWeComRoutes } from '../server/routes/wecomRoutes.js';
 import { createTaskRoutes } from '../server/routes/taskRoutes.js';
+import { createScoringRoutes } from '../server/routes/scoringRoutes.js';
 import { startScheduler } from '../server/scheduler.js';
 import { bindActivityToExplicitRefs } from '../server/services/bindingEngine.js';
 import { normalizeAssignment, normalizeStandup } from '../server/services/dailyBrief.js';
@@ -244,6 +245,30 @@ await test('weekly scoring averages only company workdays', async () => {
   const result = buildWeeklyScores(store, { projectId: 'cue_ai_classroom', date: '2026-05-15' });
   assert.deepEqual(result.workdays, ['2026-05-11', '2026-05-12', '2026-05-14', '2026-05-15']);
   assert.equal(result.rows[0].workdays, 4);
+});
+
+await test('attendance weekly route returns only company workdays', async () => {
+  const store = {
+    projects: [{ id: 'cue_ai_classroom' }],
+    attendanceRecords: [
+      { id: 'att_mon', date: '2026-05-11', owner: 'Alice', kind: 'meeting', status: 'normal', projectId: 'cue_ai_classroom' },
+      { id: 'att_wed', date: '2026-05-13', owner: 'Alice', kind: 'meeting', status: 'normal', projectId: 'cue_ai_classroom' },
+      { id: 'att_sat', date: '2026-05-16', owner: 'Alice', kind: 'meeting', status: 'normal', projectId: 'cue_ai_classroom' },
+      { id: 'att_sun', date: '2026-05-17', owner: 'Alice', kind: 'meeting', status: 'normal', projectId: 'cue_ai_classroom' }
+    ]
+  };
+  let responsePayload = null;
+  const route = createScoringRoutes({
+    loadStore: async () => store,
+    updateStore: async (mutator) => mutator(structuredClone(store)),
+    readBody: async () => ({ json: {} }),
+    sendJson: (_res, _status, payload) => { responsePayload = payload; },
+    sendError: (_res, status, message) => { throw new Error(`${status} ${message}`); },
+    todayText: () => '2026-05-17'
+  });
+  await route({ method: 'GET', headers: {} }, {}, new URL('http://localhost/api/attendance/weekly?projectId=cue_ai_classroom&date=2026-05-17'));
+  assert.deepEqual(responsePayload.days, ['2026-05-11', '2026-05-12', '2026-05-14', '2026-05-15', '2026-05-17']);
+  assert.deepEqual(responsePayload.records.map((item) => item.id), ['att_mon', 'att_sun']);
 });
 
 await test('attendance parser recognizes task and meeting bot replies', async () => {
