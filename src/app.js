@@ -32,6 +32,8 @@ const state = {
   attendanceRecords: [],
   weeklyAttendance: { days: [], records: [], weekStart: '' },
   inlineAttendanceEditor: null,
+  attendanceBulkMode: false,
+  attendanceBulkSelection: [],
   permissions: { canManageAttendance: false },
   currentUser: null,
   scoreRankingTab: 'daily',
@@ -2875,6 +2877,33 @@ function renderAttendanceOptionPanel(kind = 'meeting', selectedStatus = 'normal'
   `).join('');
 }
 
+function attendanceSelectionKey({ owner = '', date = '', kind = 'meeting' } = {}) {
+  return `${owner}|${date}|${kind}`;
+}
+
+function isAttendanceBulkSelected(owner, date, kind) {
+  const key = attendanceSelectionKey({ owner, date, kind });
+  return state.attendanceBulkSelection.some((item) => attendanceSelectionKey(item) === key);
+}
+
+function toggleAttendanceBulkSelection(item) {
+  const key = attendanceSelectionKey(item);
+  const exists = state.attendanceBulkSelection.some((entry) => attendanceSelectionKey(entry) === key);
+  state.attendanceBulkSelection = exists
+    ? state.attendanceBulkSelection.filter((entry) => attendanceSelectionKey(entry) !== key)
+    : [...state.attendanceBulkSelection, item];
+  renderAttendanceBoard();
+}
+
+function renderAttendanceBulkBar() {
+  const bar = document.querySelector('#attendanceBulkBar');
+  const count = document.querySelector('#attendanceBulkCount');
+  const toggle = document.querySelector('[data-action="toggle-attendance-bulk"]');
+  if (bar) bar.style.display = state.attendanceBulkMode ? '' : 'none';
+  if (count) count.textContent = `已选择 ${state.attendanceBulkSelection.length} 项`;
+  if (toggle) toggle.textContent = state.attendanceBulkMode ? '退出批量' : '批量修改';
+}
+
 function attendanceWeeklyScoreForRecord(kind, record) {
   const reported = record?.reportedStatus || record?.status || '';
   const actual = record?.actualStatus || record?.status || '';
@@ -3060,6 +3089,7 @@ function renderAttendanceBoard() {
   const weekStart = state.weeklyAttendance?.weekStart || weekStartMonday(weekInput?.value || getTodayText());
   const members = state.members.length ? state.members : [...new Set(records.map((item) => item.owner))].map((name) => ({ name, role: '' }));
   const recordMap = new Map(records.map((item) => [`${item.owner}|${item.date}|${item.kind}`, item]));
+  renderAttendanceBulkBar();
 
   summary.innerHTML = `
     <div><span>统计周</span><b>${escapeHtml(weekStart)} ~ ${escapeHtml(days[days.length - 1] || addDays(weekStart, 6))}</b></div>
@@ -3102,6 +3132,8 @@ function renderAttendanceBoard() {
           <div class="attendance-day-cell">
             <button type="button" class="attendance-pill tone-${day.task.tone}${currentUserCanManageAttendance() ? ' is-editable' : ''}" data-action="edit-attendance-cell" data-owner="${escapeHtml(row.member.name)}" data-date="${escapeHtml(day.date)}" data-kind="task_completion">任务 ${escapeHtml(day.task.label)}</button>
             <button type="button" class="attendance-pill tone-${day.meeting.tone}${currentUserCanManageAttendance() ? ' is-editable' : ''}" data-action="edit-attendance-cell" data-owner="${escapeHtml(row.member.name)}" data-date="${escapeHtml(day.date)}" data-kind="meeting">晚会 ${escapeHtml(day.meeting.label)}</button>
+            ${state.attendanceBulkMode && isAttendanceBulkSelected(row.member.name, day.date, 'task_completion') ? '<span class="attendance-selected-mark">已选任务</span>' : ''}
+            ${state.attendanceBulkMode && isAttendanceBulkSelected(row.member.name, day.date, 'meeting') ? '<span class="attendance-selected-mark">已选晚会</span>' : ''}
             <small>${day.dayScore} 分</small>
           </div>
         </td>
@@ -3692,7 +3724,7 @@ async function submitAttendanceRecord({
   await saveAttendanceRecord({ owner, kind, status, date, note, formSelector });
 }
 
-async function saveAttendanceRecord({ owner, kind = 'meeting', status = 'normal', date = getTodayText(), note = '', formSelector = '' } = {}) {
+async function saveAttendanceRecord({ owner, kind = 'meeting', status = 'normal', date = getTodayText(), note = '', formSelector = '', refresh = true, silent = false } = {}) {
   if (!currentUserCanManageAttendance()) {
     toast('当前账号只有查看权限');
     return;
@@ -3721,10 +3753,13 @@ async function saveAttendanceRecord({ owner, kind = 'meeting', status = 'normal'
   }
   if (formSelector) document.querySelector(formSelector)?.reset();
   state.inlineAttendanceEditor = null;
-  renderMeetingAttendance();
-  await refreshWeeklyAttendance();
-  renderMyScoreBreakdown();
-  toast(`已更新 ${owner} 的${kind === 'task_completion' ? '任务反馈' : '晚会出席'}状态`);
+  closeAttendancePopover();
+  if (refresh) {
+    renderMeetingAttendance();
+    await refreshWeeklyAttendance();
+    renderMyScoreBreakdown();
+  }
+  if (!silent) toast(`已更新 ${owner} 的${kind === 'task_completion' ? '任务反馈' : '晚会出席'}状态`);
 }
 
 async function refreshWeeklyAttendance() {
@@ -4136,21 +4171,15 @@ function bindEvents() {
     renderAttendanceOptionPanel(kind, status);
   });
   document.querySelector('#attendanceTableWrap')?.addEventListener('click', (e) => {
-    const inlineOption = e.target.closest('[data-action="save-inline-attendance"]');
-    if (inlineOption) {
-      const editor = inlineOption.closest('.attendance-floating-editor');
-      const owner = editor?.dataset.owner || '';
-      const date = editor?.dataset.date || '';
-      const kind = editor?.dataset.kind || 'meeting';
-      const status = inlineOption.dataset.status || 'normal';
-      saveAttendanceRecord({ owner, date, kind, status }).catch((err) => toast(err.message));
-      return;
-    }
     const button = e.target.closest('[data-action="edit-attendance-cell"]');
     if (!button) return;
     const owner = button.dataset.owner || '';
     const date = button.dataset.date || '';
     const kind = button.dataset.kind || 'meeting';
+    if (state.attendanceBulkMode) {
+      toggleAttendanceBulkSelection({ owner, date, kind });
+      return;
+    }
     const record = (state.weeklyAttendance?.records || []).find((item) => (
       item.owner === owner && item.date === date && item.kind === kind
     )) || null;
@@ -4168,6 +4197,16 @@ function bindEvents() {
     openAttendanceEditor({ owner, date, kind, record });
   });
   document.addEventListener('click', (e) => {
+    const inlineOption = e.target.closest('[data-action="save-inline-attendance"]');
+    if (!inlineOption) return;
+    const editor = inlineOption.closest('.attendance-floating-editor');
+    const owner = editor?.dataset.owner || '';
+    const date = editor?.dataset.date || '';
+    const kind = editor?.dataset.kind || 'meeting';
+    const status = inlineOption.dataset.status || 'normal';
+    saveAttendanceRecord({ owner, date, kind, status }).catch((err) => toast(err.message));
+  });
+  document.addEventListener('click', (e) => {
     const target = e.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.closest('#attendanceFloatingEditor') || target.closest('[data-action="edit-attendance-cell"]')) return;
@@ -4177,6 +4216,37 @@ function bindEvents() {
     const button = e.target.closest('[data-action="close-attendance-popover"]');
     if (!button) return;
     closeAttendancePopover();
+  });
+  document.querySelector('[data-action="toggle-attendance-bulk"]')?.addEventListener('click', () => {
+    if (!currentUserCanManageAttendance()) {
+      toast('当前账号只有查看权限');
+      return;
+    }
+    state.attendanceBulkMode = !state.attendanceBulkMode;
+    state.attendanceBulkSelection = [];
+    closeAttendancePopover();
+    renderAttendanceBoard();
+  });
+  document.querySelector('[data-action="clear-attendance-bulk"]')?.addEventListener('click', () => {
+    state.attendanceBulkSelection = [];
+    renderAttendanceBoard();
+  });
+  document.querySelector('[data-action="apply-attendance-bulk"]')?.addEventListener('click', async () => {
+    if (!state.attendanceBulkSelection.length) {
+      toast('请先选择要批量修改的考勤项');
+      return;
+    }
+    const status = document.querySelector('#attendanceBulkStatus')?.value || 'normal';
+    for (const item of state.attendanceBulkSelection) {
+      await saveAttendanceRecord({ ...item, status, refresh: false, silent: true });
+    }
+    state.attendanceBulkSelection = [];
+    state.attendanceBulkMode = false;
+    renderMeetingAttendance();
+    await refreshWeeklyAttendance();
+    renderMyScoreBreakdown();
+    renderAttendanceBoard();
+    toast('批量考勤已更新');
   });
 
   document.querySelector('[data-action="generate-plan"]').addEventListener('click', () => {
