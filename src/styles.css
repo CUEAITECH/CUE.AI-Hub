@@ -2920,6 +2920,49 @@ select:focus {
   gap: 6px;
 }
 
+.attendance-inline-editor {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(18, 18, 18, 0.12);
+}
+
+.attendance-inline-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(18, 18, 18, 0.1);
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.attendance-inline-option b {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.attendance-inline-option span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.attendance-inline-option:hover {
+  border-color: rgba(18, 18, 18, 0.24);
+  transform: translateY(-1px);
+}
+
+.attendance-inline-option.is-selected {
+  border-color: var(--accent);
+  background: rgba(18, 18, 18, 0.03);
+}
+
 .attendance-day-cell small,
 .attendance-score-cell {
   color: var(--muted);

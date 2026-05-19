@@ -31,6 +31,7 @@ const state = {
   weeklyScoring: { rows: [] },
   attendanceRecords: [],
   weeklyAttendance: { days: [], records: [], weekStart: '' },
+  inlineAttendanceEditor: null,
   permissions: { canManageAttendance: false },
   currentUser: null,
   scoreRankingTab: 'daily',
@@ -2840,26 +2841,6 @@ function openAttendanceEditor({ owner = '', kind = 'meeting', record = null, dat
   });
 }
 
-function openWeeklyAttendanceEditor({ owner = '', kind = 'meeting', record = null, date = '' } = {}) {
-  if (!currentUserCanManageAttendance()) {
-    toast('当前账号只有查看权限');
-    return;
-  }
-  fillAttendanceEditor({
-    formSelector: '#weeklyAttendanceManagerForm',
-    ownerSelector: '#weeklyAttendanceOwner',
-    kindSelector: '#weeklyAttendanceKind',
-    statusSelector: '#weeklyAttendanceStatus',
-    noteSelector: '#weeklyAttendanceNote',
-    optionPanelSelector: '#weeklyAttendanceOptionPanel',
-    dateSelector: '#weeklyAttendanceDate',
-    owner,
-    kind,
-    record,
-    date
-  });
-}
-
 function fillAttendanceEditor({ formSelector, ownerSelector, kindSelector, statusSelector, noteSelector, optionPanelSelector, dateSelector, owner = '', kind = 'meeting', record = null, date = '' }) {
   const form = document.querySelector(formSelector);
   const ownerEl = document.querySelector(ownerSelector);
@@ -2922,6 +2903,21 @@ function attendanceCellSummary(record, kind) {
   if ((!reported || reported === 'absent') && (actual === 'normal' || actual === 'delayed')) return { label: '未报但完成', tone: 'warn', score };
   if ((reported === 'normal' || reported === 'delayed') && (!actual || actual === 'absent')) return { label: '已报未完成', tone: 'risk', score };
   return { label: kind === 'meeting' ? '缺勤' : '未完成', tone: 'absent', score };
+}
+
+function renderInlineAttendanceOptions({ owner, date, kind, selectedStatus = 'normal' }) {
+  const normalizedSelected = normalizeAttendanceStatusValue(selectedStatus);
+  return `
+    <div class="attendance-inline-editor" data-owner="${escapeHtml(owner)}" data-date="${escapeHtml(date)}" data-kind="${escapeHtml(kind)}">
+      ${attendanceStatusOptions(kind).map((option) => `
+        <button type="button" class="attendance-inline-option${option.status === normalizedSelected ? ' is-selected' : ''}" data-action="save-inline-attendance" data-status="${escapeHtml(option.status)}">
+          <strong>${escapeHtml(option.title)}</strong>
+          <b>${option.score} 分</b>
+          <span>${escapeHtml(option.detail)}</span>
+        </button>
+      `).join('')}
+    </div>
+  `;
 }
 
 function renderMeetingAttendance() {
@@ -3013,10 +3009,6 @@ function renderMeetingTargets() {
 function renderAttendanceBoard() {
   const weekInput = document.querySelector('#attendanceWeekDate');
   if (weekInput && !weekInput.value) weekInput.value = getTodayText();
-  const ownerSelect = document.querySelector('#weeklyAttendanceOwner');
-  if (ownerSelect) {
-    setOptions('#weeklyAttendanceOwner', state.members, (member) => member.name, (member) => `${member.name} · ${member.role}`);
-  }
   const wrap = document.querySelector('#attendanceTableWrap');
   const ranking = document.querySelector('#attendanceRankingList');
   const summary = document.querySelector('#attendanceWeeklySummary');
@@ -3070,6 +3062,16 @@ function renderAttendanceBoard() {
             <button type="button" class="attendance-pill tone-${day.task.tone}${currentUserCanManageAttendance() ? ' is-editable' : ''}" data-action="edit-attendance-cell" data-owner="${escapeHtml(row.member.name)}" data-date="${escapeHtml(day.date)}" data-kind="task_completion">任务 ${escapeHtml(day.task.label)}</button>
             <button type="button" class="attendance-pill tone-${day.meeting.tone}${currentUserCanManageAttendance() ? ' is-editable' : ''}" data-action="edit-attendance-cell" data-owner="${escapeHtml(row.member.name)}" data-date="${escapeHtml(day.date)}" data-kind="meeting">晚会 ${escapeHtml(day.meeting.label)}</button>
             <small>${day.dayScore} 分</small>
+            ${state.inlineAttendanceEditor
+              && state.inlineAttendanceEditor.owner === row.member.name
+              && state.inlineAttendanceEditor.date === day.date
+                ? renderInlineAttendanceOptions({
+                    owner: row.member.name,
+                    date: day.date,
+                    kind: state.inlineAttendanceEditor.kind,
+                    selectedStatus: recordMap.get(`${row.member.name}|${day.date}|${state.inlineAttendanceEditor.kind}`)?.status || 'normal'
+                  })
+                : ''}
           </div>
         </td>
       `).join('')}
@@ -3656,6 +3658,14 @@ async function submitAttendanceRecord({
   const status = document.querySelector(statusSelector)?.value || 'normal';
   const date = document.querySelector(dateSelector)?.value || getTodayText();
   const note = document.querySelector(noteSelector)?.value || '';
+  await saveAttendanceRecord({ owner, kind, status, date, note, formSelector });
+}
+
+async function saveAttendanceRecord({ owner, kind = 'meeting', status = 'normal', date = getTodayText(), note = '', formSelector = '' } = {}) {
+  if (!currentUserCanManageAttendance()) {
+    toast('当前账号只有查看权限');
+    return;
+  }
   if (!owner) {
     toast('请选择成员');
     return;
@@ -3678,7 +3688,8 @@ async function submitAttendanceRecord({
     state.scoring = payload.scoring;
     state.myScoring = (state.scoring.rows || []).find((row) => row.owner === currentSessionName()) || null;
   }
-  document.querySelector(formSelector)?.reset();
+  if (formSelector) document.querySelector(formSelector)?.reset();
+  state.inlineAttendanceEditor = null;
   renderMeetingAttendance();
   await refreshWeeklyAttendance();
   renderMyScoreBreakdown();
@@ -4076,17 +4087,6 @@ function bindEvents() {
     e.preventDefault();
     submitAttendanceRecord().catch((err) => toast(err.message));
   });
-  document.querySelector('#weeklyAttendanceManagerForm')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    submitAttendanceRecord({
-      ownerSelector: '#weeklyAttendanceOwner',
-      kindSelector: '#weeklyAttendanceKind',
-      statusSelector: '#weeklyAttendanceStatus',
-      dateSelector: '#weeklyAttendanceDate',
-      noteSelector: '#weeklyAttendanceNote',
-      formSelector: '#weeklyAttendanceManagerForm'
-    }).catch((err) => toast(err.message));
-  });
   document.querySelector('#attendanceKind')?.addEventListener('change', (e) => {
     const status = document.querySelector('#attendanceStatus')?.value || 'normal';
     renderAttendanceOptionPanel(e.target.value || 'meeting', status);
@@ -4104,33 +4104,30 @@ function bindEvents() {
     if (statusEl) statusEl.value = status;
     renderAttendanceOptionPanel(kind, status);
   });
-  document.querySelector('#weeklyAttendanceKind')?.addEventListener('change', (e) => {
-    const status = document.querySelector('#weeklyAttendanceStatus')?.value || 'normal';
-    renderAttendanceOptionPanel(e.target.value || 'meeting', status, '#weeklyAttendanceOptionPanel');
-  });
-  document.querySelector('#weeklyAttendanceStatus')?.addEventListener('change', (e) => {
-    const kind = document.querySelector('#weeklyAttendanceKind')?.value || 'meeting';
-    renderAttendanceOptionPanel(kind, e.target.value || 'normal', '#weeklyAttendanceOptionPanel');
-  });
-  document.querySelector('#weeklyAttendanceOptionPanel')?.addEventListener('click', (e) => {
-    const button = e.target.closest('[data-action="select-attendance-status"]');
-    if (!button) return;
-    const status = button.dataset.status || 'normal';
-    const statusEl = document.querySelector('#weeklyAttendanceStatus');
-    const kind = document.querySelector('#weeklyAttendanceKind')?.value || 'meeting';
-    if (statusEl) statusEl.value = status;
-    renderAttendanceOptionPanel(kind, status, '#weeklyAttendanceOptionPanel');
-  });
   document.querySelector('#attendanceTableWrap')?.addEventListener('click', (e) => {
+    const inlineOption = e.target.closest('[data-action="save-inline-attendance"]');
+    if (inlineOption) {
+      const editor = inlineOption.closest('.attendance-inline-editor');
+      const owner = editor?.dataset.owner || '';
+      const date = editor?.dataset.date || '';
+      const kind = editor?.dataset.kind || 'meeting';
+      const status = inlineOption.dataset.status || 'normal';
+      saveAttendanceRecord({ owner, date, kind, status }).catch((err) => toast(err.message));
+      return;
+    }
     const button = e.target.closest('[data-action="edit-attendance-cell"]');
     if (!button) return;
     const owner = button.dataset.owner || '';
     const date = button.dataset.date || '';
     const kind = button.dataset.kind || 'meeting';
-    const record = (state.weeklyAttendance?.records || []).find((item) => (
-      item.owner === owner && item.date === date && item.kind === kind
-    )) || null;
-    openWeeklyAttendanceEditor({ owner, date, kind, record });
+    const current = state.inlineAttendanceEditor;
+    state.inlineAttendanceEditor = current
+      && current.owner === owner
+      && current.date === date
+      && current.kind === kind
+        ? null
+        : { owner, date, kind };
+    renderAttendanceBoard();
   });
   document.querySelector('#meetingAttendanceList')?.addEventListener('click', (e) => {
     const button = e.target.closest('[data-action="edit-attendance-cell"]');
