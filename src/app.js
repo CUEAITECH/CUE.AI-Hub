@@ -1198,10 +1198,11 @@ function openHealthModal() {
   const scoreColor = pct >= 80 ? '#0f7a55' : pct >= 60 ? '#9a6400' : '#b42318';
 
   const dims = [
-    { key: 'activity',     label: '7 日 Commit 活跃度', weight: '30%' },
-    { key: 'taskRisk',     label: '任务风险健康',         weight: '30%' },
-    { key: 'reviewClean',  label: 'Review 清洁度',        weight: '25%' },
-    { key: 'standup',      label: '7 日站会覆盖率',       weight: '15%' },
+    { key: 'activity',    label: '7 日 Commit 活跃度',       doraTag: 'Deployment Frequency' },
+    { key: 'taskRisk',    label: '任务风险健康' },
+    { key: 'reviewClean', label: 'Review 清洁度',             doraTag: 'Change Failure Rate' },
+    { key: 'mttr',        label: 'Block 平均解决时长',         doraTag: 'MTTR' },
+    { key: 'standup',     label: '7 日站会覆盖率' },
   ];
 
   const body = document.querySelector('#healthModalBody');
@@ -1209,19 +1210,21 @@ function openHealthModal() {
     <div class="health-modal-total">
       <strong style="color:${scoreColor}">${score}</strong>
       <div>
-        <p>交付健康度（分桶加权）</p>
-        <p>${metrics.healthAnalysis?.nextFocus || '各维度 30/30/25/15 加权，AI 调整 ±5'}</p>
+        <p>交付健康度（DORA 对齐几何平均）</p>
+        <p>${metrics.healthAnalysis?.nextFocus || '5 维几何均值聚合，AI 调整 ±5；任意维度趋近 0 总分同步下降'}</p>
       </div>
     </div>
-    ${dims.map(({ key, label, weight }) => {
+    ${dims.map(({ key, label, doraTag }) => {
       const c = components[key] || {};
       const s = Math.round(Number(c.score) || 0);
+      const w = c.weight != null ? `${Math.round(c.weight * 100)}%` : '—';
       const barColor = s >= 80 ? '#0f7a55' : s >= 60 ? '#9a6400' : '#b42318';
+      const tag = doraTag ? `<span class="health-dora-tag">${escapeHtml(doraTag)}</span>` : '';
       return `
         <div class="health-dim">
           <div class="health-dim-head">
-            <span>${escapeHtml(label)}</span>
-            <em>${s} 分 &nbsp;·&nbsp; 权重 ${weight}</em>
+            <span>${escapeHtml(label)}${tag}</span>
+            <em>${s} 分 &nbsp;·&nbsp; 权重 ${w}</em>
           </div>
           <div class="health-dim-bar-wrap">
             <div class="health-dim-bar" style="width:${s}%;background:${barColor}"></div>
@@ -1734,17 +1737,23 @@ function renderReviews() {
     return;
   }
 
-  list.innerHTML = state.reviews.map((review) => `
+  list.innerHTML = state.reviews.map((review) => {
+    const c = review.compliance;
+    const complianceBadge = c
+      ? `<span class="review-compliance-badge" title="${escapeHtml(c.taskTitle || '')}">验收 ✅${(c.done||[]).length} ❌${(c.notDone||[]).length} ⚠️${(c.needsHumanCheck||[]).length}</span>`
+      : '';
+    return `
     <div class="review-item review-${escapeHtml(String(review.level).toLowerCase())}">
       <div>
         <strong>${escapeHtml(review.title)}</strong>
         <span>${escapeHtml(review.repo)} · ${escapeHtml(review.owner)} · ${escapeHtml((review.findings || []).join('；'))}</span>
+        ${complianceBadge}
         ${review.suggestion ? `<p class="review-suggestion">${escapeHtml(review.suggestion)}</p>` : ''}
       </div>
       <b>${Number(review.score) || 0}</b>
       <em>${escapeHtml(getReviewLevelLabel(review.level))}</em>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 let _selectedReviewId = null;
@@ -2191,6 +2200,56 @@ function renderBriefBlock(brief, hasAssignment, assignmentDone = false, assignme
   `;
 }
 
+// 客户端聚合：取该任务最新一条带 compliance 的 review
+function aggregateTaskComplianceClient(taskId) {
+  if (!taskId) return null;
+  const relevant = (state.reviews || [])
+    .filter((r) => r.compliance?.taskId === taskId)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  if (!relevant.length) return null;
+  const c = relevant[0].compliance;
+  const done = c.done || [];
+  const notDone = c.notDone || [];
+  const needsHumanCheck = c.needsHumanCheck || [];
+  const total = done.length + notDone.length + needsHumanCheck.length;
+  return {
+    reviewId: relevant[0].id,
+    reviewedAt: relevant[0].createdAt,
+    done, notDone, needsHumanCheck,
+    total,
+    progress: total > 0 ? Math.round((done.length / total) * 100) : 0
+  };
+}
+
+function renderComplianceCard(task) {
+  const agg = aggregateTaskComplianceClient(task.id);
+  if (!agg) {
+    if (!task.acceptance?.trim()) return '';
+    return `<article class="task-detail-card task-compliance-card">
+      <span>验收对照</span>
+      <p class="compliance-empty">尚无 AI 验收数据 — 等待下一次 commit 触发 review。</p>
+    </article>`;
+  }
+  const renderList = (items, klass, icon) => items.length
+    ? `<ul class="compliance-list ${klass}">${items.map((t) => `<li><i>${icon}</i><span>${escapeHtml(t)}</span></li>`).join('')}</ul>`
+    : '';
+  const reviewedAt = agg.reviewedAt
+    ? new Date(agg.reviewedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+    : '';
+  return `<article class="task-detail-card task-compliance-card">
+    <span>验收对照 · ${agg.progress}% · 更新于 ${escapeHtml(reviewedAt)}</span>
+    <div class="compliance-summary">
+      <b class="compliance-done">✅ 已满足 ${agg.done.length}</b>
+      <b class="compliance-not-done">❌ 未满足 ${agg.notDone.length}</b>
+      <b class="compliance-human-check">⚠️ 需人工验证 ${agg.needsHumanCheck.length}</b>
+    </div>
+    ${renderList(agg.done, 'done', '✅')}
+    ${renderList(agg.notDone, 'not-done', '❌')}
+    ${renderList(agg.needsHumanCheck, 'human-check', '⚠️')}
+    <p class="compliance-meta">数据来源：最新 review 的 compliance 快照。每条 commit 入仓时自动重算。</p>
+  </article>`;
+}
+
 function renderTaskDetail() {
   const title = document.querySelector('#taskDetailTitle');
   const subtitle = document.querySelector('#taskDetailSubtitle');
@@ -2246,6 +2305,8 @@ function renderTaskDetail() {
             : '<span class="task-done-mark">任务已完成</span>'}
       </div>
     </article>
+
+    ${renderComplianceCard(task)}
 
     <article class="task-detail-card task-detail-main">
       <span>结构化任务规则</span>

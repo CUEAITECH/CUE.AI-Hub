@@ -132,6 +132,20 @@ export function scanRisks(store) {
   });
 }
 
+// DORA-aligned weighted geometric mean（对齐 SPACE/DORA 框架）
+// 几何平均比线性加权更能放大低分维度的影响：任意一维趋近 0 时总分同步趋近 0，
+// 而线性加权允许其他维度"补偿"该短板，掩盖真实瓶颈。
+// 参考：Forsgren et al. "The SPACE of Developer Productivity" (ACM Queue, 2021)
+//      DORA "State of DevOps Report" — https://dora.dev
+function weightedGeometricMean(dimensions) {
+  // dimensions: Array<{ score: number, weight: number }>，weight 之和须为 1
+  // 使用 max(score, 1) 防止 ln(0)；score=1 时对总分贡献接近 0，不会无限惩罚新团队
+  return Math.min(100, Math.round(
+    dimensions.reduce((product, { score, weight }) =>
+      product * Math.pow(Math.max(score, 1), weight), 1)
+  ));
+}
+
 export function buildMetrics(store, alerts = []) {
   const fmt = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(d);
   const todayShanghai = fmt(new Date());
@@ -140,7 +154,7 @@ export function buildMetrics(store, alerts = []) {
 
   const memberCount = Math.max((store.members || []).length, 1);
 
-  // 维度一：7 日 commit 活跃度（人均每天 1 条 = 满分）
+  // DORA 维度一：Deployment Frequency → 7 日 commit 活跃度（人均每天 1 条 = 满分）
   const commits7d = (store.activities || []).filter((a) => {
     const d = a.createdAt || a.date || '';
     return a.type === 'commit' && fmt(new Date(d)) >= sevenDaysAgo;
@@ -156,14 +170,26 @@ export function buildMetrics(store, alerts = []) {
   const highRiskTasks = (store.tasks || []).filter((t) => t.risk === '高').length;
   const taskScore = Math.round((1 - highRiskTasks / totalTasks) * 100);
 
-  // 维度三：Review 清洁度（近 30 天未处理 Block 占比）
+  // DORA 维度三：Change Failure Rate → 近 30 天未处理 Block 占比
   const reviews30d = (store.reviews || []).filter((r) => (r.createdAt || '') >= thirtyDaysAgo);
   const unresolvedBlocks30d = reviews30d.filter((r) => r.level === 'Block' && !r.humanDecision).length;
   const reviewScore = reviews30d.length
     ? Math.round((1 - unresolvedBlocks30d / reviews30d.length) * 100)
     : 100;
 
-  // 维度四：7 日站会覆盖率（近 7 天有过站会记录的成员比率）
+  // DORA 维度四：MTTR → 近 30 天已解决 Block 的平均响应时长（0h=100, ≥48h=0）
+  const resolvedBlocks30d = reviews30d.filter((r) => r.level === 'Block' && r.humanDecision && r.updatedAt);
+  let mttrScore = 100;
+  let avgMttrHours = null;
+  if (resolvedBlocks30d.length > 0) {
+    avgMttrHours = resolvedBlocks30d.reduce((sum, r) => {
+      const delta = new Date(r.updatedAt).getTime() - new Date(r.createdAt || r.updatedAt).getTime();
+      return sum + Math.max(0, delta / 3600000);
+    }, 0) / resolvedBlocks30d.length;
+    mttrScore = Math.max(0, Math.round(100 - (avgMttrHours / 48) * 100));
+  }
+
+  // 维度五：7 日站会覆盖率（近 7 天有过站会记录的成员比率）
   const standupOwners7d = new Set(
     (store.standups || [])
       .filter((s) => (s.date || '') >= sevenDaysAgo)
@@ -171,12 +197,15 @@ export function buildMetrics(store, alerts = []) {
   );
   const standupScore = Math.round(Math.min(standupOwners7d.size, memberCount) / memberCount * 100);
 
-  const baseScore = Math.round(
-    activityScore * 0.30 +
-    taskScore     * 0.30 +
-    reviewScore   * 0.25 +
-    standupScore  * 0.15
-  );
+  // 几何平均聚合：权重对齐 DORA 四指标优先级，站会作为团队协作辅助维度
+  const baseScore = weightedGeometricMean([
+    { score: activityScore, weight: 0.25 },
+    { score: taskScore,     weight: 0.25 },
+    { score: reviewScore,   weight: 0.25 },
+    { score: mttrScore,     weight: 0.15 },
+    { score: standupScore,  weight: 0.10 }
+  ]);
+
   const adjustment = Math.max(-5, Math.min(5, Number(store.healthAnalysis?.adjustment) || 0));
   const score = Math.max(0, Math.min(100, baseScore + adjustment));
 
@@ -190,10 +219,11 @@ export function buildMetrics(store, alerts = []) {
     healthAdjustment: adjustment,
     healthAnalysis: store.healthAnalysis || null,
     healthComponents: {
-      activity:  { score: activityScore,  weight: 0.30, detail: `近7日 ${commits7d} 条commit` },
-      taskRisk:  { score: taskScore,       weight: 0.30, detail: `${highRiskTasks}/${totalTasks} 个高风险任务` },
-      reviewClean: { score: reviewScore,   weight: 0.25, detail: `近30日 ${unresolvedBlocks30d}/${reviews30d.length} 条Block未处理` },
-      standup:   { score: standupScore,    weight: 0.15, detail: `近7日 ${standupOwners7d.size}/${memberCount} 人有站会记录` }
+      activity:    { score: activityScore, weight: 0.25, doraMetric: 'Deployment Frequency', detail: `近7日 ${commits7d} 条commit` },
+      taskRisk:    { score: taskScore,     weight: 0.25, detail: `${highRiskTasks}/${totalTasks} 个高风险任务` },
+      reviewClean: { score: reviewScore,   weight: 0.25, doraMetric: 'Change Failure Rate',  detail: `近30日 ${unresolvedBlocks30d}/${reviews30d.length} 条Block未处理` },
+      mttr:        { score: mttrScore,     weight: 0.15, doraMetric: 'MTTR', detail: resolvedBlocks30d.length ? `近30日Block平均解决 ${avgMttrHours != null ? avgMttrHours.toFixed(1) : '?'}h` : '近30日无已解决Block' },
+      standup:     { score: standupScore,  weight: 0.10, detail: `近7日 ${standupOwners7d.size}/${memberCount} 人有站会记录` }
     },
     highRiskTasks,
     commitsToday,

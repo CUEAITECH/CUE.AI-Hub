@@ -1,5 +1,8 @@
 import { callClaude, parseJsonOutput, isAvailable } from './claude.js';
 
+const MAX_DIFF_LEN = 4000;
+const VALID_LEVELS = ['Pass', 'Warning', 'Block', 'Escalate'];
+
 const riskyPatterns = [
   { pattern: /password|secret|token|private_key/i, penalty: 16, finding: '涉及凭据、token 或密钥相关代码，需要人工复查安全边界。' },
   { pattern: /delete\s+from|drop\s+table|truncate/i, penalty: 20, finding: '包含高风险数据库操作，需要确认迁移和回滚方案。' },
@@ -8,11 +11,7 @@ const riskyPatterns = [
   { pattern: /auth|payment|billing|permission/i, penalty: 10, finding: '涉及认证、支付或权限模块，应提高审阅等级。' }
 ];
 
-const MAX_DIFF_LEN = 4000;
-
-const VALID_LEVELS = ['Pass', 'Warning', 'Block', 'Escalate'];
-
-/** 将 LLM 输出的 level（可能是中文/小写/带空格）规范化为枚举值，无法识别时从 score 推断 */
+/** 将 LLM 输出的 level 规范化为枚举值 */
 function normalizeLevel(raw, score) {
   if (raw) {
     const exact = VALID_LEVELS.find((l) => l === raw);
@@ -23,38 +22,81 @@ function normalizeLevel(raw, score) {
     if (s === 'block' || s === 'blocked' || s === '阻断' || s === '阻止') return 'Block';
     if (s === 'escalate' || s === 'escalated' || s === '升级') return 'Escalate';
   }
-  // 无法识别时从 score 推断，与规则引擎保持一致
   if (score >= 80) return 'Pass';
   if (score >= 60) return 'Warning';
   if (score >= 40) return 'Block';
   return 'Escalate';
 }
 
-const REVIEWER_SYSTEM_PROMPT = `你是 CUE Project Hub 的代码审阅 AI。对提交的代码变更进行安全、质量和风险评估。
+/**
+ * 从 issues 和 compliance 派生审阅等级（不再让 LLM 直接判）。
+ * 规则：
+ *  - 任何 critical issue → Block
+ *  - 任何 security/payment 高影响 issue → Escalate
+ *  - compliance.notDone 非空且应该被这次提交满足 → Warning
+ *  - 其他 → Pass
+ */
+function deriveLevel(issues = [], compliance = null) {
+  const hasCritical = issues.some((i) => i.severity === 'critical');
+  const hasSecurity = issues.some((i) => i.severity === 'critical' && /auth|payment|secret|token|password|permission/i.test((i.header || '') + (i.description || '')));
+  if (hasSecurity) return 'Escalate';
+  if (hasCritical) return 'Block';
+  if (issues.some((i) => i.severity === 'major')) return 'Warning';
+  if (compliance && (compliance.notDone || []).length > 0 && (compliance.done || []).length === 0) return 'Warning';
+  return 'Pass';
+}
 
-评分标准（满分 100 分，按扣分规则计算）：
-- 包含密钥/Token/Password 相关硬编码：-16 分
-- 包含高风险数据库操作（DROP/DELETE/TRUNCATE）：-20 分
-- 涉及认证、支付、权限模块：-10 分
-- 存在 TODO/FIXME/HACK 标记：-6 分
-- 包含 console.log/debugger 调试语句：-4 分
-- 单次变更超过 500 行：-12 分
-- 单次变更 180-500 行：-6 分
-- 无测试文件且超过 40 行变更：-8 分
-- 无任务或 ticket 关联：-6 分
+/** 从 issues 数量和 severity 估算评分 */
+function deriveScore(issues = []) {
+  let score = 100;
+  for (const issue of issues) {
+    if (issue.severity === 'critical') score -= 20;
+    else if (issue.severity === 'major') score -= 10;
+    else if (issue.severity === 'minor') score -= 4;
+  }
+  return Math.max(0, Math.min(100, score));
+}
 
-等级划分：
-- Pass（通过）：80 分以上且无阻断性问题
-- Warning（提醒）：60-79 分或有轻微问题
-- Block（阻断）：包含密钥泄露、高风险 DB 操作，或低于 60 分
-- Escalate（升级）：涉及支付模块或严重安全漏洞
+const REVIEWER_SYSTEM_PROMPT = `你是 CUE Project Hub 的代码审阅 AI，参考 PR-Agent 设计。对提交的代码变更做两件事：
 
-输出要求：仅输出 JSON 对象，不包含任何其他文字。格式如下：
+(一) 验收标准对账（仅当用户输入提供了 "任务验收标准" 时执行；未提供则全部留空数组）
+  必须先把验收标准用自己的话逐条列出（写入 ticket_requirements），然后把每条归入：
+  - done：本次或既往提交已经实现，且这次没有破坏
+  - notDone：尚未实现，或这次提交把之前实现的功能改坏了
+  - needsHumanCheck：仅从代码无法判定（UI 视觉、运行时行为、外部服务联动等）
+
+  规则：
+  - 必须涵盖每一条验收标准（done + notDone + needsHumanCheck 加起来等于全部）
+  - 不要新增没出现在验收标准里的条目
+  - 即使本次 commit 没碰相关代码，也要基于"项目当前整体状态"给判断（不只看 diff）
+
+(二) 代码问题检测
+  按 PR-Agent 的"非对称报告"原则：
+  - 明显 bug、安全问题：必须报，宁可严格也不漏
+  - 低影响、低确信：宁可不报也不要猜
+  - 高影响但不确定：报，并在 description 里标注不确定点
+  每个问题必须给具体 file、startLine、endLine 和触发场景，禁止"建议关注代码质量"这种空话。
+
+输出严格遵守如下 JSON 格式，不要任何多余文字：
+
 {
-  "score": 数字（0-100）,
-  "level": "Pass|Warning|Block|Escalate",
-  "findings": ["问题描述1", "问题描述2"],
-  "suggestion": "综合建议，包括具体改进方向，100字以内"
+  "ticket_requirements": ["验收标准1原文复述", "验收标准2原文复述"],
+  "compliance": {
+    "done": ["..."],
+    "notDone": ["..."],
+    "needsHumanCheck": ["..."]
+  },
+  "issues": [
+    {
+      "file": "src/path/to/file.js",
+      "startLine": 42,
+      "endLine": 47,
+      "severity": "critical|major|minor",
+      "header": "Possible Bug",
+      "description": "具体的问题、触发场景、不确定点"
+    }
+  ],
+  "suggestion": "总体建议，50 字以内"
 }`;
 
 function countChangedLines(diff) {
@@ -62,23 +104,24 @@ function countChangedLines(diff) {
   return lines.filter((line) => line.startsWith('+') || line.startsWith('-')).length;
 }
 
-function inferLevel(score, findings) {
-  if (score < 70 || findings.some((finding) => finding.includes('高风险数据库') || finding.includes('密钥'))) {
-    return 'Block';
-  }
-  if (score < 86 || findings.length > 0) return 'Warning';
-  return 'Pass';
-}
-
-function reviewChangeWithRules({ title = 'Untitled change', repo = 'unknown', owner = '未分配', diff = '', files = [] }) {
+function reviewChangeWithRules({ title = '', repo = '', owner = '', diff = '', files = [] }) {
   const text = `${title}\n${diff}\n${files.join('\n')}`;
   const findings = [];
+  const issues = [];
   let score = 100;
 
   for (const rule of riskyPatterns) {
     if (rule.pattern.test(text)) {
       score -= rule.penalty;
       findings.push(rule.finding);
+      issues.push({
+        file: files[0] || 'unknown',
+        startLine: 0,
+        endLine: 0,
+        severity: rule.penalty >= 16 ? 'critical' : rule.penalty >= 10 ? 'major' : 'minor',
+        header: rule.finding.slice(0, 20),
+        description: rule.finding
+      });
     }
   }
 
@@ -91,62 +134,81 @@ function reviewChangeWithRules({ title = 'Untitled change', repo = 'unknown', ow
     findings.push('单次变更偏大，建议确认是否可以拆分。');
   }
 
-  const hasTestSignal = /test|spec|测试|__tests__/i.test(text);
-  if (!hasTestSignal && changedLines > 40) {
-    score -= 8;
-    findings.push('变更超过 40 行但没有明显测试文件或测试说明。');
-  }
-
-  if (!/#\d+|task_|任务|ticket/i.test(title)) {
-    score -= 6;
-    findings.push('提交标题没有明显任务或 ticket 关联。');
-  }
-
   score = Math.max(0, Math.min(100, score));
+  const level = deriveLevel(issues, null);
 
   return {
-    repo,
-    title,
-    owner,
+    repo, title, owner,
     score,
-    level: inferLevel(score, findings),
+    level,
     findings: findings.length ? findings : ['未发现明显阻断问题，可进入人工审阅。'],
     suggestion: '',
+    compliance: null,
+    issues,
     createdAt: new Date().toISOString()
   };
 }
 
-export async function reviewChange({ title = 'Untitled change', repo = 'unknown', owner = '未分配', diff = '', files = [] }) {
+/**
+ * @param {object} params
+ * @param {string} params.title
+ * @param {string} params.repo
+ * @param {string} params.owner
+ * @param {string} params.diff
+ * @param {string[]} params.files
+ * @param {object} [params.task]  关联任务（含 id/title/acceptance），用于验收对账
+ */
+export async function reviewChange({ title = '', repo = '', owner = '', diff = '', files = [], task = null }) {
   if (isAvailable()) {
     const truncatedDiff = diff.length > MAX_DIFF_LEN
       ? diff.slice(0, MAX_DIFF_LEN / 2) + '\n\n... [diff 已截断] ...\n\n' + diff.slice(-MAX_DIFF_LEN / 2)
       : diff;
 
+    const acceptanceBlock = task?.acceptance?.trim()
+      ? `关联任务：${task.title}\n任务验收标准（原文）：\n${task.acceptance}\n`
+      : '（本次提交未关联任务，留空 compliance 即可）\n';
+
     const userPrompt = `仓库：${repo}
 提交标题：${title}
 作者：${owner}
 变更文件：${files.slice(0, 10).join(', ') || '（未提供）'}
-
+${acceptanceBlock}
 Diff 内容：
 ${truncatedDiff}`.trim();
 
     const raw = await callClaude(REVIEWER_SYSTEM_PROMPT, userPrompt);
     const result = parseJsonOutput(raw);
 
-    if (result && typeof result.score === 'number') {
-      const clampedScore = Math.max(0, Math.min(100, result.score));
+    if (result && (result.compliance || result.issues)) {
+      const compliance = task?.acceptance?.trim()
+        ? {
+            taskId: task.id,
+            taskTitle: task.title,
+            requirements: Array.isArray(result.ticket_requirements) ? result.ticket_requirements : [],
+            done: Array.isArray(result.compliance?.done) ? result.compliance.done : [],
+            notDone: Array.isArray(result.compliance?.notDone) ? result.compliance.notDone : [],
+            needsHumanCheck: Array.isArray(result.compliance?.needsHumanCheck) ? result.compliance.needsHumanCheck : []
+          }
+        : null;
+      const issues = Array.isArray(result.issues) ? result.issues.filter((i) => i && i.file) : [];
+      const score = deriveScore(issues);
+      const level = deriveLevel(issues, compliance);
+      const findings = issues.length
+        ? issues.map((i) => `${i.header || ''}: ${i.description || ''}`.trim())
+        : ['未发现明显问题。'];
+
       return {
-        repo,
-        title,
-        owner,
-        score: clampedScore,
-        level: normalizeLevel(result.level, clampedScore),
-        findings: Array.isArray(result.findings) ? result.findings : [],
+        repo, title, owner,
+        score,
+        level,
+        findings,
         suggestion: String(result.suggestion || ''),
+        compliance,
+        issues,
         createdAt: new Date().toISOString()
       };
     }
-    console.warn('[Reviewer] LLM 输出解析失败，降级到规则引擎');
+    console.warn('[Reviewer] LLM 输出解析失败或缺少必填字段，降级到规则引擎');
   }
   return reviewChangeWithRules({ title, repo, owner, diff, files });
 }

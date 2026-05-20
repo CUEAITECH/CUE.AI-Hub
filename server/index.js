@@ -298,6 +298,7 @@ const routeModules = [
   }),
   createWebhookRoutes({
     createId,
+    loadStore,
     updateStore,
     readBody,
     sendJson,

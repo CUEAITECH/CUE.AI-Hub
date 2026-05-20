@@ -257,7 +257,10 @@ export function migrateStore(store) {
         ? { ...review, repo: cueAiRepo }
         : review;
       // 补充 humanDecision 字段（人工审阅决策）
-      return Object.hasOwn(migrated, 'humanDecision') ? migrated : { ...migrated, humanDecision: null };
+      const withDecision = Object.hasOwn(migrated, 'humanDecision') ? migrated : { ...migrated, humanDecision: null };
+      // 补充 compliance / issues 字段（PR-Agent 风格验收对账，旧 review 为 null/[]）
+      const withCompliance = Object.hasOwn(withDecision, 'compliance') ? withDecision : { ...withDecision, compliance: null };
+      return Object.hasOwn(withCompliance, 'issues') ? withCompliance : { ...withCompliance, issues: [] };
     });
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
