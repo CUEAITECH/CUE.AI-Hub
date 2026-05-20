@@ -103,11 +103,15 @@ async function buildHubReview(prDetail, linkedTaskIds, store) {
  */
 export async function upsertPullIntoStore(prDetail, projectId, updateStore, store) {
   const linkedTaskIds = extractLinkedTaskIds(prDetail.title, prDetail.body, store);
-  const hubReview = await buildHubReview(prDetail, linkedTaskIds, store);
-  const prAgentReview = parsePrAgentReview(prDetail);
-
   const pullId = `pull_${prDetail.number}_${projectId}`;
   const existing = (store.pulls || []).find((p) => p.id === pullId);
+
+  // 跳过 LLM：已有 review 且 PR 状态/更新时间未变
+  const unchanged = existing?.hubReview &&
+    existing.state === prDetail.state &&
+    existing.updatedAt >= (prDetail.updatedAt || '');
+  const hubReview = unchanged ? existing.hubReview : await buildHubReview(prDetail, linkedTaskIds, store);
+  const prAgentReview = parsePrAgentReview(prDetail);
 
   const pullEntry = {
     ...(existing || normalizePullEntry(prDetail, projectId, linkedTaskIds)),
