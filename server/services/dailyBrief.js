@@ -310,7 +310,12 @@ export function buildEveningReport(store, dateText = todayText(), endAt = new Da
       completed: row.completed
     })),
     nextTargets,
-    report
+    report,
+    pulls: (store.pulls || []).filter((pull) => {
+      if (!pull.mergedAt) return false;
+      const mergedDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date(pull.mergedAt));
+      return mergedDate === dateText;
+    })
   };
 }
 
@@ -325,6 +330,28 @@ export function applyEveningReportProgress(store, eveningReport) {
         status: '已完成',
         progress: 100,
         signal: '晚会对账确认完成',
+        updatedAt: eveningReport.generatedAt
+      };
+    }
+    // PR 优先：若任务有关联的 merged PR（含 hubReview.compliance），用 PR 结论
+    const pulls = store.pulls || [];
+    const linkedPulls = pulls
+      .filter((pr) => pr.linkedTaskIds?.includes(task.id) && pr.state === 'merged')
+      .sort((a, b) => String(b.mergedAt || b.updatedAt || '').localeCompare(String(a.mergedAt || a.updatedAt || '')));
+    const latestPull = linkedPulls[0];
+    const prCompliance = latestPull?.hubReview?.compliance || latestPull?.prAgentReview?.compliance;
+    if (prCompliance) {
+      const done = prCompliance.done || [];
+      const notDone = prCompliance.notDone || [];
+      const needsHumanCheck = prCompliance.needsHumanCheck || [];
+      const total = done.length + notDone.length + needsHumanCheck.length;
+      const progress = total > 0 ? Math.round((done.length / total) * 100) : 0;
+      const summary = `✅${done.length} ❌${notDone.length} ⚠️${needsHumanCheck.length}`;
+      return {
+        ...task,
+        status: progress >= 100 ? '已完成' : task.status === '待确认' ? '进行中' : task.status,
+        progress,
+        signal: `晚会对账（PR #${latestPull.number}）：验收对照 ${summary}，进度 ${progress}%`,
         updatedAt: eveningReport.generatedAt
       };
     }

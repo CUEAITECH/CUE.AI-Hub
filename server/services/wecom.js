@@ -59,6 +59,15 @@ export function buildPreMeetingWeComMsg(eveningEntry, hubUrl = 'https://hub.cuea
   const reconciliation = eveningEntry.reconciliation || [];
   const nextTargets = eveningEntry.nextTargets || [];
 
+  // PR 汇总（若有数据）
+  const pulls = eveningEntry.pulls || [];
+  const openPulls = pulls.filter((p) => p.state === 'open').length;
+  const mergedPulls = pulls.filter((p) => p.state === 'merged').length;
+  const blockPulls = pulls.filter((p) => p.hubReview?.level === 'Block' || p.hubReview?.level === 'Escalate').length;
+  const prSummaryLine = pulls.length > 0
+    ? `\n📋 今日 PR 汇总\n  已合并：${mergedPulls} 个  |  待 review：${openPulls} 个  |  Block：${blockPulls} 个`
+    : '';
+
   // ── 分工对账列表 ──────────────────────────────────────────────
   const reconLines = reconciliation.length
     ? reconciliation.map((row) => {
@@ -87,6 +96,7 @@ export function buildPreMeetingWeComMsg(eveningEntry, hubUrl = 'https://hub.cuea
     `阶段进度：**${summary.stageProgress ?? 0}%** | 提交：${summary.commitCount ?? 0} 条 | Block Review：${summary.blockReviewCount ?? 0} 条`,
     '',
     '## 昨日分工对账',
+    ...(prSummaryLine ? [prSummaryLine, ''] : []),
     reconLines,
     '',
     '## 晚会待处理',

@@ -1,4 +1,5 @@
 import { hasGitHubConfig, scanGitHubProject } from './githubApi.js';
+import { syncProjectPRs } from './pullPipeline.js';
 import { loadStore, updateStore } from '../store.js';
 import { reviewChange } from './reviewer.js';
 import { bindActivityToExplicitRefs } from './bindingEngine.js';
@@ -172,6 +173,15 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
       }));
     }).catch((err) => console.error('[SemanticLinker/GitHubSync]', err.message));
   }
+  // PR 同步（fire-and-forget，不阻塞 commit 同步流程）
+  syncProjectPRs(project, nextStore, updateStore, { since: '14 days ago' })
+    .then(({ added, updated }) => {
+      if (added || updated) {
+        console.log(`[GitHubSync] PR 同步 ${project.githubFullRepo}：新增 ${added} 条，更新 ${updated} 条`);
+      }
+    })
+    .catch((err) => console.error('[GitHubSync/PRSync]', err.message));
+
   return {
     project: nextStore.projects.find((item) => item.id === project.id),
     source: 'github-api',

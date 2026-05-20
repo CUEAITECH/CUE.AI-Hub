@@ -197,6 +197,8 @@ export function migrateStore(store) {
     users: [],
     dailyTaskSuggestions: {},
     aiPromptTraces: [],
+    pulls: [],
+    bypasses: [],
     currentStage: defaultCurrentStage,
     ...store
   };
@@ -260,8 +262,24 @@ export function migrateStore(store) {
       const withDecision = Object.hasOwn(migrated, 'humanDecision') ? migrated : { ...migrated, humanDecision: null };
       // 补充 compliance / issues 字段（PR-Agent 风格验收对账，旧 review 为 null/[]）
       const withCompliance = Object.hasOwn(withDecision, 'compliance') ? withDecision : { ...withDecision, compliance: null };
-      return Object.hasOwn(withCompliance, 'issues') ? withCompliance : { ...withCompliance, issues: [] };
+      const withIssues = Object.hasOwn(withCompliance, 'issues') ? withCompliance : { ...withCompliance, issues: [] };
+      return Object.hasOwn(withIssues, 'pullId') ? withIssues : { ...withIssues, pullId: null };
     });
+  // 为已有 pull 补全必需字段
+  next.pulls = (next.pulls || []).map((pull) => ({
+    prAgentReview: null,
+    hubReview: null,
+    linkedTaskIds: [],
+    commits: [],
+    mergedAt: null,
+    ...pull
+  }));
+  // 为已有 bypass 补全必需字段
+  next.bypasses = (next.bypasses || []).map((bypass) => ({
+    prLinked: false,
+    alertSent: false,
+    ...bypass
+  }));
   next.tasks = (next.tasks || []).map((task) => ({
     ...task,
     id: String(task.id || '').startsWith('undefined_')
