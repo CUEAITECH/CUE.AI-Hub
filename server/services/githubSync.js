@@ -1,5 +1,6 @@
 import { hasGitHubConfig, scanGitHubProject } from './githubApi.js';
 import { syncProjectPRs } from './pullPipeline.js';
+import { trace } from './syncTrace.js';
 import { loadStore, updateStore } from '../store.js';
 import { reviewChange } from './reviewer.js';
 import { bindActivityToExplicitRefs } from './bindingEngine.js';
@@ -174,6 +175,11 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
     }).catch((err) => console.error('[SemanticLinker/GitHubSync]', err.message));
   }
   // PR 同步（fire-and-forget，不阻塞 commit 同步流程）
+  trace('github-sync-trigger', {
+    projectId: project.id,
+    repo: project.githubFullRepo,
+    caller: new Error().stack.split('\n').slice(2, 8).map((s) => s.trim())
+  });
   syncProjectPRs(project, nextStore, updateStore, { since: '14 days ago' })
     .then(({ added, updated }) => {
       if (added || updated) {

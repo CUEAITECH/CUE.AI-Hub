@@ -65,6 +65,18 @@ export function createSystemRoutes({
       return true;
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/debug/sync-trace') {
+      const { readTrace, summarizeTrace } = await import('../services/syncTrace.js');
+      const lines = Math.min(2000, Number(url.searchParams.get('lines') || 500));
+      const mode = url.searchParams.get('mode') || 'summary';
+      if (mode === 'raw') {
+        sendJson(res, 200, { ok: true, entries: readTrace(lines) });
+      } else {
+        sendJson(res, 200, { ok: true, summary: summarizeTrace(lines), recent: readTrace(50) });
+      }
+      return true;
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/auth/me') {
       const store = await loadStore();
       const projectId = String(url.searchParams.get('projectId') || (store.projects || [])[0]?.id || 'cue_ai_classroom').trim();
