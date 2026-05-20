@@ -230,6 +230,40 @@ export async function syncProjectPRs(project, store, updateStore, options = {}) 
  * @param {function} updateStore
  * @returns {object|null} 更新后的 pull 条目
  */
+/**
+ * GitHub webhook 触发的单 PR 实时同步（替代轮询）
+ * 调用方：webhookRoutes.js 接收 pull_request 事件后
+ */
+export async function upsertPullFromWebhook(repoFull, prNumber, action) {
+  trace('pr-webhook', { repoFull, prNumber, action });
+
+  const [owner, repoName] = repoFull.split('/');
+  if (!owner || !repoName) return null;
+
+  // 动态加载 store helpers 避免循环依赖
+  const { loadStore: load, updateStore: update } = await import('../store.js');
+  const store = await load();
+
+  const project = (store.projects || []).find((p) => {
+    const full = p.githubFullRepo || `${p.githubOwner}/${p.repository}`;
+    return full.toLowerCase() === repoFull.toLowerCase();
+  });
+  if (!project) {
+    console.warn(`[pullPipeline] PR webhook: no project for repo ${repoFull}`);
+    return null;
+  }
+
+  try {
+    const prDetail = await fetchPRDetail(owner, repoName, prNumber);
+    const { pull } = await upsertPullIntoStore(prDetail, project.id, update, store);
+    console.log(`[pullPipeline] PR #${prNumber} (${action}) upserted via webhook`);
+    return pull;
+  } catch (err) {
+    console.error(`[pullPipeline] upsertPullFromWebhook failed:`, err.message);
+    return null;
+  }
+}
+
 export async function handlePrAgentSink(payload, store, updateStore) {
   const { repo = '', pr_number } = payload;
   trace('pr-agent-sink', { repo, pr_number, payload });

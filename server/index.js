@@ -98,7 +98,7 @@ import {
 } from './services/dailyTaskSuggester.js';
 import { startScheduler, runStartupPhaseCorrection } from './scheduler.js';
 import { createPullRoutes } from './routes/pullRoutes.js';
-import { handlePrAgentSink } from './services/pullPipeline.js';
+import { handlePrAgentSink, upsertPullFromWebhook } from './services/pullPipeline.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -323,7 +323,8 @@ const routeModules = [
     bindActivityToExplicitRefs,
     importDocsForProject,
     handlePrAgentSink,
-    cueApiKey
+    cueApiKey,
+    upsertPullFromWebhook
   })
 ];
 
