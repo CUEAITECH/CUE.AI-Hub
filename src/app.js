@@ -1198,10 +1198,11 @@ function openHealthModal() {
   const scoreColor = pct >= 80 ? '#0f7a55' : pct >= 60 ? '#9a6400' : '#b42318';
 
   const dims = [
-    { key: 'activity',     label: '7 日 Commit 活跃度', weight: '30%' },
-    { key: 'taskRisk',     label: '任务风险健康',         weight: '30%' },
-    { key: 'reviewClean',  label: 'Review 清洁度',        weight: '25%' },
-    { key: 'standup',      label: '7 日站会覆盖率',       weight: '15%' },
+    { key: 'activity',    label: '7 日 Commit 活跃度',       doraTag: 'Deployment Frequency' },
+    { key: 'taskRisk',    label: '任务风险健康' },
+    { key: 'reviewClean', label: 'Review 清洁度',             doraTag: 'Change Failure Rate' },
+    { key: 'mttr',        label: 'Block 平均解决时长',         doraTag: 'MTTR' },
+    { key: 'standup',     label: '7 日站会覆盖率' },
   ];
 
   const body = document.querySelector('#healthModalBody');
@@ -1209,19 +1210,21 @@ function openHealthModal() {
     <div class="health-modal-total">
       <strong style="color:${scoreColor}">${score}</strong>
       <div>
-        <p>交付健康度（分桶加权）</p>
-        <p>${metrics.healthAnalysis?.nextFocus || '各维度 30/30/25/15 加权，AI 调整 ±5'}</p>
+        <p>交付健康度（DORA 对齐几何平均）</p>
+        <p>${metrics.healthAnalysis?.nextFocus || '5 维几何均值聚合，AI 调整 ±5；任意维度趋近 0 总分同步下降'}</p>
       </div>
     </div>
-    ${dims.map(({ key, label, weight }) => {
+    ${dims.map(({ key, label, doraTag }) => {
       const c = components[key] || {};
       const s = Math.round(Number(c.score) || 0);
+      const w = c.weight != null ? `${Math.round(c.weight * 100)}%` : '—';
       const barColor = s >= 80 ? '#0f7a55' : s >= 60 ? '#9a6400' : '#b42318';
+      const tag = doraTag ? `<span class="health-dora-tag">${escapeHtml(doraTag)}</span>` : '';
       return `
         <div class="health-dim">
           <div class="health-dim-head">
-            <span>${escapeHtml(label)}</span>
-            <em>${s} 分 &nbsp;·&nbsp; 权重 ${weight}</em>
+            <span>${escapeHtml(label)}${tag}</span>
+            <em>${s} 分 &nbsp;·&nbsp; 权重 ${w}</em>
           </div>
           <div class="health-dim-bar-wrap">
             <div class="health-dim-bar" style="width:${s}%;background:${barColor}"></div>
