@@ -1190,6 +1190,53 @@ function renderMetrics() {
   renderScoreRanking();
 }
 
+function openHealthModal() {
+  const metrics = state.metrics || {};
+  const score = metrics.healthScore ?? 0;
+  const components = metrics.healthComponents || {};
+  const pct = Math.max(0, Math.min(100, Number(score)));
+  const scoreColor = pct >= 80 ? '#0f7a55' : pct >= 60 ? '#9a6400' : '#b42318';
+
+  const dims = [
+    { key: 'activity',     label: '7 日 Commit 活跃度', weight: '30%' },
+    { key: 'taskRisk',     label: '任务风险健康',         weight: '30%' },
+    { key: 'reviewClean',  label: 'Review 清洁度',        weight: '25%' },
+    { key: 'standup',      label: '7 日站会覆盖率',       weight: '15%' },
+  ];
+
+  const body = document.querySelector('#healthModalBody');
+  body.innerHTML = `
+    <div class="health-modal-total">
+      <strong style="color:${scoreColor}">${score}</strong>
+      <div>
+        <p>交付健康度（分桶加权）</p>
+        <p>${metrics.healthAnalysis?.nextFocus || '各维度 30/30/25/15 加权，AI 调整 ±5'}</p>
+      </div>
+    </div>
+    ${dims.map(({ key, label, weight }) => {
+      const c = components[key] || {};
+      const s = Math.round(Number(c.score) || 0);
+      const barColor = s >= 80 ? '#0f7a55' : s >= 60 ? '#9a6400' : '#b42318';
+      return `
+        <div class="health-dim">
+          <div class="health-dim-head">
+            <span>${escapeHtml(label)}</span>
+            <em>${s} 分 &nbsp;·&nbsp; 权重 ${weight}</em>
+          </div>
+          <div class="health-dim-bar-wrap">
+            <div class="health-dim-bar" style="width:${s}%;background:${barColor}"></div>
+          </div>
+          <p class="health-dim-detail">${escapeHtml(c.detail || '')}</p>
+        </div>`;
+    }).join('')}
+  `;
+  document.querySelector('#healthModalBackdrop').style.display = 'flex';
+}
+
+function closeHealthModal() {
+  document.querySelector('#healthModalBackdrop').style.display = 'none';
+}
+
 function componentScore(value, max) {
   const n = Number(value) || 0;
   return `${Math.round(n)}/${max}`;
@@ -4351,6 +4398,13 @@ function bindEvents() {
     pushEveningReportManual().catch((e) => toast(e.message));
   });
 
+  // 健康度 modal
+  document.querySelector('.dashboard-health').addEventListener('click', openHealthModal);
+  document.querySelector('[data-action="close-health-modal"]').addEventListener('click', closeHealthModal);
+  document.querySelector('#healthModalBackdrop').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeHealthModal();
+  });
+
   // 任务 modal
   document.querySelector('[data-action="close-task-modal"]').addEventListener('click', closeTaskModal);
   document.querySelector('#taskModalBackdrop').addEventListener('click', (e) => {
@@ -4518,7 +4572,10 @@ function bindEvents() {
 
   // ESC 关闭 modal
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeTaskModal();
+    if (e.key === 'Escape') {
+      closeTaskModal();
+      closeHealthModal();
+    }
   });
 }
 
