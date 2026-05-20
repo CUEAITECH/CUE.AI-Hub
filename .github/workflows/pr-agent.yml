@@ -1,0 +1,45 @@
+name: PR-Agent Review
+# Phase 2 时填入真实 secrets 后激活
+# 目前 if: false，Actions 不会实际执行 PR-Agent
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+
+jobs:
+  pr_agent_job:
+    # Phase 2 时把 'false' 改为 true
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    steps:
+      - name: PR-Agent Review
+        uses: Codium-ai/pr-agent@main
+        env:
+          OPENAI_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_BASE: https://api.anthropic.com/v1
+          CONFIG.AI_PROVIDER: anthropic
+          github_action_config.auto_review: "true"
+          github_action_config.auto_improve: "false"
+          github_action_config.auto_describe: "true"
+
+      - name: Notify Hub (sink)
+        if: always()
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR number found, skipping Hub notification"
+            exit 0
+          fi
+          curl -sf -X POST "${{ vars.HUB_URL }}/api/webhooks/pr-agent" \
+            -H "Content-Type: application/json" \
+            -H "X-CUE-API-Key: ${{ secrets.CUE_API_KEY }}" \
+            -d "{\"event\":\"pr_agent_review\",\"repo\":\"${{ github.repository }}\",\"pr_number\":${PR_NUMBER},\"run_id\":\"${{ github.run_id }}\"}" \
+            || echo "Hub notification failed (non-fatal)"
