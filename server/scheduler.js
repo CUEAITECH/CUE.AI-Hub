@@ -311,6 +311,42 @@ export function startScheduler(deps) {
       }
     }
   }, 60_000);
+
+  // 每小时检查 C+ bypass 是否超期（24h 内未补 PR）
+  async function checkBypassDeadlines() {
+    if (!isWeComAvailable()) return;
+    try {
+      const store = await loadStore();
+      const overdueBypass = (store.bypasses || []).filter((bypass) => {
+        if (bypass.prLinked || bypass.alertSent) return false;
+        return new Date(bypass.deadline).getTime() < Date.now();
+      });
+      if (!overdueBypass.length) return;
+      const lines = [
+        `## ⚠️ C+ bypass 超期提醒（${overdueBypass.length} 条）`,
+        '',
+        ...overdueBypass.slice(0, 5).map((b) => `- **${b.author || '未知'}** hotfix commit \`${b.sha.slice(0, 7)}\`（${b.branch}）超过 24h 未补 PR`),
+        '',
+        '请尽快在 GitHub 开 PR 并关联该 commit，否则团队 review 流程断档。'
+      ].join('\n');
+      await sendWeComMarkdown(lines);
+      // 标记已推送
+      await updateStore((draft) => {
+        for (const bypass of overdueBypass) {
+          const b = (draft.bypasses || []).find((x) => x.id === bypass.id);
+          if (b) b.alertSent = true;
+        }
+        return draft;
+      });
+    } catch (err) {
+      console.error('[Scheduler/bypass]', err.message);
+    }
+  }
+
+  // 每小时跑一次
+  setInterval(checkBypassDeadlines, 60 * 60 * 1000);
+  // 启动时延迟 30s 跑一次（等 store 加载完）
+  setTimeout(checkBypassDeadlines, 30000);
 }
 
 export async function runStartupPhaseCorrection(deps) {
