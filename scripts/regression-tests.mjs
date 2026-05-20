@@ -103,6 +103,32 @@ await test('mobile auth and dashboard keep phone-first density', async () => {
   assert.doesNotMatch(renderTasksSource, /detail-btn/);
 });
 
+await test('rule-fallback assignment brief exposes LLM retry action', async () => {
+  const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
+  const renderBriefSource = app.slice(
+    app.indexOf('function renderAssignmentBrief('),
+    app.indexOf('function withTaskAcceptanceBrief(')
+  );
+  const renderAssignmentsSource = app.slice(
+    app.indexOf('function renderAssignments()'),
+    app.indexOf('function renderPlanAdjustments()')
+  );
+
+  assert.match(renderBriefSource, /brief\.generatedBy === 'rule-fallback'/);
+  assert.match(renderBriefSource, /data-action="brief-retry"/);
+  assert.match(renderBriefSource, /data-assignment-id/);
+  assert.match(renderBriefSource, /重新 LLM 生成/);
+  assert.match(renderAssignmentsSource, /querySelectorAll\('\[data-action="brief-retry"\]'\)/);
+  assert.match(renderAssignmentsSource, /regenerateBrief\(btn\.dataset\.assignmentId\)/);
+
+  const regenerateSource = app.slice(
+    app.indexOf('async function regenerateBrief('),
+    app.indexOf('function switchAssignTab(')
+  );
+  assert.match(regenerateSource, /waitForClaudeBrief/);
+  assert.match(regenerateSource, /a\?\.brief\?\.generatedBy !== 'rule-fallback'/);
+});
+
 await test('phase1 migration creates top-level phases and deliverables without breaking old checklist', () => {
   const migrated = migrateStore({
     currentStage: legacyStage,
