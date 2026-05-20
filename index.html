@@ -112,6 +112,7 @@
           <div class="header-sub-group" data-sub="execution">
             <button class="nav-item" type="button" data-route="planning">AI 排期</button>
             <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
+            <button class="nav-item" type="button" data-route="viewPulls">PR 列表</button>
             <button class="nav-item" type="button" data-route="standup">异步站会</button>
             <button class="nav-item" type="button" data-route="assignment">分工领取</button>
             <button class="nav-item nav-item-hidden" type="button" data-route="task-detail">任务详情</button>
@@ -913,6 +914,30 @@
           </section>
         </section>
 
+        <!-- PR 列表 -->
+        <section class="view" id="viewPulls">
+          <div class="view-header">
+            <h2>PR 列表</h2>
+            <div class="filter-bar" id="pullFilterBar">
+              <select id="pullProjectFilter">
+                <option value="">全部项目</option>
+              </select>
+              <select id="pullStateFilter">
+                <option value="">全部状态</option>
+                <option value="open">待合并</option>
+                <option value="merged">已合并</option>
+                <option value="closed">已关闭</option>
+              </select>
+              <select id="pullAuthorFilter">
+                <option value="">全部成员</option>
+              </select>
+            </div>
+          </div>
+          <div id="pullList" class="pull-list">
+            <div class="empty-hint">加载中...</div>
+          </div>
+        </section>
+
         <!-- 异步站会 -->
         <section class="view" id="standup">
           <section class="workspace-shell">
@@ -1112,6 +1137,15 @@
           </section>
         </section>
       </main>
+      <!-- PR 详情侧滑 -->
+      <div id="pullDrawerBackdrop" class="drawer-backdrop hidden" onclick="closePullDrawer()"></div>
+      <aside id="pullDrawer" class="drawer hidden">
+        <div class="drawer-header">
+          <button class="drawer-close" onclick="closePullDrawer()">✕</button>
+          <h3 id="pullDrawerTitle">PR 详情</h3>
+        </div>
+        <div id="pullDrawerBody" class="drawer-body"></div>
+      </aside>
       <nav class="mobile-app-nav" aria-label="移动端主导航">
         <button class="mobile-app-nav-item active" type="button" data-route="overview" aria-label="总览">
           <svg viewBox="0 0 24 24" aria-hidden="true">
