@@ -171,3 +171,84 @@ export async function scanGitHubProject(project, options = {}) {
     source: 'github-api'
   };
 }
+
+/**
+ * 获取仓库近期 Pull Request 列表
+ * @param {string} owner
+ * @param {string} repo
+ * @param {object} options - { state: 'all'|'open'|'closed', since: ISO string, per_page: number }
+ */
+export async function fetchProjectPRs(owner, repo, options = {}) {
+  const params = new URLSearchParams();
+  params.set('state', options.state || 'all');
+  params.set('sort', 'updated');
+  params.set('direction', 'desc');
+  params.set('per_page', String(Math.min(options.per_page || 30, 100)));
+  const rawPRs = await ghFetch(`/repos/${owner}/${repo}/pulls?${params}`);
+
+  const since = options.since ? new Date(options.since) : null;
+  const filtered = since
+    ? rawPRs.filter((pr) => new Date(pr.updated_at) >= since)
+    : rawPRs;
+
+  return filtered.map((pr) => ({
+    number: pr.number,
+    title: pr.title || '',
+    body: pr.body || '',
+    state: pr.merged_at ? 'merged' : pr.state,
+    author: mapOwner(pr.user?.login || '', '', ''),
+    authorLogin: pr.user?.login || '',
+    headBranch: pr.head?.ref || '',
+    baseBranch: pr.base?.ref || '',
+    htmlUrl: pr.html_url || '',
+    mergedAt: pr.merged_at || null,
+    createdAt: pr.created_at || new Date().toISOString(),
+    updatedAt: pr.updated_at || new Date().toISOString()
+  }));
+}
+
+/**
+ * 获取单个 PR 详情，含 review comments（PR-Agent 留在 reviews 字段）
+ * @param {string} owner
+ * @param {string} repo
+ * @param {number} prNumber
+ */
+export async function fetchPRDetail(owner, repo, prNumber) {
+  const [pr, reviews, comments] = await Promise.all([
+    ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}`),
+    ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/reviews`),
+    ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/comments`)
+  ]);
+
+  return {
+    number: pr.number,
+    title: pr.title || '',
+    body: pr.body || '',
+    state: pr.merged_at ? 'merged' : pr.state,
+    author: mapOwner(pr.user?.login || '', '', ''),
+    authorLogin: pr.user?.login || '',
+    headBranch: pr.head?.ref || '',
+    baseBranch: pr.base?.ref || '',
+    htmlUrl: pr.html_url || '',
+    mergedAt: pr.merged_at || null,
+    createdAt: pr.created_at || new Date().toISOString(),
+    updatedAt: pr.updated_at || new Date().toISOString(),
+    commits: [],
+    reviews: (reviews || []).map((r) => ({
+      id: r.id,
+      user: r.user?.login || '',
+      body: r.body || '',
+      state: r.state,
+      submittedAt: r.submitted_at || '',
+      htmlUrl: r.html_url || ''
+    })),
+    reviewComments: (comments || []).map((c) => ({
+      id: c.id,
+      user: c.user?.login || '',
+      body: c.body || '',
+      path: c.path || '',
+      line: c.line || c.original_line || null,
+      createdAt: c.created_at || ''
+    }))
+  };
+}
