@@ -2040,8 +2040,12 @@ function renderCompareReport() {
 
 // ── 分工渲染 ────────────────────────────────────────────────────
 
-function renderAssignmentBrief(brief) {
+function renderAssignmentBrief(brief, assignmentId = null) {
   if (!brief) return '';
+  const canRetryWithLlm = brief.generatedBy === 'rule-fallback' && assignmentId;
+  const retryButton = canRetryWithLlm
+    ? `<button class="brief-retry-btn" type="button" data-action="brief-retry" data-assignment-id="${escapeHtml(assignmentId)}">重新 LLM 生成</button>`
+    : '';
   const normalizedCriteria = (brief.acceptanceCriteria || []).filter((item) => !isPlaceholderAcceptance(item));
   const steps = (brief.steps || []).slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const criteria = normalizedCriteria.slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
@@ -2049,6 +2053,7 @@ function renderAssignmentBrief(brief) {
   return `
     <details class="assignment-brief">
       <summary>任务细则 · ${escapeHtml(brief.generatedBy === 'claude' ? 'LLM' : '规则降级')}</summary>
+      ${retryButton ? `<div class="assignment-brief-actions">${retryButton}</div>` : ''}
       <p>${escapeHtml(brief.objective || '')}</p>
       <div class="assignment-brief-grid">
         <div>
@@ -2094,11 +2099,14 @@ function renderBriefBlock(brief, hasAssignment, assignmentDone = false, assignme
     if (briefAge > 30_000) {
       return `<div class="brief-failed">
         <span>细则生成失败</span>
-        ${assignmentId ? `<button onclick="window.__briefRetry('${escapeHtml(assignmentId)}')" style="font-size:12px;padding:3px 10px;border-radius:4px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;">重新生成</button>` : ''}
+        ${assignmentId ? `<button class="brief-retry-btn" type="button" data-action="brief-retry" data-assignment-id="${escapeHtml(assignmentId)}">重新生成</button>` : ''}
       </div>`;
     }
     return '<div class="brief-generating"><span class="brief-spinner"></span>任务细则生成中，稍等片刻后刷新页面…</div>';
   }
+  const retryButton = brief.generatedBy === 'rule-fallback' && assignmentId
+    ? `<button class="brief-retry-btn" type="button" data-action="brief-retry" data-assignment-id="${escapeHtml(assignmentId)}">重新 LLM 生成</button>`
+    : '';
   const list = (items, ordered = false) => {
     const tag = ordered ? 'ol' : 'ul';
     const rows = (items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
@@ -2106,6 +2114,7 @@ function renderBriefBlock(brief, hasAssignment, assignmentDone = false, assignme
   };
   return `
     <div class="task-brief-full">
+      ${retryButton ? `<div class="task-brief-actions">${retryButton}</div>` : ''}
       <section>
         <span>目标</span>
         <p>${escapeHtml(brief.objective || '待补充')}</p>
@@ -2237,48 +2246,54 @@ function renderTaskDetail() {
       }
     });
   });
+  content.querySelectorAll('[data-action="brief-retry"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      regenerateBrief(btn.dataset.assignmentId).catch((e) => toast(e.message));
+    });
+  });
 }
 
 async function regenerateBrief(assignmentId) {
-  console.log('[Brief] Step 2 — assignmentId:', assignmentId);
   if (!assignmentId || assignmentId === 'undefined') {
-    toast('❌ [2/5] assignmentId 为空，无法请求');
+    toast('缺少认领记录，无法重新生成');
     return;
   }
-  toast('[2/5] assignmentId 确认: ' + assignmentId.slice(0, 16));
+  const beforeAssignment = (state.assignments || []).find((x) => x.id === assignmentId);
+  const waitForClaudeBrief = beforeAssignment?.brief?.generatedBy === 'rule-fallback';
 
   const btn = document.querySelector(`[data-action="brief-retry"][data-assignment-id="${CSS.escape(assignmentId)}"]`);
-  if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '生成中…';
+  }
 
   try {
-    console.log('[Brief] Step 3 — 发起 API 请求...');
-    toast('[3/5] 发起 API 请求中...');
-    const payload = await api(`/api/assignments/${encodeURIComponent(assignmentId)}/brief`, { method: 'POST' });
-    console.log('[Brief] Step 3 ✅ API 响应:', payload?.message);
-    toast('[3/5] ✅ API 响应: ' + (payload?.message || 'ok'));
+    toast('已触发 LLM 重新生成');
+    await api(`/api/assignments/${encodeURIComponent(assignmentId)}/brief`, { method: 'POST' });
 
-    toast('[4/5] 开始轮询（最多 20 秒）...');
     for (let i = 0; i < 5; i++) {
       await new Promise((r) => setTimeout(r, 4000));
-      console.log(`[Brief] Step 4 — 第 ${i + 1} 次轮询...`);
       const data = await api('/api/state');
       state.assignments = data.assignments || state.assignments;
       state.tasks = data.tasks || state.tasks;
       const a = (state.assignments || []).find((x) => x.id === assignmentId);
-      console.log('[Brief] 轮询结果 brief:', a?.brief ? '有' : '无');
-      if (a?.brief) {
+      if (a?.brief && (!waitForClaudeBrief || a?.brief?.generatedBy !== 'rule-fallback')) {
         renderTaskDetail();
-        toast('[5/5] ✅ 任务细则已生成！');
+        renderAssignments();
+        toast('任务细则已生成');
         return;
       }
     }
     renderTaskDetail();
-    toast('⚠️ [5/5] 生成超时，请手动刷新页面');
+    renderAssignments();
+    toast('生成超时，请稍后刷新页面');
   } catch (err) {
-    console.error('[Brief] ❌ 请求异常:', err);
     throw err;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '重新生成'; }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '重新 LLM 生成';
+    }
   }
 }
 
@@ -2344,7 +2359,7 @@ function renderAssignments() {
             ${a.date !== today ? `<span class="assign-carryover-badge">续 ${a.date}</span>` : ''}
             ${a.note ? `<small class="assign-note">${escapeHtml(a.note)}</small>` : ''}
             ${showAiSuggest ? `<div class="assign-ai-hint">🤖 AI 判断完成度 ${aiSug.progress}%：${escapeHtml(aiSug.reason)}</div>` : ''}
-            ${renderAssignmentBrief(withTaskAcceptanceBrief(a.brief, linkedTask))}
+            ${renderAssignmentBrief(withTaskAcceptanceBrief(a.brief, linkedTask), a.id)}
             <div class="assign-actions">
               ${showDoneBtn && a.status !== '已完成' && !showAiSuggest ? `<button class="assign-done-btn" data-assign-id="${escapeHtml(a.id)}" title="标记完成">✓</button>` : ''}
               ${showAiSuggest ? `<button class="assign-ai-done-btn" data-assign-id="${escapeHtml(a.id)}" title="确认 AI 建议：标记完成">✓ 确认完成</button>` : ''}
@@ -2391,6 +2406,12 @@ function renderAssignments() {
       });
       summaryEl.querySelectorAll('.assign-cancel-btn').forEach((btn) => {
         btn.addEventListener('click', () => cancelAssignment(btn.dataset.assignId).catch((e) => toast(e.message)));
+      });
+      summaryEl.querySelectorAll('[data-action="brief-retry"]').forEach((btn) => {
+        btn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          regenerateBrief(btn.dataset.assignmentId).catch((e) => toast(e.message));
+        });
       });
       summaryEl.querySelectorAll('.assign-task-link').forEach((btn) => {
         btn.addEventListener('click', () => openTaskDetail(btn.dataset.taskId));
@@ -4089,17 +4110,6 @@ function bindEvents() {
   document.querySelectorAll('[data-route]').forEach((button) => {
     button.addEventListener('click', () => { setRoute(button.dataset.route); hideHeaderSub(); });
   });
-
-
-  // 挂到 window，供动态渲染的 onclick 内联调用
-  window.__briefRetry = (assignmentId) => {
-    console.log('[Brief] Step 1 ✅ onclick 触发，assignmentId =', assignmentId);
-    toast('[1/5] 按钮点击已捕获');
-    regenerateBrief(assignmentId).catch((err) => {
-      console.error('[Brief] ❌ 异常:', err);
-      toast(`❌ ${err.message}`);
-    });
-  };
 
   // Mega-bar 导航：hover 一级导航项展开所有子分组（overlay，不推动页面）
   const topbarEl = document.querySelector('#topbar');

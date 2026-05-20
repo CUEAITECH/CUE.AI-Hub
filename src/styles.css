@@ -4432,6 +4432,12 @@ select:focus {
   color: var(--muted);
   line-height: 1.6;
 }
+.assignment-brief-actions,
+.task-brief-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
 .assignment-brief-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
