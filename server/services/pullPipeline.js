@@ -68,8 +68,21 @@ function normalizePullEntry(prData, projectId, linkedTaskIds = []) {
 /**
  * 对 PR 执行 Hub 自身的合规评估（调用 reviewer.js）
  * 返回 hubReview 对象或 null
+ *
+ * LLM_DRY_RUN=true 时不调真 API，返回 stub 结果（用于排查调用频次问题，不烧钱）
  */
 async function buildHubReview(prDetail, linkedTaskIds, store) {
+  if (process.env.LLM_DRY_RUN === 'true') {
+    trace('llm-dryrun-stub', { prNumber: prDetail.number });
+    return {
+      level: 'Pass',
+      compliance: null,
+      issues: [],
+      createdAt: new Date().toISOString(),
+      dryRun: true
+    };
+  }
+
   const tasks = store.tasks || [];
   const linkedTask = linkedTaskIds.length
     ? tasks.find((t) => t.id === linkedTaskIds[0])
@@ -107,8 +120,12 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
   const pullId = `pull_${prDetail.number}_${projectId}`;
   const existing = (store.pulls || []).find((p) => p.id === pullId);
 
+  // LLM_DRY_RUN=true：绕过缓存，强制让每个 PR 进 buildHubReview 路径
+  // 这样能完整复现"原始触发次数"（buildHubReview 内部会走 stub 不烧钱）
+  const dryRun = process.env.LLM_DRY_RUN === 'true';
+
   // 跳过 LLM：已有 review 且 PR 状态/更新时间未变
-  const unchanged = existing?.hubReview &&
+  const unchanged = !dryRun && existing?.hubReview &&
     existing.state === prDetail.state &&
     existing.updatedAt >= (prDetail.updatedAt || '');
   if (unchanged) {
@@ -117,7 +134,7 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
     trace('llm-call', {
       prNumber: prDetail.number,
       projectId,
-      reason: existing ? 'pr-changed' : 'new-pr',
+      reason: dryRun ? 'dry-run' : (existing ? 'pr-changed' : 'new-pr'),
       existingState: existing?.state,
       newState: prDetail.state
     });
