@@ -12,8 +12,7 @@ on:
 
 jobs:
   pr_agent_job:
-    # Phase 2 时把 'false' 改为 true
-    if: ${{ false }}
+    if: ${{ true }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -23,7 +22,7 @@ jobs:
       - name: PR-Agent Review
         uses: Codium-ai/pr-agent@main
         env:
-          OPENAI_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_API_BASE: https://api.anthropic.com/v1
           CONFIG.AI_PROVIDER: anthropic
           github_action_config.auto_review: "true"
@@ -38,7 +37,7 @@ jobs:
             echo "No PR number found, skipping Hub notification"
             exit 0
           fi
-          curl -sf -X POST "${{ vars.HUB_URL }}/api/webhooks/pr-agent" \
+          curl -sf -X POST "${{ secrets.CUE_HUB_URL }}/api/webhooks/pr-agent" \
             -H "Content-Type: application/json" \
             -H "X-CUE-API-Key: ${{ secrets.CUE_API_KEY }}" \
             -d "{\"event\":\"pr_agent_review\",\"repo\":\"${{ github.repository }}\",\"pr_number\":${PR_NUMBER},\"run_id\":\"${{ github.run_id }}\"}" \
