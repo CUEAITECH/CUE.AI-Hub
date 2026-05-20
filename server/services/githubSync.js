@@ -28,25 +28,32 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
     && !existingReviewIds.has(`review_${activity.sha}`)
     && String(activity.title || '').trim().length > 0
   ));
+  // 先把 activity 与任务绑定，让 reviewer 拿到验收标准
+  const tasksForBinding = beforeStore.tasks || [];
   const commitReviews = await Promise.all(
-    reviewCandidates.map(async (activity) => ({
-      id: `review_${activity.sha}`,
-      projectId: project.id,
-      activityId: activity.id,
-      sha: activity.sha,
-      shortSha: activity.shortSha,
-      commitUrl: activity.url,
-      actor: activity.actor,
-      files: activity.files || [],
-      humanDecision: null,
-      ...await reviewChange({
-        repo: activity.repo,
-        title: activity.title,
-        owner: activity.owner,
-        diff: activity.diff || activity.files.join('\n'),
-        files: activity.files
-      })
-    }))
+    reviewCandidates.map(async (activity) => {
+      const bound = bindActivityToExplicitRefs(activity, beforeStore);
+      const linkedTask = bound.taskId ? tasksForBinding.find((t) => t.id === bound.taskId) : null;
+      return {
+        id: `review_${activity.sha}`,
+        projectId: project.id,
+        activityId: activity.id,
+        sha: activity.sha,
+        shortSha: activity.shortSha,
+        commitUrl: activity.url,
+        actor: activity.actor,
+        files: activity.files || [],
+        humanDecision: null,
+        ...await reviewChange({
+          repo: activity.repo,
+          title: activity.title,
+          owner: activity.owner,
+          diff: activity.diff || activity.files.join('\n'),
+          files: activity.files,
+          task: linkedTask || null
+        })
+      };
+    })
   );
   const lightweightActivities = scan.activities.map(({ diff, ...activity }) => activity);
   let addedActivityCount = 0;

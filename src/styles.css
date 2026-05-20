@@ -3937,6 +3937,58 @@ select:focus {
   gap: 14px;
 }
 
+/* 任务验收对照（PR-Agent 风格） */
+.task-compliance-card .compliance-summary {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0 12px;
+  flex-wrap: wrap;
+}
+.task-compliance-card .compliance-summary b {
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+.task-compliance-card .compliance-done { color: #0f7a55; background: #e7f5ee !important; }
+.task-compliance-card .compliance-not-done { color: #b42318; background: #fde8e6 !important; }
+.task-compliance-card .compliance-human-check { color: #9a6400; background: #fdf3d9 !important; }
+.compliance-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.compliance-list li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.compliance-list li i { font-style: normal; flex-shrink: 0; }
+.compliance-list.done li { color: #0f7a55; }
+.compliance-list.not-done li { color: #b42318; }
+.compliance-list.human-check li { color: #9a6400; }
+.compliance-meta { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+.compliance-empty { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+
+.review-compliance-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--muted);
+  margin-top: 4px;
+}
+
 /* 健康度详情 Modal */
 .health-card { cursor: pointer; }
 .health-card:hover { opacity: 0.85; }

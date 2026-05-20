@@ -3,7 +3,7 @@ import { loadStore, saveStore } from '../store.js';
 import { callClaude } from './claude.js';
 import { scanRisks } from './riskEngine.js';
 import { isWeComAvailable, sendWeComMarkdown, buildPreMeetingWeComMsg } from './wecom.js';
-import { runApiQA } from './apiQA.js';
+import { aggregateTaskCompliance } from './complianceAggregator.js';
 
 const timezone = 'Asia/Shanghai';
 
@@ -315,6 +315,7 @@ export function buildEveningReport(store, dateText = todayText(), endAt = new Da
 }
 
 export function applyEveningReportProgress(store, eveningReport) {
+  const reviews = store.reviews || [];
   const nextTasks = (store.tasks || []).map((task) => {
     const row = (eveningReport.reconciliation || []).find((item) => item.taskId === task.id);
     if (!row) return task;
@@ -327,27 +328,22 @@ export function applyEveningReportProgress(store, eveningReport) {
         updatedAt: eveningReport.generatedAt
       };
     }
+    // 从 review compliance 聚合该任务的最新完成度
+    const agg = aggregateTaskCompliance(task.id, reviews);
     if (row.commitCount > 0) {
-      const qa = row.qaResult;
-      if (!qa) {
+      if (!agg) {
         return {
           ...task,
-          signal: `晚会对账：QA 未运行（无验收标准或未参与本轮评估），进度待人工确认`,
+          signal: '晚会对账：有 commit 支撑但缺少 compliance 数据（任务可能没有验收标准），进度待人工确认',
           updatedAt: eveningReport.generatedAt
         };
       }
-      if (qa.error) {
-        return {
-          ...task,
-          signal: `晚会对账：QA 评估失败（${qa.error}），进度待人工确认`,
-          updatedAt: eveningReport.generatedAt
-        };
-      }
+      const summary = `✅${agg.doneCount} ❌${agg.notDone.length} ⚠️${agg.needsHumanCheck.length}`;
       return {
         ...task,
         status: task.status === '待确认' ? '进行中' : task.status,
-        progress: Math.max(Number(task.progress) || 0, qa.suggestedProgress),
-        signal: `晚会对账：AI 评估进度 ${qa.suggestedProgress}%（${qa.reason}）`,
+        progress: agg.progress,
+        signal: `晚会对账：验收对照 ${summary}，进度 ${agg.progress}%`,
         updatedAt: eveningReport.generatedAt
       };
     }
@@ -410,23 +406,8 @@ export async function generateEveningReport(date) {
   });
 
   const structuredReport = buildEveningReport(store, date, generatedAt);
-
-  // API QA：对有 commit 且有验收标准的任务评估实际完成度
-  const qaMap = await runApiQA({
-    reconciliationRows: structuredReport.reconciliation,
-    tasks: store.tasks || [],
-    commits: snapshotCommits,
-    reviews: dateReviews
-  }).catch((err) => {
-    console.error('[ApiQA] QA 评估失败，降级跳过:', err.message);
-    return {};
-  });
-  const enrichedReport = {
-    ...structuredReport,
-    reconciliation: structuredReport.reconciliation.map((row) =>
-      row.taskId in qaMap ? { ...row, qaResult: qaMap[row.taskId] } : row
-    )
-  };
+  // 不再调用独立的 QA：进度直接由 reviewer compliance 数据聚合得出（见 applyEveningReportProgress）
+  const enrichedReport = structuredReport;
 
   const commitLines = snapshotCommits.length
     ? snapshotCommits.map((c) => `- ${c.owner || c.actor || '未知'}: ${c.title} (${c.repo || ''})`).join('\n')

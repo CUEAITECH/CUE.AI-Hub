@@ -1737,17 +1737,23 @@ function renderReviews() {
     return;
   }
 
-  list.innerHTML = state.reviews.map((review) => `
+  list.innerHTML = state.reviews.map((review) => {
+    const c = review.compliance;
+    const complianceBadge = c
+      ? `<span class="review-compliance-badge" title="${escapeHtml(c.taskTitle || '')}">验收 ✅${(c.done||[]).length} ❌${(c.notDone||[]).length} ⚠️${(c.needsHumanCheck||[]).length}</span>`
+      : '';
+    return `
     <div class="review-item review-${escapeHtml(String(review.level).toLowerCase())}">
       <div>
         <strong>${escapeHtml(review.title)}</strong>
         <span>${escapeHtml(review.repo)} · ${escapeHtml(review.owner)} · ${escapeHtml((review.findings || []).join('；'))}</span>
+        ${complianceBadge}
         ${review.suggestion ? `<p class="review-suggestion">${escapeHtml(review.suggestion)}</p>` : ''}
       </div>
       <b>${Number(review.score) || 0}</b>
       <em>${escapeHtml(getReviewLevelLabel(review.level))}</em>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 let _selectedReviewId = null;
@@ -2194,6 +2200,56 @@ function renderBriefBlock(brief, hasAssignment, assignmentDone = false, assignme
   `;
 }
 
+// 客户端聚合：取该任务最新一条带 compliance 的 review
+function aggregateTaskComplianceClient(taskId) {
+  if (!taskId) return null;
+  const relevant = (state.reviews || [])
+    .filter((r) => r.compliance?.taskId === taskId)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  if (!relevant.length) return null;
+  const c = relevant[0].compliance;
+  const done = c.done || [];
+  const notDone = c.notDone || [];
+  const needsHumanCheck = c.needsHumanCheck || [];
+  const total = done.length + notDone.length + needsHumanCheck.length;
+  return {
+    reviewId: relevant[0].id,
+    reviewedAt: relevant[0].createdAt,
+    done, notDone, needsHumanCheck,
+    total,
+    progress: total > 0 ? Math.round((done.length / total) * 100) : 0
+  };
+}
+
+function renderComplianceCard(task) {
+  const agg = aggregateTaskComplianceClient(task.id);
+  if (!agg) {
+    if (!task.acceptance?.trim()) return '';
+    return `<article class="task-detail-card task-compliance-card">
+      <span>验收对照</span>
+      <p class="compliance-empty">尚无 AI 验收数据 — 等待下一次 commit 触发 review。</p>
+    </article>`;
+  }
+  const renderList = (items, klass, icon) => items.length
+    ? `<ul class="compliance-list ${klass}">${items.map((t) => `<li><i>${icon}</i><span>${escapeHtml(t)}</span></li>`).join('')}</ul>`
+    : '';
+  const reviewedAt = agg.reviewedAt
+    ? new Date(agg.reviewedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+    : '';
+  return `<article class="task-detail-card task-compliance-card">
+    <span>验收对照 · ${agg.progress}% · 更新于 ${escapeHtml(reviewedAt)}</span>
+    <div class="compliance-summary">
+      <b class="compliance-done">✅ 已满足 ${agg.done.length}</b>
+      <b class="compliance-not-done">❌ 未满足 ${agg.notDone.length}</b>
+      <b class="compliance-human-check">⚠️ 需人工验证 ${agg.needsHumanCheck.length}</b>
+    </div>
+    ${renderList(agg.done, 'done', '✅')}
+    ${renderList(agg.notDone, 'not-done', '❌')}
+    ${renderList(agg.needsHumanCheck, 'human-check', '⚠️')}
+    <p class="compliance-meta">数据来源：最新 review 的 compliance 快照。每条 commit 入仓时自动重算。</p>
+  </article>`;
+}
+
 function renderTaskDetail() {
   const title = document.querySelector('#taskDetailTitle');
   const subtitle = document.querySelector('#taskDetailSubtitle');
@@ -2249,6 +2305,8 @@ function renderTaskDetail() {
             : '<span class="task-done-mark">任务已完成</span>'}
       </div>
     </article>
+
+    ${renderComplianceCard(task)}
 
     <article class="task-detail-card task-detail-main">
       <span>结构化任务规则</span>

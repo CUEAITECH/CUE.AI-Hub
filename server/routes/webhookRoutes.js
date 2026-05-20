@@ -4,6 +4,7 @@ const inFlightPlanAdjust = new Set();
 
 export function createWebhookRoutes({
   createId,
+  loadStore,
   updateStore,
   readBody,
   sendJson,
@@ -38,8 +39,15 @@ export function createWebhookRoutes({
     const activities = parseGitHubEvent(eventName, json);
     const reviews = [];
 
+    const currentStore = loadStore ? await loadStore() : null;
     for (const activity of activities) {
       if (activity.type === 'pull_request') {
+        const bound = bindActivityToExplicitRefs && currentStore
+          ? bindActivityToExplicitRefs(activity, currentStore)
+          : activity;
+        const linkedTask = bound.taskId && currentStore
+          ? (currentStore.tasks || []).find((t) => t.id === bound.taskId)
+          : null;
         reviews.push({
           id: createId('review'),
           ...await reviewChange({
@@ -47,7 +55,8 @@ export function createWebhookRoutes({
             title: activity.title,
             owner: activity.actor,
             diff: `${activity.action || ''} ${activity.branch || ''}`,
-            files: activity.files
+            files: activity.files,
+            task: linkedTask || null
           })
         });
       }
