@@ -95,6 +95,22 @@ export function scanRisks(store) {
     }
   }
 
+  // PR 超 48h 未合并告警
+  const now48hAgo = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  for (const pull of store.pulls || []) {
+    if (pull.state !== 'open') continue;
+    if ((pull.createdAt || '') < now48hAgo) {
+      alerts.push({
+        id: `alert_pr_stuck_${pull.id}`,
+        severity: 'P2',
+        target: pull.author || '未知',
+        title: `PR #${pull.number} 超 48h 未合并`,
+        detail: `「${pull.title || ''}」开了超过 48 小时仍未 merge 或关闭。`,
+        source: pull.id
+      });
+    }
+  }
+
   const today = dateText();
   const yesterday = addDays(today, -1);
   const commitsTodayByOwner = (store.activities || [])
@@ -170,12 +186,24 @@ export function buildMetrics(store, alerts = []) {
   const highRiskTasks = (store.tasks || []).filter((t) => t.risk === '高').length;
   const taskScore = Math.round((1 - highRiskTasks / totalTasks) * 100);
 
-  // DORA 维度三：Change Failure Rate → 近 30 天未处理 Block 占比
+  // DORA 维度三：Change Failure Rate → PR 合规率（PR 流）+ commit Block 兜底
   const reviews30d = (store.reviews || []).filter((r) => (r.createdAt || '') >= thirtyDaysAgo);
-  const unresolvedBlocks30d = reviews30d.filter((r) => r.level === 'Block' && !r.humanDecision).length;
-  const reviewScore = reviews30d.length
-    ? Math.round((1 - unresolvedBlocks30d / reviews30d.length) * 100)
-    : 100;
+  const mergedPulls30d = (store.pulls || []).filter((p) => p.mergedAt && p.mergedAt >= thirtyDaysAgo);
+  let reviewScore;
+  let unresolvedBlocks30d = 0;
+  if (mergedPulls30d.length > 0) {
+    // PR 有 hubReview：计算 Block/Escalate 比率
+    const blockPulls = mergedPulls30d.filter((p) =>
+      p.hubReview?.level === 'Block' || p.hubReview?.level === 'Escalate'
+    ).length;
+    reviewScore = Math.round((1 - blockPulls / mergedPulls30d.length) * 100);
+  } else {
+    // 无 PR 数据时回退到 commit review Block 比率
+    unresolvedBlocks30d = reviews30d.filter((r) => r.level === 'Block' && !r.humanDecision).length;
+    reviewScore = reviews30d.length
+      ? Math.round((1 - unresolvedBlocks30d / reviews30d.length) * 100)
+      : 100;
+  }
 
   // DORA 维度四：MTTR → 近 30 天已解决 Block 的平均响应时长（0h=100, ≥48h=0）
   const resolvedBlocks30d = reviews30d.filter((r) => r.level === 'Block' && r.humanDecision && r.updatedAt);
