@@ -3338,7 +3338,7 @@ function renderPullList() {
       ? `合并于 ${pr.mergedAt.slice(0, 10)}`
       : `更新于 ${(pr.updatedAt || '').slice(0, 10)}`;
     return `
-      <div class="pull-card" onclick="openPullDrawer(${JSON.stringify(pr.id)})">
+      <div class="pull-card" onclick="openPullDrawer('${escapeHtml(pr.id)}')">
         <div class="pull-card-header">
           <span class="pull-number">#${pr.number}</span>
           <span class="pull-title">${escapeHtml(pr.title)}</span>
