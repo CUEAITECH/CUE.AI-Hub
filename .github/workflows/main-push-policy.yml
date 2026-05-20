@@ -1,0 +1,23 @@
+name: Main Push Policy
+# 检测非 merge commit 的直推 main 行为
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  check_bypass:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Hub of push to main
+        run: |
+          SHA="${{ github.sha }}"
+          BRANCH="main"
+          AUTHOR="${{ github.event.pusher.name }}"
+          REPO="${{ github.repository }}"
+          # 通知 Hub 记录 bypass（Hub 自己判断是否是 hotfix）
+          curl -sf -X POST "${{ vars.HUB_URL }}/api/webhooks/bypass" \
+            -H "Content-Type: application/json" \
+            -H "X-CUE-API-Key: ${{ secrets.CUE_API_KEY }}" \
+            -d "{\"sha\":\"${SHA}\",\"branch\":\"${BRANCH}\",\"author\":\"${AUTHOR}\",\"repo\":\"${REPO}\"}" \
+            || echo "Hub bypass notification failed (non-fatal)"
