@@ -12,6 +12,7 @@ import { parsePrAgentReview } from './prAgentParser.js';
 import { reviewChange } from './reviewer.js';
 import { bindActivityToExplicitRefs } from './bindingEngine.js';
 import { createId } from '../store.js';
+import { trace } from './syncTrace.js';
 
 /**
  * 从 PR body 和 title 解析关联任务 ID
@@ -103,11 +104,26 @@ async function buildHubReview(prDetail, linkedTaskIds, store) {
  */
 export async function upsertPullIntoStore(prDetail, projectId, updateStore, store) {
   const linkedTaskIds = extractLinkedTaskIds(prDetail.title, prDetail.body, store);
-  const hubReview = await buildHubReview(prDetail, linkedTaskIds, store);
-  const prAgentReview = parsePrAgentReview(prDetail);
-
   const pullId = `pull_${prDetail.number}_${projectId}`;
   const existing = (store.pulls || []).find((p) => p.id === pullId);
+
+  // 跳过 LLM：已有 review 且 PR 状态/更新时间未变
+  const unchanged = existing?.hubReview &&
+    existing.state === prDetail.state &&
+    existing.updatedAt >= (prDetail.updatedAt || '');
+  if (unchanged) {
+    trace('llm-skip', { prNumber: prDetail.number, projectId, reason: 'unchanged' });
+  } else {
+    trace('llm-call', {
+      prNumber: prDetail.number,
+      projectId,
+      reason: existing ? 'pr-changed' : 'new-pr',
+      existingState: existing?.state,
+      newState: prDetail.state
+    });
+  }
+  const hubReview = unchanged ? existing.hubReview : await buildHubReview(prDetail, linkedTaskIds, store);
+  const prAgentReview = parsePrAgentReview(prDetail);
 
   const pullEntry = {
     ...(existing || normalizePullEntry(prDetail, projectId, linkedTaskIds)),
@@ -154,6 +170,8 @@ export async function syncProjectPRs(project, store, updateStore, options = {}) 
   const { owner, repo } = parseRepo(project);
   if (!owner || !repo) return { added: 0, updated: 0, pulls: [] };
 
+  trace('sync-start', { projectId: project.id, owner, repo, options });
+
   const sinceDays = parseInt((options.since || '14 days ago').replace(/\s*days?\s*ago/i, '')) || 14;
   const sinceDate = new Date(Date.now() - sinceDays * 24 * 3600 * 1000).toISOString();
 
@@ -182,6 +200,7 @@ export async function syncProjectPRs(project, store, updateStore, options = {}) 
     }
   }
 
+  trace('sync-end', { projectId: project.id, added, updated, total: results.length });
   return { added, updated, pulls: results };
 }
 
@@ -196,6 +215,7 @@ export async function syncProjectPRs(project, store, updateStore, options = {}) 
  */
 export async function handlePrAgentSink(payload, store, updateStore) {
   const { repo = '', pr_number } = payload;
+  trace('pr-agent-sink', { repo, pr_number, payload });
   if (!repo || !pr_number) return null;
 
   const [owner, repoName] = repo.split('/');
