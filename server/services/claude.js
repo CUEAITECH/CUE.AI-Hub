@@ -18,6 +18,20 @@ export function isAvailable() {
 }
 
 export async function callClaude(systemPrompt, userPrompt, options = {}) {
+  // LLM_DRY_RUN=true：拦截所有 LLM 调用，写入 trace 但不调真 API
+  // 用于排查"为什么会有几千次 LLM 调用"——能完整复现触发链路而不烧钱
+  if (process.env.LLM_DRY_RUN === 'true') {
+    try {
+      const { trace } = await import('./syncTrace.js');
+      trace('claude-call-dryrun', {
+        systemPromptPrefix: (systemPrompt || '').slice(0, 80),
+        userPromptPrefix: (userPrompt || '').slice(0, 80),
+        caller: new Error().stack.split('\n').slice(2, 7).map((s) => s.trim())
+      });
+    } catch {}
+    return null;
+  }
+
   const client = getClient();
   if (!client) return null;
   try {
