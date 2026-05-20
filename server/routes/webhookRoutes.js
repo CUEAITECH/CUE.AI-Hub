@@ -20,7 +20,8 @@ export function createWebhookRoutes({
   bindActivityToExplicitRefs,
   importDocsForProject,
   handlePrAgentSink,
-  cueApiKey
+  cueApiKey,
+  upsertPullFromWebhook
 }) {
   return async function webhookRoutes(req, res, url) {
     // PR-Agent sink（GitHub Actions 通知 Hub：PR-Agent 已完成 review）
@@ -103,6 +104,16 @@ export function createWebhookRoutes({
     const eventName = req.headers['x-github-event'] || 'unknown';
     const activities = parseGitHubEvent(eventName, json);
     const reviews = [];
+
+    // PR 事件：单 PR 实时 upsert（替代每 10 分钟批量轮询）
+    if (eventName === 'pull_request' && typeof upsertPullFromWebhook === 'function') {
+      const repoFull = json.repository?.full_name || '';
+      const prNumber = json.pull_request?.number;
+      if (repoFull && prNumber) {
+        upsertPullFromWebhook(repoFull, prNumber, json.action)
+          .catch((err) => console.error('[Webhook/PR]', err.message));
+      }
+    }
 
     const currentStore = loadStore ? await loadStore() : null;
     for (const activity of activities) {
