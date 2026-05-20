@@ -18,9 +18,74 @@ export function createWebhookRoutes({
   scanRisks,
   githubWebhookSecret,
   bindActivityToExplicitRefs,
-  importDocsForProject
+  importDocsForProject,
+  handlePrAgentSink,
+  cueApiKey
 }) {
   return async function webhookRoutes(req, res, url) {
+    // PR-Agent sink（GitHub Actions 通知 Hub：PR-Agent 已完成 review）
+    if (req.method === 'POST' && url.pathname === '/api/webhooks/pr-agent') {
+      // 验证 CUE_API_KEY（复用同一把 key）
+      const provided = req.headers['x-cue-api-key'];
+      if (cueApiKey && provided !== cueApiKey) {
+        sendError(res, 401, 'invalid api key');
+        return true;
+      }
+      const { json } = await readBody(req);
+      if (!json || !json.repo || !json.pr_number) {
+        sendError(res, 400, 'missing repo or pr_number');
+        return true;
+      }
+      const currentStore = await loadStore();
+      const pull = handlePrAgentSink
+        ? await handlePrAgentSink(json, currentStore, updateStore)
+        : null;
+      sendJson(res, 202, { received: true, pull: pull ? { id: pull.id, number: pull.number } : null });
+      return true;
+    }
+
+    // C+ bypass 记录（main-push-policy.yml 推送）
+    if (req.method === 'POST' && url.pathname === '/api/webhooks/bypass') {
+      const provided = req.headers['x-cue-api-key'];
+      if (cueApiKey && provided !== cueApiKey) {
+        sendError(res, 401, 'invalid api key');
+        return true;
+      }
+      const { json } = await readBody(req);
+      if (!json?.sha || !json?.branch) {
+        sendJson(res, 200, { received: true, skipped: true });
+        return true;
+      }
+      // 只有 hotfix/* 分支才记录
+      const isHotfix = String(json.branch || '').startsWith('hotfix/');
+      if (!isHotfix) {
+        sendJson(res, 200, { received: true, skipped: 'not-hotfix' });
+        return true;
+      }
+      const deadline = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+      await updateStore((draft) => {
+        if (!Array.isArray(draft.bypasses)) draft.bypasses = [];
+        const existing = draft.bypasses.find((b) => b.sha === json.sha);
+        if (!existing) {
+          draft.bypasses.unshift({
+            id: createId('bypass'),
+            sha: json.sha,
+            branch: json.branch,
+            author: json.author || '',
+            repo: json.repo || '',
+            deadline,
+            prLinked: false,
+            alertSent: false,
+            createdAt: new Date().toISOString()
+          });
+          draft.bypasses = draft.bypasses.slice(0, 100);
+        }
+        return draft;
+      });
+      sendJson(res, 202, { received: true, deadline });
+      return true;
+    }
+
     if (req.method !== 'POST' || url.pathname !== '/api/webhooks/github') return false;
 
     const { raw, json } = await readBody(req);
