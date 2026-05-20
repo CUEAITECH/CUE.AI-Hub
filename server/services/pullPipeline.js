@@ -1,0 +1,224 @@
+/**
+ * pullPipeline.js
+ * PR 入库流水线：fetchPR → resolve tasks → hubReview → persist
+ *
+ * 调用方：
+ *   - githubSync.js（定时同步）
+ *   - webhookRoutes.js（GitHub PR webhook / PR-Agent sink）
+ */
+
+import { fetchProjectPRs, fetchPRDetail, parseRepo } from './githubApi.js';
+import { parsePrAgentReview } from './prAgentParser.js';
+import { reviewChange } from './reviewer.js';
+import { bindActivityToExplicitRefs } from './bindingEngine.js';
+import { createId } from '../store.js';
+
+/**
+ * 从 PR body 和 title 解析关联任务 ID
+ * 支持格式：task_xxx、#issue号（转换为 task 引用需 store 辅助）
+ */
+function extractLinkedTaskIds(title = '', body = '', store = {}) {
+  const text = `${title}\n${body}`;
+  const tasks = store.tasks || [];
+
+  // 显式 task_xxx 引用
+  const explicitIds = [...text.matchAll(/\btask_[\w]+/gi)].map((m) => m[0]);
+  const validExplicit = explicitIds.filter((id) => tasks.some((t) => t.id === id));
+
+  // 用 bindingEngine 的逻辑（构造一个 commit-like activity）
+  if (validExplicit.length) return [...new Set(validExplicit)];
+
+  const fakeActivity = {
+    id: `pr_bind_${Date.now()}`,
+    type: 'commit',
+    title: title.slice(0, 120),
+    files: [],
+    repo: ''
+  };
+  const bound = bindActivityToExplicitRefs(fakeActivity, store);
+  return bound.taskId ? [bound.taskId] : [];
+}
+
+/**
+ * 将 GitHub PR 原始数据（来自 fetchProjectPRs 或 fetchPRDetail）
+ * 映射为 store.pulls 条目格式
+ */
+function normalizePullEntry(prData, projectId, linkedTaskIds = []) {
+  return {
+    id: `pull_${prData.number}_${projectId}`,
+    projectId,
+    number: prData.number,
+    title: prData.title || '',
+    body: prData.body || '',
+    state: prData.state || 'open',
+    author: prData.author || '',
+    headBranch: prData.headBranch || '',
+    baseBranch: prData.baseBranch || '',
+    linkedTaskIds,
+    prAgentReview: null,
+    hubReview: null,
+    commits: prData.commits || [],
+    mergedAt: prData.mergedAt || null,
+    createdAt: prData.createdAt || new Date().toISOString(),
+    updatedAt: prData.updatedAt || new Date().toISOString()
+  };
+}
+
+/**
+ * 对 PR 执行 Hub 自身的合规评估（调用 reviewer.js）
+ * 返回 hubReview 对象或 null
+ */
+async function buildHubReview(prDetail, linkedTaskIds, store) {
+  const tasks = store.tasks || [];
+  const linkedTask = linkedTaskIds.length
+    ? tasks.find((t) => t.id === linkedTaskIds[0])
+    : null;
+
+  try {
+    const result = await reviewChange({
+      repo: `${prDetail.number}`,
+      title: prDetail.title,
+      owner: prDetail.author,
+      diff: prDetail.body || '',
+      files: [],
+      task: linkedTask || null
+    });
+
+    return {
+      level: result.level || 'Pass',
+      compliance: linkedTask && result.compliance ? { taskId: linkedTask.id, ...result.compliance } : null,
+      issues: result.issues || [],
+      createdAt: new Date().toISOString()
+    };
+  } catch (err) {
+    console.error('[pullPipeline] hubReview failed:', err.message);
+    return null;
+  }
+}
+
+/**
+ * 同步单个 PR 进 store
+ * - 若已存在（按 pull id）则更新；否则新增
+ * - 返回 { isNew: boolean, pull: object }
+ */
+export async function upsertPullIntoStore(prDetail, projectId, updateStore, store) {
+  const linkedTaskIds = extractLinkedTaskIds(prDetail.title, prDetail.body, store);
+  const hubReview = await buildHubReview(prDetail, linkedTaskIds, store);
+  const prAgentReview = parsePrAgentReview(prDetail);
+
+  const pullId = `pull_${prDetail.number}_${projectId}`;
+  const existing = (store.pulls || []).find((p) => p.id === pullId);
+
+  const pullEntry = {
+    ...(existing || normalizePullEntry(prDetail, projectId, linkedTaskIds)),
+    title: prDetail.title,
+    body: prDetail.body,
+    state: prDetail.state,
+    author: prDetail.author,
+    headBranch: prDetail.headBranch,
+    baseBranch: prDetail.baseBranch,
+    linkedTaskIds,
+    hubReview,
+    prAgentReview: prAgentReview || existing?.prAgentReview || null,
+    mergedAt: prDetail.mergedAt || existing?.mergedAt || null,
+    updatedAt: new Date().toISOString()
+  };
+
+  let isNew = false;
+  await updateStore((draft) => {
+    const idx = (draft.pulls || []).findIndex((p) => p.id === pullId);
+    if (!Array.isArray(draft.pulls)) draft.pulls = [];
+    if (idx === -1) {
+      draft.pulls.unshift(pullEntry);
+      isNew = true;
+    } else {
+      draft.pulls[idx] = pullEntry;
+    }
+    draft.pulls = draft.pulls.slice(0, 500);
+    return draft;
+  });
+
+  return { isNew, pull: pullEntry };
+}
+
+/**
+ * 批量同步项目的近期 PR（供 githubSync.js 调用）
+ *
+ * @param {object} project - store.projects 条目
+ * @param {object} store   - 当前 store 快照
+ * @param {function} updateStore
+ * @param {object} options - { since: '7 days ago' }
+ * @returns {{ added: number, updated: number, pulls: object[] }}
+ */
+export async function syncProjectPRs(project, store, updateStore, options = {}) {
+  const { owner, repo } = parseRepo(project);
+  if (!owner || !repo) return { added: 0, updated: 0, pulls: [] };
+
+  const sinceDays = parseInt((options.since || '14 days ago').replace(/\s*days?\s*ago/i, '')) || 14;
+  const sinceDate = new Date(Date.now() - sinceDays * 24 * 3600 * 1000).toISOString();
+
+  let prs;
+  try {
+    prs = await fetchProjectPRs(owner, repo, { state: 'all', since: sinceDate, per_page: 30 });
+  } catch (err) {
+    console.error(`[pullPipeline] fetchProjectPRs failed for ${owner}/${repo}:`, err.message);
+    return { added: 0, updated: 0, pulls: [] };
+  }
+
+  let added = 0;
+  let updated = 0;
+  const results = [];
+
+  for (const pr of prs) {
+    try {
+      // 拉取完整详情（含 review comments，用于 prAgentParser）
+      const prDetail = await fetchPRDetail(owner, repo, pr.number);
+      const { isNew, pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store);
+      if (isNew) added++;
+      else updated++;
+      results.push(pull);
+    } catch (err) {
+      console.error(`[pullPipeline] failed on PR #${pr.number}:`, err.message);
+    }
+  }
+
+  return { added, updated, pulls: results };
+}
+
+/**
+ * 处理 PR-Agent sink 通知（来自 /api/webhooks/pr-agent）
+ * 拉取对应 PR 详情，更新 store
+ *
+ * @param {{ repo: string, pr_number: number }} payload
+ * @param {object} store
+ * @param {function} updateStore
+ * @returns {object|null} 更新后的 pull 条目
+ */
+export async function handlePrAgentSink(payload, store, updateStore) {
+  const { repo = '', pr_number } = payload;
+  if (!repo || !pr_number) return null;
+
+  const [owner, repoName] = repo.split('/');
+  if (!owner || !repoName) return null;
+
+  // 找对应的 project
+  const project = (store.projects || []).find((p) => {
+    const full = p.githubFullRepo || `${p.githubOwner}/${p.repository}`;
+    return full.toLowerCase() === repo.toLowerCase();
+  });
+
+  if (!project) {
+    console.warn(`[pullPipeline] PR-Agent sink: no project found for repo ${repo}`);
+    return null;
+  }
+
+  try {
+    const prDetail = await fetchPRDetail(owner, repoName, pr_number);
+    const { pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store);
+    console.log(`[pullPipeline] PR #${pr_number} upserted (project: ${project.id})`);
+    return pull;
+  } catch (err) {
+    console.error(`[pullPipeline] handlePrAgentSink failed:`, err.message);
+    return null;
+  }
+}
