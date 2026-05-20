@@ -3936,6 +3936,49 @@ select:focus {
   flex-direction: column;
   gap: 14px;
 }
+
+/* 健康度详情 Modal */
+.health-card { cursor: pointer; }
+.health-card:hover { opacity: 0.85; }
+.health-modal-body {
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.health-modal-total {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.health-modal-total strong {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+}
+.health-modal-total p { margin: 0; color: var(--muted); font-size: 13px; }
+.health-dim { display: flex; flex-direction: column; gap: 6px; }
+.health-dim-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.health-dim-head span { font-size: 13px; font-weight: 600; }
+.health-dim-head em { font-style: normal; font-size: 13px; color: var(--muted); }
+.health-dim-bar-wrap {
+  height: 8px;
+  background: var(--panel-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.health-dim-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.health-dim-detail { font-size: 12px; color: var(--muted); margin: 0; }
 .modal-form label {
   display: flex;
   flex-direction: column;

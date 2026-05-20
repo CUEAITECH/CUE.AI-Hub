@@ -59,7 +59,7 @@ export function scanRisks(store) {
       });
     }
 
-    if (idleHours !== null && idleHours >= 24 && task.progress < 100) {
+    if (idleHours !== null && idleHours >= 24 && task.status === '进行中' && task.progress > 0 && task.progress < 100) {
       alerts.push({
         id: `alert_idle_${task.id}`,
         severity: 'P2',
@@ -83,7 +83,7 @@ export function scanRisks(store) {
   }
 
   for (const review of store.reviews || []) {
-    if (review.level === 'Block') {
+    if (review.level === 'Block' && !review.humanDecision) {
       alerts.push({
         id: `alert_review_${review.id}`,
         severity: 'P1',
@@ -133,30 +133,55 @@ export function scanRisks(store) {
 }
 
 export function buildMetrics(store, alerts = []) {
-  // 用上海时区本地日期，避免 UTC 与 Asia/Shanghai 差一天
-  const todayShanghai = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
-  const commitsToday = (store.activities || []).filter((activity) => {
-    const dateStr = String(activity.createdAt || activity.date || '');
-    // ISO 字符串转上海日期
-    const activityDate = dateStr
-      ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date(dateStr))
-      : '';
-    return activity.type === 'commit' && activityDate === todayShanghai;
-  }).length;
-  const workingTreeFiles = (store.activities || []).filter((activity) => activity.type === 'working_tree').length;
-  const blockingReviews = (store.reviews || []).filter((review) => review.level === 'Block').length;
-  const highRiskTasks = (store.tasks || []).filter((task) => task.risk === '高').length;
+  const fmt = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(d);
+  const todayShanghai = fmt(new Date());
+  const sevenDaysAgo = fmt(new Date(Date.now() - 7 * 24 * 3600 * 1000));
+  const thirtyDaysAgo = fmt(new Date(Date.now() - 30 * 24 * 3600 * 1000));
+
   const memberCount = Math.max((store.members || []).length, 1);
-  const standupCount = new Set((store.standups || [])
-    .filter((standup) => standup.date === todayShanghai)
-    .map((standup) => standup.owner)).size;
-  const baseScore = Math.max(0, 100 - highRiskTasks * 12 - blockingReviews * 8 - workingTreeFiles * 2 - alerts.filter((alert) => alert.severity === 'P1').length * 6);
+
+  // 维度一：7 日 commit 活跃度（人均每天 1 条 = 满分）
+  const commits7d = (store.activities || []).filter((a) => {
+    const d = a.createdAt || a.date || '';
+    return a.type === 'commit' && fmt(new Date(d)) >= sevenDaysAgo;
+  }).length;
+  const commitsToday = (store.activities || []).filter((a) => {
+    const d = a.createdAt || a.date || '';
+    return a.type === 'commit' && fmt(new Date(d)) === todayShanghai;
+  }).length;
+  const activityScore = Math.min(100, Math.round(commits7d / (memberCount * 7) * 100));
+
+  // 维度二：任务健康（高风险任务占比）
+  const totalTasks = Math.max((store.tasks || []).length, 1);
+  const highRiskTasks = (store.tasks || []).filter((t) => t.risk === '高').length;
+  const taskScore = Math.round((1 - highRiskTasks / totalTasks) * 100);
+
+  // 维度三：Review 清洁度（近 30 天未处理 Block 占比）
+  const reviews30d = (store.reviews || []).filter((r) => (r.createdAt || '') >= thirtyDaysAgo);
+  const unresolvedBlocks30d = reviews30d.filter((r) => r.level === 'Block' && !r.humanDecision).length;
+  const reviewScore = reviews30d.length
+    ? Math.round((1 - unresolvedBlocks30d / reviews30d.length) * 100)
+    : 100;
+
+  // 维度四：7 日站会覆盖率（近 7 天有过站会记录的成员比率）
+  const standupOwners7d = new Set(
+    (store.standups || [])
+      .filter((s) => (s.date || '') >= sevenDaysAgo)
+      .map((s) => s.owner)
+  );
+  const standupScore = Math.round(Math.min(standupOwners7d.size, memberCount) / memberCount * 100);
+
+  const baseScore = Math.round(
+    activityScore * 0.30 +
+    taskScore     * 0.30 +
+    reviewScore   * 0.25 +
+    standupScore  * 0.15
+  );
   const adjustment = Math.max(-5, Math.min(5, Number(store.healthAnalysis?.adjustment) || 0));
   const score = Math.max(0, Math.min(100, baseScore + adjustment));
 
-  // 待处理：Block 或 Escalate 才需要人工介入，Pass/Warning 不计入
   const actionableReviews = (store.reviews || []).filter(
-    (review) => review.level === 'Block' || review.level === 'Escalate'
+    (r) => (r.level === 'Block' || r.level === 'Escalate') && !r.humanDecision
   ).length;
 
   return {
@@ -164,11 +189,16 @@ export function buildMetrics(store, alerts = []) {
     baseHealthScore: baseScore,
     healthAdjustment: adjustment,
     healthAnalysis: store.healthAnalysis || null,
+    healthComponents: {
+      activity:  { score: activityScore,  weight: 0.30, detail: `近7日 ${commits7d} 条commit` },
+      taskRisk:  { score: taskScore,       weight: 0.30, detail: `${highRiskTasks}/${totalTasks} 个高风险任务` },
+      reviewClean: { score: reviewScore,   weight: 0.25, detail: `近30日 ${unresolvedBlocks30d}/${reviews30d.length} 条Block未处理` },
+      standup:   { score: standupScore,    weight: 0.15, detail: `近7日 ${standupOwners7d.size}/${memberCount} 人有站会记录` }
+    },
     highRiskTasks,
     commitsToday,
-    workingTreeFiles,
     pendingReviews: actionableReviews,
-    standupResponseRate: `${Math.round((standupCount / memberCount) * 100)}%`,
-    urgentAlerts: alerts.filter((alert) => alert.severity === 'P1').length
+    standupResponseRate: `${standupScore}%`,
+    urgentAlerts: alerts.filter((a) => a.severity === 'P1').length
   };
 }
