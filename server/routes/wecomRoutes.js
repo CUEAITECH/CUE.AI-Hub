@@ -255,6 +255,14 @@ function pickStructuredAttendance(json = {}) {
   };
 }
 
+function logWeComToolHit(pathname, json = {}) {
+  const keys = Object.keys(json || {}).filter((key) => key !== 'token' && key !== 'apiKey');
+  const text = String(json?.text || json?.content || json?.message || '').slice(0, 80);
+  const owner = String(json?.owner || json?.name || json?.memberName || json?.userName || '').slice(0, 40);
+  const type = String(json?.type || json?.kind || json?.status || '').slice(0, 40);
+  console.info(`[WeComTool] ${pathname} keys=${keys.join(',') || '-'} text="${text}" owner="${owner}" type="${type}"`);
+}
+
 function looksLikeAttendanceIntent(text = '') {
   return /(正常完成|延迟完成|正常出席|延迟出席|提前请假|临时请假|缺勤)/.test(String(text || ''));
 }
@@ -469,6 +477,7 @@ export function createWeComRoutes({
 
     if (url.pathname === '/api/wecom/ranking' && (req.method === 'GET' || req.method === 'POST')) {
       const { json = {} } = req.method === 'POST' ? await readBody(req) : {};
+      logWeComToolHit(url.pathname, json);
       const store = await loadStore();
       const { projectId } = resolveProjectContext(store, url, json);
       const type = resolveRankingType(json?.type || url.searchParams.get('type') || 'daily') || 'daily';
@@ -483,6 +492,7 @@ export function createWeComRoutes({
 
     if (req.method === 'POST' && url.pathname === '/api/wecom/command') {
       const { json } = await readBody(req);
+      logWeComToolHit(url.pathname, json);
       const text = String(json?.text || json?.content || json?.message || '').trim();
       const attendance = await recordWeComAttendance(json, url);
       if (attendance) {
@@ -531,6 +541,7 @@ export function createWeComRoutes({
 
     if (req.method === 'POST' && url.pathname === '/api/wecom/attendance') {
       const { json } = await readBody(req);
+      logWeComToolHit(url.pathname, json);
       const attendance = await recordWeComAttendance(json, url);
       if (!attendance) {
         sendJson(res, 200, {
