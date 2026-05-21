@@ -739,6 +739,85 @@ export async function handleV2(req, res, url) {
     }
 
     // ════════════════════════════════════════════════════════════
+    // Outcome Ledger 端点（W9 持续学习）
+    // ════════════════════════════════════════════════════════════
+
+    // POST /v2/outcomes — 手动记录一条 outcome
+    if (method === 'POST' && path === '/v2/outcomes') {
+      const { recordOutcome } = await import('../services/outcomeLedger.js');
+      const schema = z.object({
+        actionType:    z.string(),
+        actionRefId:   z.string(),
+        outcomeSignal: z.string().min(1),
+        polarity:      z.union([z.literal(1), z.literal(-1), z.literal(0)]),
+        evidence:      z.record(z.any()).optional(),
+        observer:      z.enum(['auto-rule', 'human-label', 'agent-self']).default('human-label'),
+        lagHours:      z.number().int().nonnegative().optional(),
+      });
+      const body = schema.parse(await readBody(req));
+      const id = await recordOutcome({ tenantId, ...body });
+      sendV2Json(res, 201, { id, ok: true });
+      return true;
+    }
+
+    // GET /v2/outcomes — 查询 outcomes（过滤/分页）
+    if (method === 'GET' && path === '/v2/outcomes') {
+      const { queryOutcomes } = await import('../services/outcomeLedger.js');
+      const actionType = url.searchParams.get('action_type') || undefined;
+      const polarity   = url.searchParams.has('polarity') ? Number(url.searchParams.get('polarity')) : undefined;
+      const observer   = url.searchParams.get('observer') || undefined;
+      const since      = url.searchParams.get('since') || undefined;
+      const limit      = Math.min(Number(url.searchParams.get('limit') || 50), 200);
+      const offset     = Number(url.searchParams.get('offset') || 0);
+
+      const result = queryOutcomes({ tenantId, actionType, polarity, observer, since, limit, offset });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // GET /v2/outcomes/stats — 聚合统计
+    if (method === 'GET' && path === '/v2/outcomes/stats') {
+      const { computeStats } = await import('../services/outcomeLedger.js');
+      const since      = url.searchParams.get('since') || undefined;
+      const actionType = url.searchParams.get('action_type') || undefined;
+      const result = computeStats({ tenantId, since, actionType });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // POST /v2/outcomes/auto-label — 批量自动打标
+    if (method === 'POST' && path === '/v2/outcomes/auto-label') {
+      const { batchAutoLabel } = await import('../services/outcomeLedger.js');
+      const schema = z.object({
+        since: z.string().optional(), // ISO datetime
+      });
+      const body = schema.parse(await readBody(req));
+      const result = await batchAutoLabel({ tenantId, since: body.since });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // POST /v2/outcomes/label-task — 为单个任务打标
+    if (method === 'POST' && path === '/v2/outcomes/label-task') {
+      const { autoLabelTaskOutcome } = await import('../services/outcomeLedger.js');
+      const schema = z.object({ taskId: z.string() });
+      const body = schema.parse(await readBody(req));
+      const id = await autoLabelTaskOutcome({ tenantId, taskId: body.taskId });
+      sendV2Json(res, 200, { id, ok: true });
+      return true;
+    }
+
+    // POST /v2/outcomes/label-review — 为单个审阅打标
+    if (method === 'POST' && path === '/v2/outcomes/label-review') {
+      const { autoLabelReviewOutcome } = await import('../services/outcomeLedger.js');
+      const schema = z.object({ reviewId: z.string() });
+      const body = schema.parse(await readBody(req));
+      const id = await autoLabelReviewOutcome({ tenantId, reviewId: body.reviewId });
+      sendV2Json(res, 200, { id, ok: true });
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
     // SSE 实时事件流
     // ════════════════════════════════════════════════════════════
 
