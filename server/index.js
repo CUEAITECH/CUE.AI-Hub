@@ -22,6 +22,15 @@ import { dirname } from 'node:path';
     }
   } catch { /* .env 文件不存在时静默跳过 */ }
 }
+// ── V2 地基初始化（在任何路由注册之前）──────────────────────
+import { initDb } from './db/index.js';
+import './state/reducer.js';          // 注册 reducer 订阅者
+import { replayUnprocessed } from './events/bus.js';
+const { db: _v2db, kysely: _v2kysely } = initDb();
+await replayUnprocessed();            // 重启后回放未处理事件
+console.log('[V2] DB + EventBus + reducers initialized');
+// ── END V2 初始化 ───────────────────────────────────────────
+
 import { createId, loadStore, saveStore, updateStore } from './store.js';
 import { setCorsHeaders, sendJson, sendError, readBody, normalizeTask, isCompanyWorkday } from './utils.js';
 import {
