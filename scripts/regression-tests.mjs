@@ -1119,6 +1119,22 @@ await test('wecom command records attendance bot replies', async () => {
   assert.match(responsePayload.result, /已记录 林世棋 任务完成：正常/);
   assert.equal(store.attendanceRecords.length, 2);
   assert.equal(store.attendanceRecords[0].kind, 'task_completion');
+
+  requestJson = { text: '正常出席', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.match(responsePayload.result, /缺少成员真实姓名/);
+  assert.equal(store.attendanceRecords.length, 2);
+
+  requestJson = { owner: '张三', kind: 'meeting', status: 'normal', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.match(responsePayload.result, /占位值/);
+  assert.equal(store.attendanceRecords.length, 2);
+
+  requestJson = { owner: '林世棋', kind: 'meeting', status: 'delayed', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.match(responsePayload.result, /已记录 林世棋 晚会出席：延迟说明/);
+  assert.equal(store.attendanceRecords.length, 2);
+  assert.equal(store.attendanceRecords[0].status, 'delayed');
 });
 
 await test('wecom command handles deterministic attendance stats and menu', async () => {
@@ -1176,6 +1192,16 @@ await test('wecom command handles deterministic attendance stats and menu', asyn
   assert.equal(responsePayload.records.length, 3);
   assert.ok(responsePayload.missing.includes('田家铭(任务完成)'));
   assert.match(responsePayload.result, /未记录：\d+ 项/);
+
+  requestJson = { text: '@cue项目中枢 每日排行', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.equal(responsePayload.type, 'daily');
+  assert.match(responsePayload.result, /每日评分排行/);
+
+  requestJson = { text: '@cue项目中枢 周排行', projectId: 'cue_ai_classroom', date: '2026-05-19' };
+  await route({ method: 'POST' }, {}, new URL('http://localhost/api/wecom/command'));
+  assert.equal(responsePayload.type, 'weekly');
+  assert.match(responsePayload.result, /每周评分排行/);
 });
 
 await test('scheduler prompts use unified WeCom bot name', async () => {
