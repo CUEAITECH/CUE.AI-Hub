@@ -1017,6 +1017,52 @@ export async function handleV2(req, res, url) {
     }
 
     // ════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════
+    // 周度学习批处理（W13）
+    // ════════════════════════════════════════════════════════════
+
+    // POST /v2/learning/weekly-batch — 运行周报生成
+    if (method === 'POST' && path === '/v2/learning/weekly-batch') {
+      const { runWeeklyBatch } = await import('../services/weeklyLearning.js');
+      const schema = z.object({
+        weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        weekEnd:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      });
+      const body = schema.parse(await readBody(req));
+      const result = await runWeeklyBatch({ tenantId, ...body });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // GET /v2/learning/reports — 查询历史周报列表
+    if (method === 'GET' && path === '/v2/learning/reports') {
+      const { queryReports } = await import('../services/weeklyLearning.js');
+      const limit  = Math.min(Number(url.searchParams.get('limit') || 10), 52);
+      const offset = Number(url.searchParams.get('offset') || 0);
+      const result = queryReports({ tenantId, limit, offset });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // GET /v2/learning/reports/:id — 获取单条周报
+    if (method === 'GET' && path.match(/^\/v2\/learning\/reports\/\d+$/)) {
+      const { getReport } = await import('../services/weeklyLearning.js');
+      const reportId = Number(path.split('/').pop());
+      const result = getReport({ tenantId, reportId });
+      if (!result) { sendV2Error(res, 404, `report ${reportId} not found`); return true; }
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // GET /v2/learning/weeks — 工具：返回当前周和上周的日期范围
+    if (method === 'GET' && path === '/v2/learning/weeks') {
+      const { getISOWeekBounds, getWeekBoundsForDate } = await import('../services/weeklyLearning.js');
+      const lastWeek    = getISOWeekBounds();
+      const currentWeek = getWeekBoundsForDate(new Date().toISOString().slice(0, 10));
+      sendV2Json(res, 200, { lastWeek, currentWeek });
+      return true;
+    }
+
     // SSE 实时事件流
     // ════════════════════════════════════════════════════════════
 
