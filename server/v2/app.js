@@ -47,6 +47,20 @@ const StandupSchema = z.object({
   blockers: z.string().optional(),
 });
 
+const MemoryCreateSchema = z.object({
+  kind: z.enum(['convention', 'decision', 'gotcha', 'pattern', 'taboo', 'success-case', 'failure-case']),
+  body: z.string().min(10).max(2000),
+  projectId: z.string().optional(),
+  confidence: z.number().min(0).max(1).default(0.8),
+  evidenceRefs: z.string().optional(),  // 关联的 PR/任务 URL，逗号分隔
+});
+
+const MemoryUpdateSchema = z.object({
+  body: z.string().min(10).max(2000).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  supersededBy: z.number().int().optional(),  // 被哪条记录取代（软删除）
+});
+
 // ── 辅助函数 ─────────────────────────────────────────────────
 function sendV2Json(res, statusCode, data) {
   const body = JSON.stringify(data);
@@ -310,6 +324,158 @@ export async function handleV2(req, res, url) {
 
       console.log(`[v2] standup submitted by agent ${body.agentId} for ${body.date}`);
       sendV2Json(res, 200, { ok: true, agentId: body.agentId, date: body.date });
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // Memory 端点（project_memory CRUD）
+    // ════════════════════════════════════════════════════════════
+
+    // GET /v2/memory?projectId=&kind=&limit=
+    if (method === 'GET' && path === '/v2/memory') {
+      const db = getDb();
+      const projectId = url.searchParams.get('projectId') || null;
+      const kind      = url.searchParams.get('kind') || null;
+      const limit     = Math.min(Number(url.searchParams.get('limit') || 50), 200);
+
+      let query = db.prepare(`
+        SELECT * FROM project_memory
+        WHERE tenant_id = ?
+          AND (? IS NULL OR project_id = ?)
+          AND (? IS NULL OR kind = ?)
+          AND superseded_by IS NULL
+        ORDER BY confidence DESC, id DESC
+        LIMIT ?
+      `);
+      const rows = query.all(tenantId, projectId, projectId, kind, kind, limit);
+
+      sendV2Json(res, 200, rows.map(m => ({
+        id: m.id,
+        kind: m.kind,
+        body: m.body,
+        projectId: m.project_id,
+        confidence: m.confidence,
+        source: m.source,
+        evidenceRefs: m.evidence_refs,
+        validatedAt: m.validated_at,
+        createdAt: m.created_at,
+      })));
+      return true;
+    }
+
+    // POST /v2/memory — 手动添加 memory 条目
+    if (method === 'POST' && path === '/v2/memory') {
+      const rawBody = await readBody(req);
+      const body = MemoryCreateSchema.parse(rawBody);
+      const now = new Date().toISOString();
+
+      const id = await dbWrite('v2:memory.create', (db) => {
+        const result = db.prepare(`
+          INSERT INTO project_memory
+            (tenant_id, project_id, kind, body, confidence, source, evidence_refs, created_at)
+          VALUES (?, ?, ?, ?, ?, 'human-added', ?, ?)
+        `).run(
+          tenantId,
+          body.projectId || null,
+          body.kind,
+          body.body,
+          body.confidence,
+          body.evidenceRefs || null,
+          now
+        );
+        return result.lastInsertRowid;
+      });
+
+      console.log(`[v2] memory created: id=${id} kind=${body.kind} tenant=${tenantId}`);
+      sendV2Json(res, 201, { id, kind: body.kind, body: body.body, source: 'human-added', createdAt: now });
+      return true;
+    }
+
+    // PATCH /v2/memory/:id — 更新或标记废弃
+    const memoryMatch = path.match(/^\/v2\/memory\/(\d+)$/);
+    if (method === 'PATCH' && memoryMatch) {
+      const memId = Number(memoryMatch[1]);
+      const rawBody = await readBody(req);
+      const body = MemoryUpdateSchema.parse(rawBody);
+      const db = getDb();
+
+      const existing = db.prepare('SELECT * FROM project_memory WHERE id = ? AND tenant_id = ?').get(memId, tenantId);
+      if (!existing) { sendV2Error(res, 404, 'memory entry not found'); return true; }
+
+      const updates = [];
+      const params = [];
+      if (body.body !== undefined)        { updates.push('body = ?');          params.push(body.body); }
+      if (body.confidence !== undefined)  { updates.push('confidence = ?');    params.push(body.confidence); }
+      if (body.supersededBy !== undefined){ updates.push('superseded_by = ?'); params.push(body.supersededBy); }
+
+      if (updates.length === 0) { sendV2Error(res, 400, 'no fields to update'); return true; }
+
+      await dbWrite('v2:memory.update', (db) => {
+        db.prepare(`UPDATE project_memory SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ?`)
+          .run(...params, memId, tenantId);
+      });
+
+      const updated = db.prepare('SELECT * FROM project_memory WHERE id = ?').get(memId);
+      sendV2Json(res, 200, { id: updated.id, kind: updated.kind, body: updated.body, confidence: updated.confidence, supersededBy: updated.superseded_by });
+      return true;
+    }
+
+    // DELETE /v2/memory/:id — 标记废弃（软删除，设置 superseded_by = self）
+    if (method === 'DELETE' && memoryMatch) {
+      const memId = Number(memoryMatch[1]);
+      const db = getDb();
+      const existing = db.prepare('SELECT id FROM project_memory WHERE id = ? AND tenant_id = ?').get(memId, tenantId);
+      if (!existing) { sendV2Error(res, 404, 'memory entry not found'); return true; }
+
+      await dbWrite('v2:memory.delete', (db) => {
+        // 软删除：superseded_by 指向自身（规约：过滤 superseded_by IS NULL 时自动排除）
+        db.prepare('UPDATE project_memory SET superseded_by = ? WHERE id = ? AND tenant_id = ?')
+          .run(memId, memId, tenantId);
+      });
+
+      sendV2Json(res, 200, { ok: true, id: memId, superseded: true });
+      return true;
+    }
+
+    // GET /v2/memory/stats — 按 kind 统计
+    if (method === 'GET' && path === '/v2/memory/stats') {
+      const db = getDb();
+      const rows = db.prepare(`
+        SELECT kind, COUNT(*) as count, AVG(confidence) as avgConfidence
+        FROM project_memory
+        WHERE tenant_id = ? AND superseded_by IS NULL
+        GROUP BY kind
+        ORDER BY count DESC
+      `).all(tenantId);
+      sendV2Json(res, 200, { stats: rows, total: rows.reduce((s, r) => s + r.count, 0) });
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // PR 描述生成端点
+    // ════════════════════════════════════════════════════════════
+
+    // POST /v2/pulls/generate-description
+    if (method === 'POST' && path === '/v2/pulls/generate-description') {
+      const { generatePRDescription } = await import('../services/prPromptGenerator.js');
+      const rawBody = await readBody(req);
+      const schema = z.object({
+        taskId:      z.string(),
+        branchName:  z.string().optional(),
+        diffSummary: z.string().max(3000).optional(),
+        artifacts:   z.array(z.string()).optional(),
+      });
+      const body = schema.parse(rawBody);
+
+      const { body: description, source } = await generatePRDescription({
+        taskId: body.taskId,
+        tenantId,
+        branchName:  body.branchName,
+        diffSummary: body.diffSummary,
+        artifacts:   body.artifacts || [],
+      });
+
+      sendV2Json(res, 200, { description, source, taskId: body.taskId });
       return true;
     }
 

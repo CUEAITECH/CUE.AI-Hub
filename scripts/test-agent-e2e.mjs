@@ -60,16 +60,19 @@ console.log(B(`[mock] agent endpoint listening at ${MOCK_URL}`));
 // ── 初始化 ────────────────────────────────────────────────────
 initDb();
 const db = getDb();
-const tenantId = 'test_e2e';
+// 每次运行使用唯一 tenant_id，避免并发运行时的数据污染
+const tenantId = `test_e2e_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-// 清理旧测试数据（先删子表，再删父表，遵循 FK 顺序）
-db.prepare("DELETE FROM reviews WHERE tenant_id = ?").run(tenantId);
-db.prepare("DELETE FROM standups WHERE tenant_id = ?").run(tenantId);
-db.prepare("DELETE FROM project_memory WHERE tenant_id = ?").run(tenantId);
-db.prepare("DELETE FROM events WHERE tenant_id = ?").run(tenantId);
-db.prepare("DELETE FROM tasks WHERE tenant_id = ?").run(tenantId);
-db.prepare("DELETE FROM projects WHERE tenant_id = ?").run(tenantId);
-db.prepare("DELETE FROM actors WHERE tenant_id = ?").run(tenantId);
+// 旧静态 tenant 残留清理（新 tenant 本身是空的，这里清旧数据）
+for (const old of ['test_e2e']) {
+  db.prepare("DELETE FROM reviews WHERE tenant_id = ?").run(old);
+  db.prepare("DELETE FROM standups WHERE tenant_id = ?").run(old);
+  db.prepare("DELETE FROM project_memory WHERE tenant_id = ?").run(old);
+  db.prepare("DELETE FROM events WHERE tenant_id = ?").run(old);
+  db.prepare("DELETE FROM tasks WHERE tenant_id = ?").run(old);
+  db.prepare("DELETE FROM projects WHERE tenant_id = ?").run(old);
+  db.prepare("DELETE FROM actors WHERE tenant_id = ?").run(old);
+}
 
 const now = () => new Date().toISOString();
 
