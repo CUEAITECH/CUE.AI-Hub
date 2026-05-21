@@ -818,6 +818,94 @@ export async function handleV2(req, res, url) {
     }
 
     // ════════════════════════════════════════════════════════════
+    // Active Learning Queue 端点（W10）
+    // ════════════════════════════════════════════════════════════
+
+    // POST /v2/learning/enqueue — 手动推入队列
+    if (method === 'POST' && path === '/v2/learning/enqueue') {
+      const { enqueue } = await import('../services/activeLearning.js');
+      const schema = z.object({
+        actionType:   z.string(),
+        actionRefId:  z.string(),
+        reason:       z.string().min(1),
+        priority:     z.number().int().min(0).max(10).default(5),
+        metadata:     z.record(z.any()).optional(),
+      });
+      const body = schema.parse(await readBody(req));
+      const id = await enqueue({ tenantId, ...body });
+      sendV2Json(res, id !== null ? 201 : 200, { id, ok: true, enqueued: id !== null });
+      return true;
+    }
+
+    // GET /v2/learning/queue — 查询队列
+    if (method === 'GET' && path === '/v2/learning/queue') {
+      const { dequeue } = await import('../services/activeLearning.js');
+      const status     = (url.searchParams.get('status') || 'pending');
+      const actionType = url.searchParams.get('action_type') || undefined;
+      const limit      = Math.min(Number(url.searchParams.get('limit') || 20), 100);
+      const offset     = Number(url.searchParams.get('offset') || 0);
+      const result = dequeue({ tenantId, status, actionType, limit, offset });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // POST /v2/learning/label — 人工打标
+    if (method === 'POST' && path === '/v2/learning/label') {
+      const { label } = await import('../services/activeLearning.js');
+      const schema = z.object({
+        queueId:   z.number().int(),
+        polarity:  z.union([z.literal(1), z.literal(-1), z.literal(0)]),
+        signal:    z.string().min(1),
+        labeledBy: z.string().optional(),
+      });
+      const body = schema.parse(await readBody(req));
+      const result = await label({ tenantId, ...body });
+      sendV2Json(res, 200, { ...result, ok: true });
+      return true;
+    }
+
+    // POST /v2/learning/dismiss — 忽略队列条目
+    if (method === 'POST' && path === '/v2/learning/dismiss') {
+      const { dismiss } = await import('../services/activeLearning.js');
+      const schema = z.object({ queueId: z.number().int() });
+      const body = schema.parse(await readBody(req));
+      const ok = await dismiss({ tenantId, queueId: body.queueId });
+      sendV2Json(res, 200, { ok });
+      return true;
+    }
+
+    // GET /v2/learning/stats — 队列统计
+    if (method === 'GET' && path === '/v2/learning/stats') {
+      const { queueStats } = await import('../services/activeLearning.js');
+      const result = queueStats({ tenantId });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // POST /v2/learning/auto-enqueue — 规则自动入队
+    if (method === 'POST' && path === '/v2/learning/auto-enqueue') {
+      const { autoEnqueue } = await import('../services/activeLearning.js');
+      const schema = z.object({ since: z.string().optional() });
+      const body = schema.parse(await readBody(req));
+      const result = await autoEnqueue({ tenantId, since: body.since });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 可观测性健康度面板（W10）
+    // ════════════════════════════════════════════════════════════
+
+    // GET /v2/health — 系统健康度聚合
+    if (method === 'GET' && path === '/v2/health') {
+      const { computeHealth } = await import('../services/observability.js');
+      const since = url.searchParams.get('since') || undefined;
+      const result = computeHealth({ tenantId, since });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
     // SSE 实时事件流
     // ════════════════════════════════════════════════════════════
 
