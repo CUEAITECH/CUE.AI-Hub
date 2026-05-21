@@ -669,6 +669,76 @@ export async function handleV2(req, res, url) {
     }
 
     // ════════════════════════════════════════════════════════════
+    // 三端同步端点（W8 doc ↔ PR ↔ task）
+    // ════════════════════════════════════════════════════════════
+
+    // POST /v2/sync/webhook — 接收 GitHub PR Webhook
+    if (method === 'POST' && path === '/v2/sync/webhook') {
+      const { handlePRWebhook } = await import('../services/syncBroker.js');
+      const payload = await readBody(req);
+
+      // 解析 X-GitHub-Event header
+      const event = req.headers['x-github-event'] || payload.action || 'unknown';
+
+      const result = await handlePRWebhook({ tenantId, event, payload });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // POST /v2/sync/resync — 手动触发全量 PR-Task 链接重建
+    if (method === 'POST' && path === '/v2/sync/resync') {
+      const { resyncAllPRLinks } = await import('../services/syncBroker.js');
+      const schema = z.object({
+        projectId: z.string().optional(),
+      });
+      const body = schema.parse(await readBody(req));
+
+      const result = await resyncAllPRLinks({ tenantId, projectId: body.projectId });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // POST /v2/sync/writeback — 手动触发文档回写
+    if (method === 'POST' && path === '/v2/sync/writeback') {
+      const { writeProgressDoc } = await import('../services/syncBroker.js');
+      const schema = z.object({
+        projectId: z.string(),
+      });
+      const body = schema.parse(await readBody(req));
+
+      const result = await writeProgressDoc({ tenantId, projectId: body.projectId });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // GET /v2/sync/links — 查询 PR-Task 链接关系
+    if (method === 'GET' && path === '/v2/sync/links') {
+      const db = getDb();
+      const projectId = url.searchParams.get('project_id');
+      const pullId    = url.searchParams.get('pull_id');
+      const taskId    = url.searchParams.get('task_id');
+
+      let q = `
+        SELECT ptl.pull_id, ptl.task_id,
+               p.title as pr_title, p.state as pr_state, p.number as pr_number,
+               t.title as task_title, t.state as task_state
+        FROM pull_task_links ptl
+        JOIN pulls p ON ptl.pull_id = p.id AND p.tenant_id = ?
+        JOIN tasks t ON ptl.task_id = t.id AND t.tenant_id = ?
+        WHERE 1=1
+      `;
+      const params = [tenantId, tenantId];
+      if (pullId)    { q += ' AND ptl.pull_id = ?';    params.push(pullId); }
+      if (taskId)    { q += ' AND ptl.task_id = ?';    params.push(taskId); }
+      if (projectId) { q += ' AND p.project_id = ?';   params.push(projectId); }
+      q += ' ORDER BY p.number DESC LIMIT 100';
+
+      const links = db.prepare(q).all(...params);
+      sendV2Json(res, 200, { links, total: links.length });
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
     // SSE 实时事件流
     // ════════════════════════════════════════════════════════════
 
