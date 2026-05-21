@@ -961,6 +961,62 @@ export async function handleV2(req, res, url) {
     }
 
     // ════════════════════════════════════════════════════════════
+    // Runbook + 自动化告警（W12）
+    // ════════════════════════════════════════════════════════════
+
+    // GET /v2/runbooks — 列出内置 runbook 定义
+    if (method === 'GET' && path === '/v2/runbooks') {
+      const { BUILTIN_RUNBOOKS } = await import('../services/runbook.js');
+      sendV2Json(res, 200, { runbooks: BUILTIN_RUNBOOKS, total: BUILTIN_RUNBOOKS.length });
+      return true;
+    }
+
+    // GET /v2/alerts/evaluate — 实时评估告警（不写入 DB）
+    if (method === 'GET' && path === '/v2/alerts/evaluate') {
+      const { evaluateAlerts } = await import('../services/runbook.js');
+      const result = evaluateAlerts({ tenantId });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // POST /v2/alerts/cycle — 完整告警扫描 + 持久化
+    if (method === 'POST' && path === '/v2/alerts/cycle') {
+      const { runAlertCycle } = await import('../services/runbook.js');
+      const schema = z.object({
+        cooldownHours: z.number().int().min(0).max(168).default(4),
+      });
+      const body = schema.parse(await readBody(req));
+      const result = await runAlertCycle({ tenantId, cooldownHours: body.cooldownHours });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // GET /v2/alerts — 查询告警历史
+    if (method === 'GET' && path === '/v2/alerts') {
+      const { queryAlertHistory, ensureAlertsTable } = await import('../services/runbook.js');
+      ensureAlertsTable();
+      const severity     = url.searchParams.get('severity') || undefined;
+      const ackParam     = url.searchParams.get('acknowledged');
+      const acknowledged = ackParam !== null ? ackParam === 'true' : undefined;
+      const limit  = Math.min(Number(url.searchParams.get('limit') || 50), 200);
+      const offset = Number(url.searchParams.get('offset') || 0);
+      const result = queryAlertHistory({ tenantId, severity, acknowledged, limit, offset });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // POST /v2/alerts/:id/ack — 确认告警
+    if (method === 'POST' && path.match(/^\/v2\/alerts\/\d+\/ack$/)) {
+      const { acknowledgeAlert } = await import('../services/runbook.js');
+      const alertId = Number(path.split('/')[3]);
+      const schema = z.object({ acknowledgedBy: z.string().optional() });
+      const body = schema.parse(await readBody(req));
+      const ok = await acknowledgeAlert({ tenantId, alertId, acknowledgedBy: body.acknowledgedBy });
+      sendV2Json(res, 200, { ok });
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
     // SSE 实时事件流
     // ════════════════════════════════════════════════════════════
 

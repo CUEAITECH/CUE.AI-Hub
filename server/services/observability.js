@@ -139,7 +139,7 @@ export function computeHealth({ tenantId, since }) {
 
     const successRate = outcomes.total > 0
       ? Math.round(outcomes.positive / outcomes.total * 100)
-      : 50; // 无数据中性
+      : 100; // 无历史数据 → 新系统默认健康（不触发 critical 告警）
 
     const score = Math.max(0, Math.min(100,
       successRate * 0.6 +
