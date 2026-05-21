@@ -1106,6 +1106,76 @@ export async function handleV2(req, res, url) {
       return true;
     }
 
+    // ── W14: 渐进式自主权 ─────────────────────────────────────────────────────
+
+    // GET /v2/autonomy — 列出所有 AI Agent 自主级别
+    if (method === 'GET' && path === '/v2/autonomy') {
+      const { listAutonomyLevels } = await import('../services/autonomy.js');
+      const levels = listAutonomyLevels({ tenantId });
+      sendV2Json(res, { levels, count: levels.length });
+      return true;
+    }
+
+    // GET /v2/autonomy/:actorId — 获取单个 Agent 自主级别 + 历史
+    if (method === 'GET' && path.match(/^\/v2\/autonomy\/[^/]+$/)) {
+      const actorId = path.split('/')[3];
+      const { getAutonomyLevel, getAutonomyHistory, AUTONOMY_LEVELS } = await import('../services/autonomy.js');
+      const current = getAutonomyLevel({ tenantId, actorId });
+      const history = getAutonomyHistory({ tenantId, actorId, limit: 20 });
+      sendV2Json(res, { actorId, ...current, history, allLevels: AUTONOMY_LEVELS });
+      return true;
+    }
+
+    // POST /v2/autonomy/:actorId/adjust — 手动调整自主级别
+    if (method === 'POST' && path.match(/^\/v2\/autonomy\/[^/]+\/adjust$/)) {
+      const actorId = path.split('/')[3];
+      const body = await parseBody(req);
+      const { level, reason } = z.object({
+        level: z.number().int().min(1).max(5),
+        reason: z.string().optional(),
+      }).parse(body);
+      const { adjustAutonomy } = await import('../services/autonomy.js');
+      const result = await adjustAutonomy({
+        tenantId, actorId, newLevel: level,
+        reason: reason || '手动调整',
+        changedBy: body.changedBy || 'manual',
+        direction: 'manual',
+      });
+      sendV2Json(res, result, 200);
+      return true;
+    }
+
+    // GET /v2/autonomy/:actorId/evaluate — 评估升降级建议（不写入）
+    if (method === 'GET' && path.match(/^\/v2\/autonomy\/[^/]+\/evaluate$/)) {
+      const actorId = path.split('/')[3];
+      const { evaluateAutonomy } = await import('../services/autonomy.js');
+      const evaluation = evaluateAutonomy({ tenantId, actorId });
+      sendV2Json(res, evaluation);
+      return true;
+    }
+
+    // POST /v2/autonomy/auto-adjust — 自动扫描并调整所有 Agent
+    if (method === 'POST' && path === '/v2/autonomy/auto-adjust') {
+      const body = await parseBody(req);
+      const dryRun = body.dryRun === true;
+      const { autoAdjustAll } = await import('../services/autonomy.js');
+      const result = await autoAdjustAll({ tenantId, dryRun });
+      sendV2Json(res, result);
+      return true;
+    }
+
+    // GET /v2/autonomy/:actorId/can/:action — 权限检查
+    if (method === 'GET' && path.match(/^\/v2\/autonomy\/[^/]+\/can\/[^/]+$/)) {
+      const parts = path.split('/');
+      const actorId = parts[3];
+      const action = parts[5];
+      const { canPerform, getAutonomyLevel } = await import('../services/autonomy.js');
+      const allowed = canPerform({ tenantId, actorId, action });
+      const { level } = getAutonomyLevel({ tenantId, actorId });
+      sendV2Json(res, { actorId, action, allowed, level });
+      return true;
+    }
+
     // 未匹配的 /v2/* 路由
     sendV2Error(res, 404, `v2 route not found: ${method} ${path}`);
     return true;
