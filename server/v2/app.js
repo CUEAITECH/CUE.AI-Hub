@@ -906,6 +906,61 @@ export async function handleV2(req, res, url) {
     }
 
     // ════════════════════════════════════════════════════════════
+    // SPACE 指标 + 风险传播（W11）
+    // ════════════════════════════════════════════════════════════
+
+    // GET /v2/space — SPACE 健康指标
+    if (method === 'GET' && path === '/v2/space') {
+      const { computeSpaceMetrics } = await import('../services/spaceMetrics.js');
+      const projectId  = url.searchParams.get('project_id') || undefined;
+      const windowDays = Number(url.searchParams.get('window_days') || 14);
+      const result = computeSpaceMetrics({ tenantId, projectId, windowDays });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // GET /v2/space/actors — 按成员维度的 SPACE 贡献
+    if (method === 'GET' && path === '/v2/space/actors') {
+      const { computePerActorStats } = await import('../services/spaceMetrics.js');
+      const projectId  = url.searchParams.get('project_id') || undefined;
+      const windowDays = Number(url.searchParams.get('window_days') || 14);
+      const result = computePerActorStats({ tenantId, projectId, windowDays });
+      sendV2Json(res, 200, { actors: result, total: result.length });
+      return true;
+    }
+
+    // GET /v2/risks — 扫描项目风险
+    if (method === 'GET' && path === '/v2/risks') {
+      const { scanRisks } = await import('../services/riskPropagation.js');
+      const projectId = url.searchParams.get('project_id') || undefined;
+      const result = scanRisks({ tenantId, projectId });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // POST /v2/risks/propagate — 将高风险信号写回任务 signal 字段
+    if (method === 'POST' && path === '/v2/risks/propagate') {
+      const { propagateRiskSignals } = await import('../services/riskPropagation.js');
+      const schema = z.object({
+        projectId: z.string().optional(),
+        threshold: z.number().int().min(1).max(10).default(7),
+      });
+      const body = schema.parse(await readBody(req));
+      const result = await propagateRiskSignals({ tenantId, ...body });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // GET /v2/risks/task/:taskId — 单任务风险查询
+    if (method === 'GET' && path.startsWith('/v2/risks/task/')) {
+      const { getRiskForTask } = await import('../services/riskPropagation.js');
+      const taskId = path.slice('/v2/risks/task/'.length);
+      const result = getRiskForTask({ tenantId, taskId });
+      sendV2Json(res, 200, result);
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
     // SSE 实时事件流
     // ════════════════════════════════════════════════════════════
 
