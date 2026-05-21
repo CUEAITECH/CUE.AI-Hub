@@ -9,6 +9,7 @@ import { withTenant } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
 import { emit } from '../events/bus.js';
 import { broadcast } from '../adapters/index.js';
+import { buildAgentContext } from '../services/contextInjector.js';
 
 // ── zod schemas ───────────────────────────────────────────────
 const ActorCreateSchema = z.object({
@@ -36,6 +37,14 @@ const TaskDispatchSchema = z.object({
   taskId: z.string(),
   agentId: z.string(),
   contextOverride: z.record(z.any()).optional(),
+});
+
+const StandupSchema = z.object({
+  agentId: z.string(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  yesterday: z.string().min(1),
+  today: z.string().min(1),
+  blockers: z.string().optional(),
 });
 
 // ── 辅助函数 ─────────────────────────────────────────────────
@@ -244,21 +253,13 @@ export async function handleV2(req, res, url) {
         .get(body.taskId, tenantId);
       if (!task) { sendV2Error(res, 404, 'task not found'); return true; }
 
-      // 从 project_memory 注入上下文
-      const memory = db.prepare(`
-        SELECT * FROM project_memory
-        WHERE tenant_id = ? AND (project_id = ? OR project_id IS NULL)
-        ORDER BY confidence DESC LIMIT 20
-      `).all(tenantId, task.project_id);
-
-      const dispatchPayload = {
-        taskId: task.id, title: task.title, acceptance: task.acceptance, signal: task.signal,
-        hubCallbackUrl: `${process.env.HUB_URL || 'https://hub.cueai.top'}/v2/agents/callback`,
-        context: {
-          memory: memory.map(m => ({ kind: m.kind, body: m.body, confidence: m.confidence })),
-          ...body.contextOverride,
-        },
-      };
+      // ── Context injection（W4 完整版，替换旧的 inline memory 查询）──
+      const dispatchPayload = await buildAgentContext({
+        taskId: body.taskId,
+        tenantId,
+        agentId: body.agentId,
+        contextOverride: body.contextOverride || {},
+      });
 
       try {
         const resp = await fetch(agent.agent_endpoint, {
@@ -283,7 +284,32 @@ export async function handleV2(req, res, url) {
         tenantId, taskId: body.taskId, actorId: body.agentId, source: 'scheduler',
       }, { source: 'ui' });
 
-      sendV2Json(res, 200, { ok: true, agentId: body.agentId, taskId: body.taskId });
+      sendV2Json(res, 200, {
+        ok: true,
+        agentId: body.agentId,
+        taskId: body.taskId,
+        memoryStats: dispatchPayload.context?.memoryStats,
+      });
+      return true;
+    }
+
+    // POST /v2/agents/standup
+    // agent 与人类共用同一个 standup reducer（actor 抽象体现）
+    if (method === 'POST' && path === '/v2/agents/standup') {
+      const rawBody = await readBody(req);
+      const body = StandupSchema.parse(rawBody);
+
+      await emit('standup.submitted', {
+        tenantId,
+        actorId: body.agentId,
+        date: body.date,
+        yesterday: body.yesterday,
+        today: body.today,
+        blockers: body.blockers || null,
+      }, { source: 'agent' });
+
+      console.log(`[v2] standup submitted by agent ${body.agentId} for ${body.date}`);
+      sendV2Json(res, 200, { ok: true, agentId: body.agentId, date: body.date });
       return true;
     }
 
