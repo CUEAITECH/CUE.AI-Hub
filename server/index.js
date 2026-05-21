@@ -26,9 +26,12 @@ import { dirname } from 'node:path';
 import { initDb } from './db/index.js';
 import './state/reducer.js';          // 注册 reducer 订阅者
 import { replayUnprocessed } from './events/bus.js';
+import { initAdapters } from './adapters/index.js';
+import { handleV2 } from './v2/app.js';
 const { db: _v2db, kysely: _v2kysely } = initDb();
 await replayUnprocessed();            // 重启后回放未处理事件
-console.log('[V2] DB + EventBus + reducers initialized');
+initAdapters();                       // 通信平台适配器
+console.log('[V2] DB + EventBus + reducers + adapters initialized');
 // ── END V2 初始化 ───────────────────────────────────────────
 
 import { createId, loadStore, saveStore, updateStore } from './store.js';
@@ -375,6 +378,12 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   try {
+    // ── V2 路由：/v2/* 走 handleV2 ───────────────────────────────
+    if (url.pathname.startsWith('/v2/')) {
+      await handleV2(req, res, url);
+      return;
+    }
+
     if (url.pathname.startsWith('/api/')) {
       // 处理 CORS 预检请求
       if (req.method === 'OPTIONS') {
