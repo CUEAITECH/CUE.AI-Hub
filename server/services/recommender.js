@@ -12,6 +12,8 @@
 
 import { callClaude } from './claude.js';
 import { getDb } from '../db/index.js';
+import { getRankerWeights } from './weeklyLearning.js';
+import { searchSimilarMemory } from './vectorStore.js';
 
 // ── Phase 1: 特征提取 ────────────────────────────────────────
 
@@ -107,32 +109,41 @@ function computeSkillMatch(capabilities, taskText) {
 /**
  * 对 actor 特征打分（0-100）
  *
- * 权重设计：
- *   skillMatch  × 35%  — 能不能做
- *   load        × 25%  — 现在忙不忙（负数：越忙越低）
- *   successRate × 20%  — 做得好不好
- *   freshness   × 10%  — 最近有没有活跃
- *   autonomy    × 10%  — agent 能不能自主（人类固定 50）
+ * 基准权重（来自 weeklyLearning.ranker_weights，自动调整）：
+ *   skill_match     × 35  — 能不能做
+ *   load_balance    × 25  — 现在忙不忙（负数：越忙越低）
+ *   success_history × 20  — 做得好不好（outcome ledger 驱动）
+ *   recency         × 10  — 最近有没有活跃
+ *   diversity       × 10  — autonomy bonus
+ *
+ * 每个维度基准分乘以 ranker_weights 里的动态系数（默认 1.0，由周度学习调整）
  */
-function scoreActor(features, task) {
-  // skill match: 0-1 → 0-35
-  const skillScore = features.skillMatch * 35;
+function scoreActor(features, task, dynamicWeights = {}) {
+  // 读取动态权重（缺失时用 1.0）
+  const wSkill    = dynamicWeights.skill_match     ?? 1.0;
+  const wLoad     = dynamicWeights.load_balance    ?? 1.0;
+  const wSuccess  = dynamicWeights.success_history ?? 1.0;
+  const wRecency  = dynamicWeights.recency         ?? 1.0;
+  const wDiversity = dynamicWeights.diversity      ?? 1.0;
 
-  // load penalty: 0 task → 25, 5+ tasks → 0
-  const loadScore = Math.max(0, 25 - features.load * 5);
+  // skill match: 0-1 → 0-35，乘动态权重
+  const skillScore = features.skillMatch * 35 * wSkill;
 
-  // success rate: 0-1 → 0-20
-  const successScore = features.successRate * 20;
+  // load penalty: 0 task → 25, 5+ tasks → 0，乘动态权重
+  const loadScore = Math.max(0, 25 - features.load * 5) * wLoad;
 
-  // freshness: 活跃天数 0 → 10, 30+ → 0
-  const freshnessScore = Math.max(0, 10 - features.daysSinceActive / 3);
+  // success rate: 0-1 → 0-20，乘 outcome ledger 权重
+  const successScore = features.successRate * 20 * wSuccess;
 
-  // autonomy: agent autonomy_level 0-5 → 0-10; 人类固定 5
-  const autonomyScore = features.type === 'ai-agent'
+  // freshness: 活跃天数 0 → 10, 30+ → 0，乘动态权重
+  const freshnessScore = Math.max(0, 10 - features.daysSinceActive / 3) * wRecency;
+
+  // autonomy: agent autonomy_level 0-5 → 0-10; 人类固定 5，乘 diversity 权重
+  const autonomyScore = (features.type === 'ai-agent'
     ? (features.autonomyLevel / 5) * 10
-    : 5;
+    : 5) * wDiversity;
 
-  // 任务优先级加成：P0/P1 任务对 agent autonomy 要求更高
+  // 任务优先级加成：P0/P1 任务对 agent autonomy 要求更高（不受动态权重影响）
   const priorityBonus = (task.priority === 'P0' || task.priority === 'P1')
     ? (features.type === 'ai-agent' ? features.autonomyLevel * 1.5 : 3)
     : 0;
@@ -142,13 +153,14 @@ function scoreActor(features, task) {
   return {
     total: Math.min(100, Math.round(total)),
     breakdown: {
-      skill:    Math.round(skillScore),
-      load:     Math.round(loadScore),
-      success:  Math.round(successScore),
-      freshness: Math.round(freshnessScore),
-      autonomy: Math.round(autonomyScore),
+      skill:        Math.round(skillScore),
+      load:         Math.round(loadScore),
+      success:      Math.round(successScore),
+      freshness:    Math.round(freshnessScore),
+      autonomy:     Math.round(autonomyScore),
       priorityBonus: Math.round(priorityBonus),
     },
+    weightsUsed: { wSkill, wLoad, wSuccess, wRecency, wDiversity },
   };
 }
 
@@ -283,23 +295,44 @@ export async function recommendForTask({ taskId, tenantId, options = {} }) {
     return { taskId, recommendations: [], stats: { totalCandidates: 0 } };
   }
 
-  // ── 读取 project_memory（给 Phase 3 用）────────────────────
+  // ── 读取 project_memory（向量检索，给 Phase 3 用）──────────
   let memory = [];
   if (task.project_id) {
-    memory = db.prepare(`
-      SELECT kind, body FROM project_memory
-      WHERE tenant_id = ? AND (project_id = ? OR project_id IS NULL)
-        AND superseded_by IS NULL
-      ORDER BY confidence DESC LIMIT 10
-    `).all(tenantId, task.project_id);
+    const ragQuery = [task.title, task.priority].filter(Boolean).join(' ');
+    const vecResults = searchSimilarMemory(db, {
+      tenantId,
+      query:     ragQuery,
+      projectId: task.project_id,
+      limit:     10,
+    });
+    if (vecResults !== null) {
+      memory = vecResults;
+    } else {
+      // sqlite-vec 未就绪 → 回退 confidence 排序
+      memory = db.prepare(`
+        SELECT kind, body FROM project_memory
+        WHERE tenant_id = ? AND (project_id = ? OR project_id IS NULL)
+          AND superseded_by IS NULL
+        ORDER BY confidence DESC LIMIT 10
+      `).all(tenantId, task.project_id);
+    }
+  }
+
+  // ── 读取动态权重（ranker_weights 表，由周度学习自动调整）──
+  // 非阻塞：getRankerWeights 失败时退化到默认权重（全 1.0）
+  let dynamicWeights = {};
+  try {
+    dynamicWeights = getRankerWeights(tenantId);
+  } catch (err) {
+    console.warn('[recommender] getRankerWeights failed, using defaults:', err.message);
   }
 
   // ── Phase 1 + 2：特征提取 + 评分 ───────────────────────────
   const scored = actors
     .map(actor => {
       const features = extractActorFeatures(actor, task, tenantId);
-      const { total, breakdown } = scoreActor(features, task);
-      return { ...features, score: total, scoreBreakdown: breakdown };
+      const { total, breakdown, weightsUsed } = scoreActor(features, task, dynamicWeights);
+      return { ...features, score: total, scoreBreakdown: breakdown, weightsUsed };
     })
     .filter(c => c.score >= minScore)
     .sort((a, b) => b.score - a.score)

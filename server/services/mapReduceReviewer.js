@@ -14,6 +14,7 @@ import PQueue from 'p-queue';
 import { callClaude, parseJsonOutput } from './claude.js';
 import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
+import { runSemgrepOnDiff } from './semgrepFilter.js';
 
 const CONCURRENCY = 4;
 
@@ -231,16 +232,68 @@ function normalizeLevel(raw) {
 export async function mapReduceReview({ files, prTitle, acceptance, memory = [], tenantId, pullId, taskId }) {
   const startTime = Date.now();
 
-  // ── Map 阶段（并发，上限 CONCURRENCY） ──────────────────────
+  // ── Pre-Map 阶段：Semgrep 静态分析预过滤 ────────────────────
+  // 对已知漏洞模式做静态扫描（< 1s，比 LLM 便宜 100x）
+  // 已被 Semgrep 判定为 critical 的文件跳过 LLM，节省 token
+  let semgrepIssuesByFile = new Map(); // path → issue[]
+  let semgrepStats = { skipped: true, filesScanned: 0, rulesMatched: 0 };
+
+  try {
+    const semgrepResult = await runSemgrepOnDiff(files);
+    if (!semgrepResult.skipped && semgrepResult.issues.length > 0) {
+      for (const issue of semgrepResult.issues) {
+        if (!semgrepIssuesByFile.has(issue.file)) semgrepIssuesByFile.set(issue.file, []);
+        semgrepIssuesByFile.get(issue.file).push(issue);
+      }
+    }
+    semgrepStats = {
+      skipped:      semgrepResult.skipped ?? false,
+      filesScanned: semgrepResult.filesScanned ?? 0,
+      rulesMatched: semgrepResult.rulesMatched ?? 0,
+    };
+    if (!semgrepResult.skipped) {
+      console.log(`[mapReduceReviewer] Semgrep: ${semgrepStats.filesScanned} files scanned, ${semgrepStats.rulesMatched} findings`);
+    }
+  } catch (semErr) {
+    console.warn('[mapReduceReviewer] Semgrep pre-filter failed, proceeding without:', semErr.message);
+  }
+
+  // 文件分流：有 Semgrep critical → 直接用静态结果，跳过 LLM
+  const llmFiles    = [];  // 需要 LLM 审阅的文件
+  const semgrepOnly = [];  // Semgrep 已发现 critical，跳过 LLM
+
+  for (const fileDiff of files) {
+    const fileIssues = semgrepIssuesByFile.get(fileDiff.path) || [];
+    const hasCritical = fileIssues.some(i => i.severity === 'critical');
+    if (hasCritical) {
+      semgrepOnly.push({ fileDiff, issues: fileIssues });
+    } else {
+      llmFiles.push({ fileDiff, existingSemgrepIssues: fileIssues });
+    }
+  }
+
+  // ── Map 阶段（并发，上限 CONCURRENCY）— 仅 LLM 文件 ────────
   const queue = new PQueue({ concurrency: CONCURRENCY });
   const mapResults = await Promise.all(
-    files.map(fileDiff =>
-      queue.add(() => mapFile(fileDiff, memory))
+    llmFiles.map(({ fileDiff, existingSemgrepIssues }) =>
+      queue.add(async () => {
+        const llmIssues = await mapFile(fileDiff, memory);
+        // 合并非 critical Semgrep issue（去重：相同 file+header 不重复）
+        const merged = [...llmIssues];
+        for (const si of existingSemgrepIssues) {
+          const dup = merged.some(li => li.file === si.file && li.header === si.header);
+          if (!dup) merged.push(si);
+        }
+        return merged;
+      })
     )
   );
 
+  // 合并 Semgrep-only 文件的 issues
+  const semgrepOnlyIssues = semgrepOnly.flatMap(({ issues }) => issues);
+
   // 展平所有 issues
-  const allIssues = mapResults.flat();
+  const allIssues = [...mapResults.flat(), ...semgrepOnlyIssues];
 
   // ── Reduce 阶段 ──────────────────────────────────────────────
   const reduced = await reduceIssues({ allIssues, acceptance, prTitle, memory });
@@ -270,7 +323,12 @@ export async function mapReduceReview({ files, prTitle, acceptance, memory = [],
   });
 
   const elapsed = Date.now() - startTime;
-  console.log(`[mapReduceReviewer] PR ${pullId}: ${files.length} files, ${allIssues.length} issues → ${reduced.level} (${elapsed}ms)`);
+  const llmSkipped = semgrepOnly.length;
+  console.log(
+    `[mapReduceReviewer] PR ${pullId}: ${files.length} files ` +
+    `(${llmSkipped} semgrep-only, ${llmFiles.length} LLM), ` +
+    `${allIssues.length} issues → ${reduced.level} (${elapsed}ms)`
+  );
 
   return {
     level:      reduced.level,
@@ -280,12 +338,15 @@ export async function mapReduceReview({ files, prTitle, acceptance, memory = [],
     compliance: reduced.compliance,
     reviewId,
     stats: {
-      filesReviewed: files.length,
-      issuesFound:   allIssues.length,
-      critical:      allIssues.filter(i => i.severity === 'critical').length,
-      major:         allIssues.filter(i => i.severity === 'major').length,
-      minor:         allIssues.filter(i => i.severity === 'minor').length,
-      elapsedMs:     elapsed,
+      filesReviewed:     files.length,
+      llmFilesReviewed:  llmFiles.length,
+      semgrepOnlyFiles:  llmSkipped,
+      issuesFound:       allIssues.length,
+      critical:          allIssues.filter(i => i.severity === 'critical').length,
+      major:             allIssues.filter(i => i.severity === 'major').length,
+      minor:             allIssues.filter(i => i.severity === 'minor').length,
+      elapsedMs:         elapsed,
+      semgrep:           semgrepStats,
     },
   };
 }

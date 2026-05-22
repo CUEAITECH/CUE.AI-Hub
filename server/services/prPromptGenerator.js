@@ -14,6 +14,7 @@
 import { callClaude } from './claude.js';
 import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
+import { searchSimilarMemory } from './vectorStore.js';
 
 const PR_TEMPLATE = `## 变更说明
 
@@ -59,14 +60,25 @@ export async function generatePRDescription({ taskId, tenantId, branchName, diff
 
   if (!task) throw new Error(`task ${taskId} not found`);
 
-  // ── 2. 相关 memory（约定/决策，供 LLM 参考） ─────────────
-  const memory = db.prepare(`
-    SELECT kind, body FROM project_memory
-    WHERE tenant_id = ? AND (project_id = ? OR project_id IS NULL)
-      AND kind IN ('convention', 'decision', 'taboo')
-      AND superseded_by IS NULL
-    ORDER BY confidence DESC LIMIT 10
-  `).all(tenantId, task.project_id || '');
+  // ── 2. 相关 memory（向量检索约定/决策/taboo，供 LLM 参考）──
+  const ragQuery = [task.title, task.acceptance].filter(Boolean).join('\n');
+  let memory = searchSimilarMemory(db, {
+    tenantId,
+    query:     ragQuery,
+    projectId: task.project_id,
+    limit:     10,
+    kinds:     ['convention', 'decision', 'taboo'],
+  });
+  if (memory === null) {
+    // sqlite-vec 未就绪 → 回退 confidence 排序
+    memory = db.prepare(`
+      SELECT kind, body FROM project_memory
+      WHERE tenant_id = ? AND (project_id = ? OR project_id IS NULL)
+        AND kind IN ('convention', 'decision', 'taboo')
+        AND superseded_by IS NULL
+      ORDER BY confidence DESC LIMIT 10
+    `).all(tenantId, task.project_id || '');
+  }
 
   // ── 3. AC 解析（从 acceptance 字段提取条目） ─────────────
   const acItems = parseAcceptanceCriteria(task.acceptance || '');

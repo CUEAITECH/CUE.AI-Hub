@@ -463,6 +463,10 @@ export async function handleV2(req, res, url) {
         return result.lastInsertRowid;
       });
 
+      // 向量索引（sqlite-vec 就绪时嵌入写入，降级时静默跳过）
+      const { indexMemoryEntry } = await import('../services/vectorStore.js');
+      indexMemoryEntry(getDb(), { memoryId: Number(id), text: body.body });
+
       console.log(`[v2] memory created: id=${id} kind=${body.kind} tenant=${tenantId}`);
       sendV2Json(res, 201, { id, kind: body.kind, body: body.body, source: 'human-added', createdAt: now });
       return true;
@@ -491,6 +495,12 @@ export async function handleV2(req, res, url) {
         db.prepare(`UPDATE project_memory SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ?`)
           .run(...params, memId, tenantId);
       });
+
+      // 若 body 变更，重建向量索引
+      if (body.body !== undefined) {
+        const { indexMemoryEntry } = await import('../services/vectorStore.js');
+        indexMemoryEntry(getDb(), { memoryId: memId, text: body.body });
+      }
 
       const updated = db.prepare('SELECT * FROM project_memory WHERE id = ?').get(memId);
       sendV2Json(res, 200, { id: updated.id, kind: updated.kind, body: updated.body, confidence: updated.confidence, supersededBy: updated.superseded_by });
@@ -745,10 +755,41 @@ export async function handleV2(req, res, url) {
     // 三端同步端点（W8 doc ↔ PR ↔ task）
     // ════════════════════════════════════════════════════════════
 
-    // POST /v2/sync/webhook — 接收 GitHub PR Webhook
+    // POST /v2/sync/webhook — 接收 GitHub PR Webhook（@octokit/webhooks 验签）
     if (method === 'POST' && path === '/v2/sync/webhook') {
       const { handlePRWebhook } = await import('../services/syncBroker.js');
-      const payload = await readBody(req);
+      const { Webhooks } = await import('@octokit/webhooks');
+
+      // 读取原始 body（验签需要原始字节，不能先 JSON.parse）
+      const rawBody = await new Promise((resolve, reject) => {
+        const chunks = [];
+        req.on('data', c => chunks.push(c));
+        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        req.on('error', reject);
+      });
+
+      // 签名验证（配置了 GITHUB_WEBHOOK_SECRET 时强制验签）
+      const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const signature = req.headers['x-hub-signature-256'] || req.headers['x-hub-signature'] || '';
+        const wh = new Webhooks({ secret: webhookSecret });
+        const deliveryId = req.headers['x-github-delivery'] || `manual-${Date.now()}`;
+        const eventName  = req.headers['x-github-event'] || 'push';
+
+        try {
+          // verifyAndReceive：验签 + 事件分发（如无注册 handler 则只验签）
+          await wh.verifyAndReceive({ id: deliveryId, name: eventName, signature, payload: rawBody });
+        } catch (verifyErr) {
+          console.warn('[v2/sync/webhook] signature verification failed:', verifyErr.message);
+          sendV2Error(res, 401, 'GitHub webhook signature verification failed');
+          return true;
+        }
+      }
+
+      // 解析 payload
+      let payload;
+      try { payload = JSON.parse(rawBody); }
+      catch { sendV2Error(res, 400, 'invalid JSON payload'); return true; }
 
       // 解析 X-GitHub-Event header
       const event = req.headers['x-github-event'] || payload.action || 'unknown';
@@ -902,6 +943,7 @@ export async function handleV2(req, res, url) {
         actionRefId:  z.string(),
         reason:       z.string().min(1),
         priority:     z.number().int().min(0).max(10).default(5),
+        aiConfidence: z.number().min(0).max(1).default(0.5),  // 新增：AI 置信度
         metadata:     z.record(z.any()).optional(),
       });
       const body = schema.parse(await readBody(req));

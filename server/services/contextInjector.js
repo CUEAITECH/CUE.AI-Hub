@@ -9,6 +9,7 @@
 //   - 优先级：taboo > gotcha > decision > convention > pattern
 
 import { getDb } from '../db/index.js';
+import { searchSimilarMemory } from './vectorStore.js';
 
 const MAX_MEMORY_CHARS = 8000; // 单次注入的 project_memory 字符上限
 
@@ -40,19 +41,32 @@ export async function buildAgentContext({ taskId, tenantId, agentId, contextOver
   const contextWindowLimit = agent?.context_window || 200000;
   const memoryCharLimit = Math.min(MAX_MEMORY_CHARS, Math.floor(contextWindowLimit * 0.08));
 
-  // ── 3. Project memory（按优先级排序） ───────────────────────
+  // ── 3. Project memory（向量相似度检索，降级到置信度排序）────
   // 优先级：taboo(最高) > gotcha > decision > convention > pattern > success/failure
   const PRIORITY = { taboo: 0, gotcha: 1, decision: 2, convention: 3, pattern: 4, 'success-case': 5, 'failure-case': 6 };
-  const allMemory = db.prepare(`
-    SELECT * FROM project_memory
-    WHERE tenant_id = ? AND (project_id = ? OR project_id IS NULL)
-      AND superseded_by IS NULL
-    ORDER BY confidence DESC
-    LIMIT 100
-  `).all(tenantId, task.project_id || '');
 
-  // 按优先级排序，截断到字符限制
-  const sortedMemory = allMemory.sort((a, b) =>
+  // 向量检索 query = 任务标题 + AC（召回最相关的 memory）
+  const ragQuery = [task.title, task.acceptance].filter(Boolean).join('\n');
+  let allMemory = searchSimilarMemory(db, {
+    tenantId,
+    query:     ragQuery,
+    projectId: task.project_id,
+    limit:     100,
+  });
+
+  if (allMemory === null) {
+    // sqlite-vec 未就绪 → 回退到 confidence 排序
+    allMemory = db.prepare(`
+      SELECT * FROM project_memory
+      WHERE tenant_id = ? AND (project_id = ? OR project_id IS NULL)
+        AND superseded_by IS NULL
+      ORDER BY confidence DESC
+      LIMIT 100
+    `).all(tenantId, task.project_id || '');
+  }
+
+  // 在向量相似度基础上，再按种类优先级做二次排序（确保 taboo/gotcha 不被埋没）
+  const sortedMemory = [...allMemory].sort((a, b) =>
     (PRIORITY[a.kind] ?? 9) - (PRIORITY[b.kind] ?? 9)
   );
   let memoryChars = 0;

@@ -7,19 +7,20 @@
 //   - 高负载 actor（WIP > 5）
 //   - 取消任务导致的下游影响
 //
-// 传播规则：
-//   - 任务 A "blocks" 任务 B → A 的风险传播到 B（衰减 50%）
-//   - P0/P1 任务风险乘数 1.5x
-//   - 最大传播深度 3 层
+// 传播算法：Personalized PageRank（graphology + graphology-pagerank）
+//   - 依赖图构建：pull_task_links（同 PR 任务视为同层依赖）+ signal 引用（task_xxx）
+//   - 个性化种子：初始风险分作为 Personalized PageRank 的 nstart 权重
+//   - α=0.85（标准 damping factor，Haveliwala 2002）
 //
 // 风险存储：使用 task.signal 字段记录（已有），不新建表
 
 import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
+import Graph from 'graphology';
+import pagerank from 'graphology-pagerank';
 
-const MAX_PROPAGATION_DEPTH = 3;
-const PROPAGATION_DECAY = 0.5;    // 每层衰减 50%
 const PRIORITY_MULTIPLIER = { P0: 1.5, P1: 1.3, P2: 1.0, P3: 0.8 };
+const PAGERANK_ALPHA = 0.85;  // damping factor（Haveliwala 2002）
 
 /**
  * 扫描项目风险源，计算传播后的风险分布
@@ -112,39 +113,110 @@ export function scanRisks({ tenantId, projectId }) {
     }
   }
 
-  // ── 风险传播（BFS，最大深度 3）──────────────────────────
-  // 依赖关系来自 task.signal 中的 "blocked by task_xxx" 格式
-  // 以及 pull_task_links（PR 关联任务视为软依赖）
-  const propagated = [];
+  // ── 依赖图构建（graphology）────────────────────────────────
+  // 节点 = 每个活跃任务；边 = 依赖关系（有向）
+  // 边来源 1：pull_task_links（同 PR 的任务视为同层软依赖）
+  // 边来源 2：task.signal 中的 task_xxx 引用（格式: "blocked by task_abc"）
+  const graph = new Graph({ type: 'directed', multi: false, allowSelfLoops: false });
 
-  for (const [taskId, riskInfo] of riskMap.entries()) {
-    if (riskInfo.score < 2) continue; // 只传播中等以上风险
+  // 添加节点
+  for (const task of tasks) {
+    graph.addNode(task.id, { title: task.title, priority: task.priority });
+  }
 
-    // 查找信号中的 "blocked by" 引用
-    const task = taskId ? taskMap.get(taskId) : null;
-    if (!task) continue;
+  // 边来源 1：pull_task_links（同 PR 共享任务 → 相互依赖）
+  try {
+    const pullLinks = db.prepare(`
+      SELECT pull_id, task_id FROM pull_task_links
+      WHERE tenant_id = ?
+    `).all(tenantId);
 
-    // 从 signal 中解析下游任务（模糊匹配 task_xxx 引用）
-    const signalRefs = (task.signal || '').match(/task[_-][a-zA-Z0-9_-]+/gi) || [];
-
-    for (let depth = 1; depth <= MAX_PROPAGATION_DEPTH; depth++) {
-      const decayedScore = Math.round(riskInfo.score * Math.pow(PROPAGATION_DECAY, depth) * 10) / 10;
-      if (decayedScore < 0.5) break;
-
-      // 推送给下游任务（模拟：这里直接记录传播路径）
-      for (const ref of signalRefs) {
-        const downstreamTask = tasks.find(t => t.id.includes(ref) || t.id === ref);
-        if (downstreamTask && downstreamTask.id !== taskId) {
-          propagated.push({
-            sourceTaskId:   taskId,
-            sourceRisk:     riskInfo.score,
-            targetTaskId:   downstreamTask.id,
-            targetTitle:    downstreamTask.title,
-            propagatedScore: decayedScore,
-            depth,
-          });
+    // 按 pull_id 分组，同 PR 内的任务两两相连（无向软依赖）
+    const prToTasks = new Map();
+    for (const { pull_id, task_id } of pullLinks) {
+      if (!graph.hasNode(task_id)) continue; // 只处理活跃任务
+      if (!prToTasks.has(pull_id)) prToTasks.set(pull_id, []);
+      prToTasks.get(pull_id).push(task_id);
+    }
+    for (const [, taskIds] of prToTasks) {
+      for (let i = 0; i < taskIds.length; i++) {
+        for (let j = i + 1; j < taskIds.length; j++) {
+          if (!graph.hasEdge(taskIds[i], taskIds[j])) {
+            graph.addEdge(taskIds[i], taskIds[j]);
+          }
+          if (!graph.hasEdge(taskIds[j], taskIds[i])) {
+            graph.addEdge(taskIds[j], taskIds[i]);
+          }
         }
       }
+    }
+  } catch { /* pull_task_links 表不存在时忽略 */ }
+
+  // 边来源 2：task.signal 中的 task_xxx 引用
+  for (const task of tasks) {
+    const signalRefs = (task.signal || '').match(/task[_-][a-zA-Z0-9_-]+/gi) || [];
+    for (const ref of signalRefs) {
+      const downstream = tasks.find(t => t.id === ref || t.id.endsWith(ref));
+      if (downstream && downstream.id !== task.id) {
+        try { graph.addEdge(task.id, downstream.id); } catch { /* 边已存在 */ }
+      }
+    }
+  }
+
+  // ── Personalized PageRank（Haveliwala 2002）────────────────
+  // nstart = 初始风险分作为个性化权重（归一化到 0-1）
+  const propagated = [];
+
+  if (graph.order > 1) {
+    try {
+      // 构建 nstart（个性化种子权重）
+      const maxScore = Math.max(1, ...riskMap.values().map(r => r.score));
+      const nstart = {};
+      for (const task of tasks) {
+        const risk = riskMap.get(task.id);
+        nstart[task.id] = risk ? risk.score / maxScore : 0.01; // 无风险节点设最小值
+      }
+
+      // 运行 PageRank
+      const pr = pagerank(graph, {
+        alpha: PAGERANK_ALPHA,
+        nstart,         // 个性化起始权重
+        maxIterations: 100,
+        tolerance: 1e-6,
+      });
+
+      // 将 PageRank 分数转换为传播风险（0-10 scale）
+      const prValues = Object.values(pr);
+      const maxPr = Math.max(...prValues, 0.001);
+
+      for (const [taskId, prScore] of Object.entries(pr)) {
+        const originalRisk = riskMap.get(taskId)?.score || 0;
+        const propagatedScore = Math.round((prScore / maxPr) * 10 * 10) / 10;
+
+        // 只记录 PageRank 高于原始风险的传播效果（真正被传播影响到的）
+        if (propagatedScore > originalRisk && !riskMap.has(taskId)) {
+          const task = taskMap.get(taskId);
+          if (task) {
+            propagated.push({
+              sourceTaskId:    'pagerank-propagation',
+              sourceRisk:      Math.round(maxScore),
+              targetTaskId:    taskId,
+              targetTitle:     task.title,
+              propagatedScore,
+              prScore:         Math.round(prScore * 10000) / 10000,
+            });
+          }
+        }
+      }
+
+      // 更新 riskMap 中已有风险节点的传播得分（PageRank 加权）
+      for (const [taskId, riskInfo] of riskMap.entries()) {
+        const prScore = pr[taskId] || 0;
+        const amplified = Math.min(10, riskInfo.score * (1 + prScore / maxPr));
+        riskMap.set(taskId, { ...riskInfo, score: Math.round(amplified * 10) / 10 });
+      }
+    } catch (prErr) {
+      console.warn('[riskPropagation] pagerank failed, skipping propagation:', prErr.message);
     }
   }
 

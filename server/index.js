@@ -32,7 +32,11 @@ import { handleV2 } from './v2/app.js';
 const { db: _v2db, kysely: _v2kysely } = initDb();
 await replayUnprocessed();            // 重启后回放未处理事件
 initAdapters();                       // 通信平台适配器
-console.log('[V2] DB + EventBus + reducers + outcome-handlers + adapters initialized');
+// sqlite-vec 向量索引（P2 真 RAG）— 异步初始化，失败时优雅降级
+import { initVectorStore, rebuildMemoryIndex } from './services/vectorStore.js';
+const { supported: _vecSupported } = await initVectorStore(_v2db);
+if (_vecSupported) rebuildMemoryIndex(_v2db); // 补全旧数据向量（首次启动）
+console.log(`[V2] DB + EventBus + reducers + outcome-handlers + adapters + vector-store(${_vecSupported ? 'ON' : 'OFF'}) initialized`);
 // ── END V2 初始化 ───────────────────────────────────────────
 
 import { createId, loadStore, saveStore, updateStore } from './store.js';

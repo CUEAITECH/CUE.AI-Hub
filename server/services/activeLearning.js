@@ -27,23 +27,30 @@ export function ensureLearningQueueTable() {
   const db = getDb();
   db.prepare(`
     CREATE TABLE IF NOT EXISTS learning_queue (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      tenant_id    TEXT NOT NULL DEFAULT 'default',
-      outcome_ref  TEXT,          -- ai_outcomes.action_ref_id（或 null）
-      action_type  TEXT NOT NULL,
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id     TEXT NOT NULL DEFAULT 'default',
+      outcome_ref   TEXT,           -- ai_outcomes.action_ref_id（或 null）
+      action_type   TEXT NOT NULL,
       action_ref_id TEXT NOT NULL,
-      reason       TEXT NOT NULL,  -- 为什么需要人工标注
-      priority     INTEGER DEFAULT 5,  -- 0-10，越高越紧迫
-      status       TEXT DEFAULT 'pending',  -- pending | labeled | dismissed
+      reason        TEXT NOT NULL,  -- 为什么需要人工标注
+      priority      INTEGER DEFAULT 5,   -- 0-10，越高越紧迫（业务优先级）
+      ai_confidence REAL DEFAULT 0.5,    -- AI 置信度 0-1（越低越需要人工标注）
+      status        TEXT DEFAULT 'pending',  -- pending | labeled | dismissed
       metadata_json TEXT,
       labeled_polarity INTEGER,    -- 人工标注结果 +1/-1/0
       labeled_signal   TEXT,
       labeled_by       TEXT,
       labeled_at       DATETIME,
-      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(tenant_id, action_type, action_ref_id)
     )
   `).run();
+
+  // Schema migration：为已存在的旧表添加 ai_confidence 列（幂等）
+  try {
+    db.prepare('ALTER TABLE learning_queue ADD COLUMN ai_confidence REAL DEFAULT 0.5').run();
+    console.log('[activeLearning] migrated: learning_queue.ai_confidence added');
+  } catch { /* 列已存在，跳过 */ }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -57,23 +64,25 @@ export function ensureLearningQueueTable() {
  * @param {string} params.tenantId
  * @param {string} params.actionType
  * @param {string} params.actionRefId
- * @param {string} params.reason       - 为什么需要人工标注
- * @param {number} [params.priority=5] - 0-10
- * @param {object} [params.metadata]   - 附加上下文
+ * @param {string} params.reason        - 为什么需要人工标注
+ * @param {number} [params.priority=5]  - 0-10（业务优先级，越高越紧迫）
+ * @param {number} [params.aiConfidence=0.5] - AI 置信度 0-1（越低越应优先标注）
+ * @param {object} [params.metadata]    - 附加上下文
  * @returns {Promise<number|null>}  新 id，或 null（已存在）
  */
-export async function enqueue({ tenantId, actionType, actionRefId, reason, priority = 5, metadata = null }) {
+export async function enqueue({ tenantId, actionType, actionRefId, reason, priority = 5, aiConfidence = 0.5, metadata = null }) {
   ensureLearningQueueTable();
 
   return dbWrite('learning_queue:enqueue', (db) => {
     // INSERT OR IGNORE（幂等：同一 action_ref_id 不重复入队）
     const result = db.prepare(`
       INSERT OR IGNORE INTO learning_queue
-        (tenant_id, action_type, action_ref_id, reason, priority, metadata_json)
-      VALUES (?, ?, ?, ?, ?, ?)
+        (tenant_id, action_type, action_ref_id, reason, priority, ai_confidence, metadata_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       tenantId, actionType, actionRefId, reason,
       Math.min(10, Math.max(0, priority)),
+      Math.max(0, Math.min(1, aiConfidence)),
       metadata ? JSON.stringify(metadata) : null
     );
     return result.changes > 0 ? result.lastInsertRowid : null;
@@ -107,7 +116,9 @@ export function dequeue({ tenantId, status = 'pending', actionType, limit = 20, 
   const countQ = q.replace('SELECT *', 'SELECT COUNT(*) as c');
   const total = db.prepare(countQ).get(...params).c;
 
-  q += ' ORDER BY priority DESC, created_at ASC LIMIT ? OFFSET ?';
+  // Uncertainty sampling：ai_confidence 越低（越不确定）越优先标注
+  // 同等置信度下，业务优先级高的先处理
+  q += ' ORDER BY ai_confidence ASC, priority DESC, created_at ASC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
   const items = db.prepare(q).all(...params).map(row => ({
@@ -255,12 +266,14 @@ export async function autoEnqueue({ tenantId, since }) {
   `).all(tenantId, cutoff);
 
   for (const o of neutralOutcomes) {
+    // 中性 outcome = 置信度最低（0.5），是 uncertainty sampling 的核心目标
     const id = await enqueue({
       tenantId,
-      actionType: o.action_type,
-      actionRefId: o.action_ref_id,
-      reason: `outcome 极性为中性（${o.outcome_signal}），需要人工确认`,
-      priority: 5,
+      actionType:   o.action_type,
+      actionRefId:  o.action_ref_id,
+      reason:       `outcome 极性为中性（${o.outcome_signal}），需要人工确认`,
+      priority:     5,
+      aiConfidence: 0.5,  // 中性 = 不确定，置信度 0.5
       metadata: { outcomeId: o.id, outcomeSignal: o.outcome_signal },
     });
     if (id !== null) enqueued++;
@@ -280,10 +293,11 @@ export async function autoEnqueue({ tenantId, since }) {
   for (const r of blockReviews) {
     const id = await enqueue({
       tenantId,
-      actionType: 'code.review',
-      actionRefId: r.id,
-      reason: `${r.task_priority} 任务"${r.task_title}"审阅被 Block，需要人工决定是否解除拦截`,
-      priority: 9,  // 高优先级
+      actionType:   'code.review',
+      actionRefId:  r.id,
+      reason:       `${r.task_priority} 任务"${r.task_title}"审阅被 Block，需要人工决定是否解除拦截`,
+      priority:     9,    // 高业务优先级
+      aiConfidence: 0.2,  // Block 审阅 = AI 高置信但人类应该复核 → 低置信度入队最前
       metadata: { reviewId: r.id, taskId: r.task_id, level: r.level },
     });
     if (id !== null) enqueued++;
