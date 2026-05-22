@@ -4,6 +4,8 @@ import { callClaude } from './claude.js';
 import { scanRisks } from './riskEngine.js';
 import { isWeComAvailable, sendWeComMarkdown, buildPreMeetingWeComMsg } from './wecom.js';
 import { aggregateTaskCompliance } from './complianceAggregator.js';
+import logger from '../logger.js';
+
 
 const timezone = 'Asia/Shanghai';
 
@@ -488,7 +490,7 @@ ${unfinishedLines}`);
   if (isWeComAvailable()) {
     const wecomMsg = buildPreMeetingWeComMsg(finalEntry, hubUrl);
     await sendWeComMarkdown(wecomMsg).catch((err) =>
-      console.error('[WeCom] 晚报推送失败:', err.message)
+      logger.error('[WeCom] 晚报推送失败:', err.message)
     );
   }
 

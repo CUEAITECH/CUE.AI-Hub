@@ -16,6 +16,7 @@ import {
   auditLog,
   ensureGatewayTables,
 } from '../middleware/apiGateway.js';
+import logger from '../logger.js';
 
 // ── 鉴权豁免路径（无需 API Key）────────────────────────────
 const V2_AUTH_EXEMPT = new Set([
@@ -265,7 +266,7 @@ export async function handleV2(req, res, url) {
       });
 
       if (body.type === 'ai-agent') {
-        console.log(`[v2] AI agent registered: ${id} (${body.displayName})`);
+        logger.info(`[v2] AI agent registered: ${id} (${body.displayName})`);
       }
       sendV2Json(res, 201, { id, type: body.type, displayName: body.displayName });
       return true;
@@ -399,7 +400,7 @@ export async function handleV2(req, res, url) {
         blockers: body.blockers || null,
       }, { source: 'agent' });
 
-      console.log(`[v2] standup submitted by agent ${body.agentId} for ${body.date}`);
+      logger.info(`[v2] standup submitted by agent ${body.agentId} for ${body.date}`);
       sendV2Json(res, 200, { ok: true, agentId: body.agentId, date: body.date });
       return true;
     }
@@ -467,7 +468,7 @@ export async function handleV2(req, res, url) {
       const { indexMemoryEntry } = await import('../services/vectorStore.js');
       indexMemoryEntry(getDb(), { memoryId: Number(id), text: body.body });
 
-      console.log(`[v2] memory created: id=${id} kind=${body.kind} tenant=${tenantId}`);
+      logger.info(`[v2] memory created: id=${id} kind=${body.kind} tenant=${tenantId}`);
       sendV2Json(res, 201, { id, kind: body.kind, body: body.body, source: 'human-added', createdAt: now });
       return true;
     }
@@ -780,7 +781,7 @@ export async function handleV2(req, res, url) {
           // verifyAndReceive：验签 + 事件分发（如无注册 handler 则只验签）
           await wh.verifyAndReceive({ id: deliveryId, name: eventName, signature, payload: rawBody });
         } catch (verifyErr) {
-          console.warn('[v2/sync/webhook] signature verification failed:', verifyErr.message);
+          logger.warn('[v2/sync/webhook] signature verification failed:', verifyErr.message);
           sendV2Error(res, 401, 'GitHub webhook signature verification failed');
           return true;
         }
@@ -1428,6 +1429,192 @@ export async function handleV2(req, res, url) {
       return true;
     }
 
+    // ════════════════════════════════════════════════════════════
+    // GET /v2/events/stream — SSE 实时事件流（Part L 前端补丁依赖）
+    // 客户端通过 EventSource 订阅，用于 PR 实时 AC / 晚会 timeline
+    // ════════════════════════════════════════════════════════════
+    if (method === 'GET' && path === '/v2/events/stream') {
+      const typeFilter = url.searchParams.get('type') || null;
+      const sinceParam = url.searchParams.get('since');
+      let lastId = sinceParam ? parseInt(sinceParam, 10) : 0;
+
+      res.writeHead(200, {
+        'content-type':                'text/event-stream',
+        'cache-control':               'no-cache',
+        'connection':                  'keep-alive',
+        'access-control-allow-origin': '*',
+        'x-accel-buffering':           'no',  // Nginx: 禁用缓冲
+      });
+      res.write(': SSE stream connected\n\n');
+
+      const db = getDb();
+      const interval = setInterval(() => {
+        try {
+          const query = typeFilter
+            ? `SELECT id, type, payload_json, source, created_at FROM events WHERE id > ? AND type = ? ORDER BY id ASC LIMIT 50`
+            : `SELECT id, type, payload_json, source, created_at FROM events WHERE id > ? ORDER BY id ASC LIMIT 50`;
+          const rows = typeFilter
+            ? db.prepare(query).all(lastId, typeFilter)
+            : db.prepare(query).all(lastId);
+
+          for (const row of rows) {
+            const data = JSON.stringify({
+              id:        row.id,
+              type:      row.type,
+              source:    row.source,
+              createdAt: row.created_at,
+              payload:   (() => { try { return JSON.parse(row.payload_json); } catch { return {}; } })(),
+            });
+            res.write(`id: ${row.id}\ndata: ${data}\n\n`);
+            lastId = row.id;
+          }
+
+          // Keepalive comment 每 15 秒一次
+          if (rows.length === 0) {
+            res.write(': keepalive\n\n');
+          }
+        } catch (e) {
+          // DB 不可用时静默，不断开连接
+        }
+      }, 2000);
+
+      // 客户端断开时清理
+      req.on('close', () => { clearInterval(interval); });
+      req.on('error', () => { clearInterval(interval); });
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // GET /v2/observability/llm — LLM 调用账本
+    // GET /v2/observability/events — 事件流历史
+    // GET /v2/observability/sync-health — 三端同步健康度
+    // ════════════════════════════════════════════════════════════
+    if (method === 'GET' && path === '/v2/observability/llm') {
+      const db = getDb();
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+      const daily = db.prepare(`
+        SELECT
+          COUNT(*) as totalCalls,
+          SUM(input_tokens)  as totalInput,
+          SUM(output_tokens) as totalOutput,
+          SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END) as cacheHits,
+          SUM(CASE WHEN output_tokens IS NULL OR output_tokens = 0 THEN 1 ELSE 0 END) as failedCalls
+        FROM llm_calls WHERE ts >= ?
+      `).get(todayStart.toISOString());
+
+      const byPurpose = db.prepare(`
+        SELECT purpose, COUNT(*) as calls, SUM(input_tokens) as input, SUM(output_tokens) as output
+        FROM llm_calls WHERE ts >= ?
+        GROUP BY purpose ORDER BY calls DESC LIMIT 10
+      `).all(todayStart.toISOString());
+
+      const recentFailRate = (() => {
+        const r = db.prepare(`
+          SELECT COUNT(*) as total,
+            SUM(CASE WHEN output_tokens IS NULL OR output_tokens = 0 THEN 1 ELSE 0 END) as failed
+          FROM llm_calls WHERE ts >= ?
+        `).get(fiveMinAgo);
+        return r.total > 0 ? Math.round(r.failed / r.total * 100) : 0;
+      })();
+
+      // 成本估算（Sonnet 4.5 定价近似值）
+      const costUsd = ((daily.totalInput || 0) * 0.000003 + (daily.totalOutput || 0) * 0.000015);
+      const costYuan = costUsd * 7.2;
+      const cacheHitRate = daily.totalCalls > 0
+        ? Math.round(daily.cacheHits / daily.totalCalls * 100) : 0;
+
+      sendV2Json(res, 200, {
+        today: {
+          totalCalls:    daily.totalCalls,
+          failedCalls:   daily.failedCalls,
+          cacheHitRate:  `${cacheHitRate}%`,
+          estimatedCostYuan: parseFloat(costYuan.toFixed(2)),
+          estimatedCostUsd:  parseFloat(costUsd.toFixed(4)),
+        },
+        recentFailRatePct: recentFailRate,
+        byPurpose,
+      });
+      return true;
+    }
+
+    if (method === 'GET' && path === '/v2/observability/events') {
+      const db = getDb();
+      const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
+      const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+      const type   = url.searchParams.get('type') || null;
+      const source = url.searchParams.get('source') || null;
+
+      let q = 'SELECT id, type, payload_json, source, created_at, processed_at FROM events WHERE tenant_id = ?';
+      const params = [tenantId];
+      if (type)   { q += ' AND type = ?';   params.push(type); }
+      if (source) { q += ' AND source = ?'; params.push(source); }
+      q += ' ORDER BY id DESC LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+
+      const rows = db.prepare(q).all(...params);
+      const total = db.prepare('SELECT COUNT(*) as n FROM events WHERE tenant_id = ?').get(tenantId).n;
+      const unprocessed = db.prepare("SELECT COUNT(*) as n FROM events WHERE tenant_id = ? AND processed_at IS NULL").get(tenantId).n;
+
+      sendV2Json(res, 200, {
+        total, unprocessed, limit, offset,
+        events: rows.map(r => ({
+          id:          r.id,
+          type:        r.type,
+          source:      r.source,
+          createdAt:   r.created_at,
+          processedAt: r.processed_at,
+          payload:     (() => { try { return JSON.parse(r.payload_json); } catch { return {}; } })(),
+        })),
+      });
+      return true;
+    }
+
+    if (method === 'GET' && path === '/v2/observability/sync-health') {
+      const db = getDb();
+
+      // task ↔ PR 一致性（有 PR 关联的任务 vs 所有 in_progress/in_review 任务）
+      const activeTasks = db.prepare(
+        "SELECT COUNT(*) as n FROM tasks WHERE tenant_id = ? AND state IN ('in_progress','in_review')"
+      ).get(tenantId).n;
+      const linkedTasks = db.prepare(`
+        SELECT COUNT(DISTINCT ptl.task_id) as n
+        FROM pull_task_links ptl
+        JOIN tasks t ON ptl.task_id = t.id
+        WHERE t.tenant_id = ? AND t.state IN ('in_progress','in_review')
+      `).get(tenantId).n;
+
+      // 孤儿 PR（有 PR 但没有关联任务）
+      const orphanPRs = db.prepare(`
+        SELECT COUNT(*) as n FROM pulls p
+        WHERE p.tenant_id = ? AND p.state = 'open'
+          AND NOT EXISTS (SELECT 1 FROM pull_task_links ptl WHERE ptl.pull_id = p.id)
+      `).get(tenantId).n;
+
+      // 防循环签名命中（sync_signatures 表，7 天内）
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      let signatureHits = 0;
+      try {
+        signatureHits = db.prepare(
+          "SELECT COUNT(*) as n FROM sync_signatures WHERE created_at >= ?"
+        ).get(sevenDaysAgo).n;
+      } catch { /* sync_signatures 表可能不存在 */ }
+
+      const taskPrConsistency = activeTasks > 0
+        ? Math.round(linkedTasks / activeTasks * 100) : 100;
+
+      sendV2Json(res, 200, {
+        taskPrConsistencyPct: taskPrConsistency,
+        activeTasks,
+        linkedTasks,
+        orphanPRs,
+        signatureHits7d: signatureHits,
+        health: orphanPRs <= 5 && taskPrConsistency >= 80 ? 'healthy' : 'degraded',
+      });
+      return true;
+    }
+
     // 未匹配的 /v2/* 路由
     sendV2Error(res, 404, `v2 route not found: ${method} ${path}`);
     return true;
@@ -1437,7 +1624,7 @@ export async function handleV2(req, res, url) {
       sendV2Error(res, 400, 'validation error', err.errors);
       return true;
     }
-    console.error('[v2] error:', method, path, err.message);
+    logger.error('[v2] error:', method, path, err.message);
     sendV2Error(res, 500, err.message || 'internal error');
     return true;
   } finally {

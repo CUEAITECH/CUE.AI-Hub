@@ -11,10 +11,12 @@
 //   - 并发上限 CONCURRENCY=4，避免 rate limit
 
 import PQueue from 'p-queue';
-import { callClaude, parseJsonOutput } from './claude.js';
+import { callClaude, callHaiku, parseJsonOutput } from './claude.js';
 import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
 import { runSemgrepOnDiff } from './semgrepFilter.js';
+import logger from '../logger.js';
+
 
 const CONCURRENCY = 4;
 
@@ -86,7 +88,8 @@ ${fileDiff.diffText}
   const timer = setTimeout(() => controller.abort(), 30_000);
 
   try {
-    const result = await callClaude(MAP_SYSTEM_PROMPT, userPrompt, { signal: controller.signal });
+    // Map 阶段：用 Haiku（高频/廉价）—— Part I 决策 14
+    const result = await callHaiku(MAP_SYSTEM_PROMPT, userPrompt, { signal: controller.signal });
     clearTimeout(timer);
     if (!result) return ruleReviewFile(fileDiff); // LLM 不可用 → 规则
 
@@ -252,10 +255,10 @@ export async function mapReduceReview({ files, prTitle, acceptance, memory = [],
       rulesMatched: semgrepResult.rulesMatched ?? 0,
     };
     if (!semgrepResult.skipped) {
-      console.log(`[mapReduceReviewer] Semgrep: ${semgrepStats.filesScanned} files scanned, ${semgrepStats.rulesMatched} findings`);
+      logger.info(`[mapReduceReviewer] Semgrep: ${semgrepStats.filesScanned} files scanned, ${semgrepStats.rulesMatched} findings`);
     }
   } catch (semErr) {
-    console.warn('[mapReduceReviewer] Semgrep pre-filter failed, proceeding without:', semErr.message);
+    logger.warn('[mapReduceReviewer] Semgrep pre-filter failed, proceeding without:', semErr.message);
   }
 
   // 文件分流：有 Semgrep critical → 直接用静态结果，跳过 LLM
@@ -298,6 +301,48 @@ export async function mapReduceReview({ files, prTitle, acceptance, memory = [],
   // ── Reduce 阶段 ──────────────────────────────────────────────
   const reduced = await reduceIssues({ allIssues, acceptance, prTitle, memory });
 
+  // ── Self-Consistency n=3（仅对 Block 级别）──────────────────
+  // Wang 2022 "Self-Consistency Improves Chain of Thought Reasoning"
+  // 对 critical 判断跑 3 次，多数票决定是否真的是 Block
+  // 额外 2 次调用使用 Haiku（低成本），只看 level 字段
+  if (reduced.level === 'Block') {
+    try {
+      const SC_SYSTEM = `你是代码审阅专家。根据 issue 列表判断本次 PR 是否应该 Block（阻断合并）。
+只输出 JSON: { "level": "Block" | "Warning" | "Pass" }。
+Block = 必须修改才能合并；Warning = 建议修改；Pass = 可以合并。`;
+
+      const scPrompt = `PR 标题：${prTitle}
+关键 Issue（${allIssues.filter(i => i.severity === 'critical').length} 个 critical）：
+${allIssues.filter(i => i.severity === 'critical').map(i => `• [${i.severity}] ${i.file}: ${i.header} — ${i.description}`).join('\n') || '（无 critical issue）'}`;
+
+      // 已有 1 票（reduced.level = Block），再跑 2 次
+      const [r2, r3] = await Promise.all([
+        callHaiku(SC_SYSTEM, scPrompt, { maxTokens: 64 }),
+        callHaiku(SC_SYSTEM, scPrompt, { maxTokens: 64 }),
+      ]);
+
+      const vote2 = r2 ? (parseJsonOutput(r2)?.level || 'Block') : 'Block';
+      const vote3 = r3 ? (parseJsonOutput(r3)?.level || 'Block') : 'Block';
+
+      const votes = [reduced.level, normalizeLevel(vote2), normalizeLevel(vote3)];
+      const blockVotes = votes.filter(v => v === 'Block').length;
+
+      logger.info(`[mapReduceReviewer] self-consistency votes: ${votes.join(', ')} (Block ${blockVotes}/3)`);
+
+      // 多数票（≥2）决定结果
+      if (blockVotes < 2) {
+        // 少数是 Block → 降级为 Warning
+        reduced.level   = 'Warning';
+        reduced.summary = `[Self-consistency 3/3 多数票] 降级 Block → Warning：3 次判断中 ${blockVotes} 次认为 Block，采用多数票。` + reduced.summary;
+      }
+      // 若 3 次都是 Block → 保持 Block（不变）
+
+    } catch (scErr) {
+      // self-consistency 失败不影响主流程，保守地保留原来的 Block
+      logger.warn('[mapReduceReviewer] self-consistency failed (non-blocking), keeping Block:', scErr.message);
+    }
+  }
+
   // ── 写入 reviews 表 ──────────────────────────────────────────
   const reviewId = `review_mr_${pullId}_${Date.now()}`;
   const now = new Date().toISOString();
@@ -324,7 +369,7 @@ export async function mapReduceReview({ files, prTitle, acceptance, memory = [],
 
   const elapsed = Date.now() - startTime;
   const llmSkipped = semgrepOnly.length;
-  console.log(
+  logger.info(
     `[mapReduceReviewer] PR ${pullId}: ${files.length} files ` +
     `(${llmSkipped} semgrep-only, ${llmFiles.length} LLM), ` +
     `${allIssues.length} issues → ${reduced.level} (${elapsed}ms)`

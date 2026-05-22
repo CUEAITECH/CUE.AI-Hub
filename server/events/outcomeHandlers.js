@@ -15,6 +15,8 @@ import {
 } from '../services/outcomeLedger.js';
 import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
+import logger from '../logger.js';
+
 
 // ── 1. 任务状态变更 → 打标 ──────────────────────────────────────
 // task.state.changed 是任意合法状态转移的权威事件
@@ -27,11 +29,11 @@ on('task.state.changed', async ({ tenantId, taskId, to }) => {
   try {
     const id = await autoLabelTaskOutcome({ tenantId, taskId });
     if (id !== null) {
-      console.log(`[outcomeHandlers] task.state.changed → labeled outcome id=${id} task=${taskId} state=${to}`);
+      logger.info(`[outcomeHandlers] task.state.changed → labeled outcome id=${id} task=${taskId} state=${to}`);
     }
   } catch (err) {
     // 非阻塞：打标失败不影响状态机
-    console.warn(`[outcomeHandlers] autoLabelTaskOutcome failed for ${taskId}: ${err.message}`);
+    logger.warn(`[outcomeHandlers] autoLabelTaskOutcome failed for ${taskId}: ${err.message}`);
   }
 });
 
@@ -59,9 +61,9 @@ on('pr.merged', async ({ tenantId, taskIds, prId }) => {
         observer:      'auto-rule',
         lagHours:      0,
       });
-      console.log(`[outcomeHandlers] pr.merged → recorded outcome for task=${taskId}`);
+      logger.info(`[outcomeHandlers] pr.merged → recorded outcome for task=${taskId}`);
     } catch (err) {
-      console.warn(`[outcomeHandlers] pr.merged outcome failed for task ${taskId}: ${err.message}`);
+      logger.warn(`[outcomeHandlers] pr.merged outcome failed for task ${taskId}: ${err.message}`);
     }
   }
 });
@@ -96,9 +98,9 @@ on('agent.task.completed', async ({ tenantId, taskId, agentId, acStatus }) => {
       observer:      'auto-rule',
       lagHours:      0,
     });
-    console.log(`[outcomeHandlers] agent.task.completed → polarity=0 outcome for task=${taskId}`);
+    logger.info(`[outcomeHandlers] agent.task.completed → polarity=0 outcome for task=${taskId}`);
   } catch (err) {
-    console.warn(`[outcomeHandlers] agent.task.completed outcome failed for ${taskId}: ${err.message}`);
+    logger.warn(`[outcomeHandlers] agent.task.completed outcome failed for ${taskId}: ${err.message}`);
   }
 });
 
@@ -128,11 +130,11 @@ on('pr.review.posted', async ({ tenantId, prId, source, level }) => {
 
     const id = await autoLabelReviewOutcome({ tenantId, reviewId: review.id });
     if (id !== null) {
-      console.log(`[outcomeHandlers] pr.review.posted → labeled review outcome id=${id} review=${review.id} level=${level}`);
+      logger.info(`[outcomeHandlers] pr.review.posted → labeled review outcome id=${id} review=${review.id} level=${level}`);
     }
   } catch (err) {
-    console.warn(`[outcomeHandlers] pr.review.posted outcome failed for pr ${prId}: ${err.message}`);
+    logger.warn(`[outcomeHandlers] pr.review.posted outcome failed for pr ${prId}: ${err.message}`);
   }
 });
 
-console.log('[outcomeHandlers] ✅ registered (task.state.changed + pr.merged + agent.task.completed + pr.review.posted)');
+logger.info('[outcomeHandlers] ✅ registered (task.state.changed + pr.merged + agent.task.completed + pr.review.posted)');

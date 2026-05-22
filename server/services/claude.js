@@ -1,7 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
+import logger from '../logger.js';
+
+// ── LLM 路由器（Part I 决策 14）──────────────────────────────────
+// 按调用场景分配不同 model：
+//   review map-chunk（高频/廉价）→ HAIKU
+//   planner / explainer / 生成类   → SONNET（默认）
+// 调用方通过 options.model 覆盖，或使用 callHaiku() 便捷函数
+const DEFAULT_MODEL  = process.env.CLAUDE_MODEL  || 'claude-sonnet-4-5';
+const HAIKU_MODEL    = process.env.CLAUDE_HAIKU_MODEL || 'claude-haiku-4-5';
 
 // 懒读取：ES module import 先于 .env 加载执行，所以不能在模块顶层取值
-function getModel() { return process.env.CLAUDE_MODEL || 'claude-sonnet-4-6'; }
+function getModel(override) { return override || DEFAULT_MODEL; }
 let _client = null;
 
 function getClient() {
@@ -17,6 +26,15 @@ export function isAvailable() {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
+/**
+ * 调用 Claude（默认 Sonnet，用于 planner / explainer / 生成类）
+ * @param {string} systemPrompt
+ * @param {string} userPrompt
+ * @param {object} [options]
+ * @param {string} [options.model]      - 覆盖 model（如 HAIKU_MODEL）
+ * @param {number} [options.maxTokens]  - 最大输出 token
+ * @param {AbortSignal} [options.signal]
+ */
 export async function callClaude(systemPrompt, userPrompt, options = {}) {
   // LLM_DRY_RUN=true：拦截所有 LLM 调用，写入 trace 但不调真 API
   // 用于排查"为什么会有几千次 LLM 调用"——能完整复现触发链路而不烧钱
@@ -38,26 +56,34 @@ export async function callClaude(systemPrompt, userPrompt, options = {}) {
     // SDK 接收 second-arg request options（AbortSignal 等），允许调用方在超时时取消底层 HTTP 请求
     const requestOptions = options.signal ? { signal: options.signal } : undefined;
     const response = await client.messages.create({
-      model: getModel(),
+      model: getModel(options.model),
       max_tokens: options.maxTokens || 4096,
       system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }]
     }, requestOptions);
     // 检测因 max_tokens 截断的情况，给出明确日志
     if (response.stop_reason === 'max_tokens') {
-      console.warn(`[Claude] 输出在 max_tokens=${options.maxTokens || 4096} 处被截断（stop_reason=max_tokens），输出可能不完整`);
+      logger.warn(`[Claude] 输出在 max_tokens=${options.maxTokens || 4096} 处被截断（stop_reason=max_tokens），输出可能不完整`);
     }
     return response.content.find((b) => b.type === 'text')?.text ?? null;
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
-      console.error('[Claude] API key 无效，将使用规则引擎');
+      logger.error('[Claude] API key 无效，将使用规则引擎');
     } else if (err instanceof Anthropic.RateLimitError) {
-      console.error('[Claude] 触发频率限制，将使用规则引擎');
+      logger.error('[Claude] 触发频率限制，将使用规则引擎');
     } else {
-      console.error('[Claude] API 调用失败，降级到规则引擎:', err.message);
+      logger.error('[Claude] API 调用失败，降级到规则引擎:', err.message);
     }
     return null;
   }
+}
+
+/**
+ * 便捷函数：用 Haiku 调用（reviewer map-chunk，高频低成本场景）
+ * 签名与 callClaude 完全一致，调用方无需关心 model 名称
+ */
+export async function callHaiku(systemPrompt, userPrompt, options = {}) {
+  return callClaude(systemPrompt, userPrompt, { ...options, model: HAIKU_MODEL });
 }
 
 export function parseJsonOutput(text) {

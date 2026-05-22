@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 /**
  * 企业微信群机器人 Webhook 推送
  * 配置：WECOM_WEBHOOK_URL 环境变量
@@ -34,13 +35,13 @@ export async function sendWeComMarkdown(content) {
     });
     const result = await response.json();
     if (result.errcode !== 0) {
-      console.error('[WeCom] 推送失败:', result.errmsg, '(errcode:', result.errcode, ')');
+      logger.error('[WeCom] 推送失败:', result.errmsg, '(errcode:', result.errcode, ')');
       return false;
     }
-    console.log('[WeCom] 推送成功');
+    logger.info('[WeCom] 推送成功');
     return true;
   } catch (err) {
-    console.error('[WeCom] 推送异常:', err.message);
+    logger.error('[WeCom] 推送异常:', err.message);
     return false;
   }
 }

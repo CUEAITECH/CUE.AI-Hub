@@ -1,3 +1,4 @@
+import logger from './logger.js';
 export function startScheduler(deps) {
   const {
     loadStore,
@@ -47,10 +48,10 @@ export function startScheduler(deps) {
             diffLimit: githubSyncDiffLimit
           });
           if (result.addedActivities || result.addedReviews) {
-            console.log(`[Scheduler] GitHub 已同步 ${project.githubFullRepo || project.repository}：新增 ${result.addedActivities} 条提交，新增 ${result.addedReviews} 条 Review`);
+            logger.info(`[Scheduler] GitHub 已同步 ${project.githubFullRepo || project.repository}：新增 ${result.addedActivities} 条提交，新增 ${result.addedReviews} 条 Review`);
           }
         } catch (err) {
-          console.error(`[Scheduler] GitHub 同步失败 ${project.githubFullRepo || project.repository || project.id}:`, err.message);
+          logger.error(`[Scheduler] GitHub 同步失败 ${project.githubFullRepo || project.repository || project.id}:`, err.message);
         }
       }
     } finally {
@@ -90,7 +91,7 @@ export function startScheduler(deps) {
           '',
           '延迟完成默认要求第二个工作日补齐；如果后续请假，系统会把连续工作日作为一个评分窗口取平均。'
         ].join('\n')).catch((err) =>
-          console.error('[Scheduler] 任务完成确认推送失败', err.message)
+          logger.error('[Scheduler] 任务完成确认推送失败', err.message)
         );
       }
     }
@@ -109,7 +110,7 @@ export function startScheduler(deps) {
           '',
           '18:25-18:35 回复按临时请假/迟到处理；18:35 后仍无记录默认缺勤，可由人事管理补录。'
         ].join('\n')).catch((err) =>
-          console.error('[Scheduler] 晚会出席确认推送失败', err.message)
+          logger.error('[Scheduler] 晚会出席确认推送失败', err.message)
         );
       }
     }
@@ -151,22 +152,22 @@ export function startScheduler(deps) {
         }
         draft.attendanceRecords = draft.attendanceRecords.slice(0, 2000);
         return draft;
-      }).catch((err) => console.error('[Scheduler] 晚会缺勤自动收口失败', err.message));
+      }).catch((err) => logger.error('[Scheduler] 晚会缺勤自动收口失败', err.message));
     }
 
     if (isWorkday && sh === prepHour && sm === prepMinute && lastEveningReportDate !== today) {
       lastEveningReportDate = today;
-      console.log(`[Scheduler] ${prepHour}:${String(prepMinute).padStart(2, '0')} 触发晚会前作战包生成...`);
+      logger.info(`[Scheduler] ${prepHour}:${String(prepMinute).padStart(2, '0')} 触发晚会前作战包生成...`);
       await generateEveningReport(today).catch((err) =>
-        console.error('[Scheduler] 作战包生成失败:', err.message)
+        logger.error('[Scheduler] 作战包生成失败:', err.message)
       );
 
       // 17:45 AI 语义分析刷新（兜底：无论当天 GitHub 同步是否触发过，都保证晚会前是最新的）
       try {
         await refreshAnalysisIntoStore();
-        console.log('[Scheduler] AI 语义分析刷新完成');
+        logger.info('[Scheduler] AI 语义分析刷新完成');
       } catch (err) {
-        console.error('[Scheduler] AI 语义分析失败:', err.message);
+        logger.error('[Scheduler] AI 语义分析失败:', err.message);
       }
 
       // 晚报生成前刷新候选任务（sync-docs 轻量版）：
@@ -179,14 +180,14 @@ export function startScheduler(deps) {
           try {
             const result = await importDocsForProject(project, project.id);
             if (result.imported > 0) {
-              console.log(`[Scheduler] sync-docs ${project.githubFullRepo}：新增任务 ${result.imported}，候选 ${result.selected || 0}，phases ${result.phases || 0}，新建 deliverable ${result.createdDeliverables || 0}`);
+              logger.info(`[Scheduler] sync-docs ${project.githubFullRepo}：新增任务 ${result.imported}，候选 ${result.selected || 0}，phases ${result.phases || 0}，新建 deliverable ${result.createdDeliverables || 0}`);
             }
           } catch (err) {
-            console.error(`[Scheduler] sync-docs 失败 ${project.id}:`, err.message);
+            logger.error(`[Scheduler] sync-docs 失败 ${project.id}:`, err.message);
           }
         }
       } catch (err) {
-        console.error('[Scheduler] 批量 sync-docs 失败:', err.message);
+        logger.error('[Scheduler] 批量 sync-docs 失败:', err.message);
       }
 
       // 晚报生成后，自动把进度写回 GitHub（update-docs）
@@ -214,13 +215,13 @@ export function startScheduler(deps) {
               deliverables
             );
             await writeProgressToGitHub(owner, repo, markdown);
-            console.log(`[Scheduler] 进度文档已写回 ${project.githubFullRepo}`);
+            logger.info(`[Scheduler] 进度文档已写回 ${project.githubFullRepo}`);
           } catch (err) {
-            console.error(`[Scheduler] update-docs 失败 ${project.id}:`, err.message);
+            logger.error(`[Scheduler] update-docs 失败 ${project.id}:`, err.message);
           }
         }
       } catch (err) {
-        console.error('[Scheduler] 批量 update-docs 失败:', err.message);
+        logger.error('[Scheduler] 批量 update-docs 失败:', err.message);
       }
 
       // 17:45 为所有活跃用户预生成明日推荐（独立 LLM 调用，per-user）
@@ -257,10 +258,10 @@ export function startScheduler(deps) {
             ok++;
           } catch (err) {
             failed++;
-            console.error(`[Scheduler] 推荐生成失败 ${user.username || user.id}:`, err.message);
+            logger.error(`[Scheduler] 推荐生成失败 ${user.username || user.id}:`, err.message);
           }
         }
-        console.log(`[Scheduler] 推荐已生成：${ok} 个用户，${failed} 个失败（forDate=${tomorrow}）`);
+        logger.info(`[Scheduler] 推荐已生成：${ok} 个用户，${failed} 个失败（forDate=${tomorrow}）`);
         if (failed > 0 && isWeComAvailable()) {
           await sendWeComMarkdown([
             `## ⚠️ AI 推荐生成部分失败`,
@@ -268,10 +269,10 @@ export function startScheduler(deps) {
             `成功 ${ok} 人，失败 ${failed} 人（forDate=${tomorrow}）`,
             ``,
             `检查 ANTHROPIC_API_KEY 配置或服务可用性。`
-          ].join('\n')).catch((e) => console.error('[Scheduler] 推荐失败告警推送失败:', e.message));
+          ].join('\n')).catch((e) => logger.error('[Scheduler] 推荐失败告警推送失败:', e.message));
         }
       } catch (err) {
-        console.error('[Scheduler] 批量推荐生成失败:', err.message);
+        logger.error('[Scheduler] 批量推荐生成失败:', err.message);
       }
     }
 
@@ -304,9 +305,9 @@ export function startScheduler(deps) {
             `[前往人工审阅](${hubUrl}#reviews)`
           ].filter((l) => l !== undefined).join('\n');
           await sendWeComMarkdown(lines).catch((err) =>
-            console.error('[Scheduler] 人工审阅提醒推送失败:', err.message)
+            logger.error('[Scheduler] 人工审阅提醒推送失败:', err.message)
           );
-          console.log(`[Scheduler] ${reviewHour}:00 已推送人工审阅提醒（${pending.length} Block/Escalate，${warning.length} Warning）`);
+          logger.info(`[Scheduler] ${reviewHour}:00 已推送人工审阅提醒（${pending.length} Block/Escalate，${warning.length} Warning）`);
         }
       }
     }
@@ -339,7 +340,7 @@ export function startScheduler(deps) {
         return draft;
       });
     } catch (err) {
-      console.error('[Scheduler/bypass]', err.message);
+      logger.error('[Scheduler/bypass]', err.message);
     }
   }
 
@@ -367,7 +368,7 @@ export async function runStartupPhaseCorrection(deps) {
     const hasDocPhases = phases.length > 0 && phases.every((p) => /^phase_doc_/.test(p.id));
     const hasMissingPhaseId = checklist.some((n) => !phaseIdSet.has(n.phaseId));
     if (!hasDocPhases && !hasMissingPhaseId) return;
-    console.log('[Startup] 检测到 phases 需要修正，触发异步 LLM 重新分配...');
+    logger.info('[Startup] 检测到 phases 需要修正，触发异步 LLM 重新分配...');
     const project = (s.projects || []).find((p) => p.githubFullRepo?.includes('/'));
     if (!project) return;
     const { owner, repo } = project.githubFullRepo.split('/').length >= 2
@@ -397,8 +398,8 @@ export async function runStartupPhaseCorrection(deps) {
       }
       return draft;
     });
-    console.log('[Startup] phases 修正完成，共', result.phases.length, '个阶段');
+    logger.info('[Startup] phases 修正完成，共', result.phases.length, '个阶段');
   } catch (e) {
-    console.error('[Startup] 异步 phases 修正失败:', e.message);
+    logger.error('[Startup] 异步 phases 修正失败:', e.message);
   }
 }

@@ -24,11 +24,13 @@ import { dirname } from 'node:path';
 }
 // ── V2 地基初始化（在任何路由注册之前）──────────────────────
 import { initDb } from './db/index.js';
-import './state/reducer.js';           // 注册 reducer 订阅者（状态机）
-import './events/outcomeHandlers.js';  // 注册 Outcome Ledger 事件订阅（W9 闭合）
+import './state/reducer.js';                // 注册 reducer 订阅者（状态机）
+import './events/outcomeHandlers.js';       // 注册 Outcome Ledger 事件订阅（W9 闭合）
+import './events/eveningReportHandler.js';  // 晚会作战包 EventBus 迁移（ENABLE_V2_EVENING=true 时生效）
 import { replayUnprocessed } from './events/bus.js';
 import { initAdapters } from './adapters/index.js';
 import { handleV2 } from './v2/app.js';
+import logger from './logger.js';
 const { db: _v2db, kysely: _v2kysely } = initDb();
 await replayUnprocessed();            // 重启后回放未处理事件
 initAdapters();                       // 通信平台适配器
@@ -36,7 +38,7 @@ initAdapters();                       // 通信平台适配器
 import { initVectorStore, rebuildMemoryIndex } from './services/vectorStore.js';
 const { supported: _vecSupported } = await initVectorStore(_v2db);
 if (_vecSupported) rebuildMemoryIndex(_v2db); // 补全旧数据向量（首次启动）
-console.log(`[V2] DB + EventBus + reducers + outcome-handlers + adapters + vector-store(${_vecSupported ? 'ON' : 'OFF'}) initialized`);
+logger.info(`[V2] DB + EventBus + reducers + outcome-handlers + adapters + vector-store(${_vecSupported ? 'ON' : 'OFF'}) initialized`);
 // ── END V2 初始化 ───────────────────────────────────────────
 
 import { createId, loadStore, saveStore, updateStore } from './store.js';
@@ -461,7 +463,7 @@ setTimeout(() => runStartupPhaseCorrection({
 
 server.listen(port, host, () => {
   const prepHour = meetingHour === 0 ? 23 : meetingHour - 1;
-  console.log(`
+  logger.info(`
 ╔═══════════════════════════════════════════════╗
 ║         CUE Project Hub 启动成功              ║
 ╚═══════════════════════════════════════════════╝

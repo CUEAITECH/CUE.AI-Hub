@@ -15,6 +15,8 @@ import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
 import { emit } from '../events/bus.js';
 import { getOctokit } from './githubClient.js';
+import logger from '../logger.js';
+
 
 // ══════════════════════════════════════════════════════════════
 // A. PR → task 链接解析
@@ -97,7 +99,7 @@ export async function linkPRToTasks({ tenantId, pullId, prBranch, prBody, projec
   }
 
   if (linked.length > 0) {
-    console.log(`[syncBroker] PR ${pullId} → tasks: ${linked.join(', ')}`);
+    logger.info(`[syncBroker] PR ${pullId} → tasks: ${linked.join(', ')}`);
   }
 
   return { linked, skipped };
@@ -153,7 +155,7 @@ export async function onPRMerged({ tenantId, pullId, mergedAt }) {
     await scheduleDocWriteback({ tenantId, taskId, trigger: 'pr.merged' });
   }
 
-  console.log(`[syncBroker] PR ${pullId} merged → ${taskIds.length} tasks advanced`);
+  logger.info(`[syncBroker] PR ${pullId} merged → ${taskIds.length} tasks advanced`);
   return { pullId, taskIds };
 }
 
@@ -186,12 +188,12 @@ export async function scheduleDocWriteback({ tenantId, taskId, trigger }) {
     try {
       await writeProgressDoc({ tenantId, projectId: task.project_id });
     } catch (err) {
-      console.warn(`[syncBroker] doc writeback failed for ${task.project_id}: ${err.message}`);
+      logger.warn(`[syncBroker] doc writeback failed for ${task.project_id}: ${err.message}`);
     }
   }, 30_000); // 30s 防抖
 
   _writebackDebounce.set(key, timer);
-  console.log(`[syncBroker] doc writeback scheduled for project ${task.project_id} (trigger: ${trigger})`);
+  logger.info(`[syncBroker] doc writeback scheduled for project ${task.project_id} (trigger: ${trigger})`);
 }
 
 /**
@@ -211,7 +213,7 @@ export async function writeProgressDoc({ tenantId, projectId }) {
   const repo  = project.github_repo  || dataJson.githubRepo;
 
   if (!owner || !repo) {
-    console.log(`[syncBroker] project ${projectId} has no GitHub config, skipping doc writeback`);
+    logger.info(`[syncBroker] project ${projectId} has no GitHub config, skipping doc writeback`);
     return { skipped: true, reason: 'no-github-config' };
   }
 
@@ -221,7 +223,7 @@ export async function writeProgressDoc({ tenantId, projectId }) {
   // 写回 GitHub
   await githubWriteFile({ owner, repo, path: PROGRESS_DOC_PATH, content: markdown, message: `docs: Hub 自动同步进度 — ${new Date().toISOString().slice(0, 10)}` });
 
-  console.log(`[syncBroker] wrote progress doc to ${owner}/${repo}`);
+  logger.info(`[syncBroker] wrote progress doc to ${owner}/${repo}`);
   return { ok: true, owner, repo, path: PROGRESS_DOC_PATH };
 }
 
@@ -435,6 +437,6 @@ export async function resyncAllPRLinks({ tenantId, projectId }) {
     totalLinked += linked.length;
   }
 
-  console.log(`[syncBroker] resync complete: ${pulls.length} PRs, ${totalLinked} links created`);
+  logger.info(`[syncBroker] resync complete: ${pulls.length} PRs, ${totalLinked} links created`);
   return { pulls: pulls.length, linksCreated: totalLinked };
 }

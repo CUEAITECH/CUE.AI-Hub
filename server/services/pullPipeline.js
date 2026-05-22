@@ -13,6 +13,8 @@ import { reviewChange } from './reviewer.js';
 import { bindActivityToExplicitRefs } from './bindingEngine.js';
 import { createId } from '../store.js';
 import { trace } from './syncTrace.js';
+import logger from '../logger.js';
+
 
 /**
  * 从 PR body 和 title 解析关联任务 ID
@@ -105,7 +107,7 @@ async function buildHubReview(prDetail, linkedTaskIds, store) {
       createdAt: new Date().toISOString()
     };
   } catch (err) {
-    console.error('[pullPipeline] hubReview failed:', err.message);
+    logger.error('[pullPipeline] hubReview failed:', err.message);
     return null;
   }
 }
@@ -196,7 +198,7 @@ export async function syncProjectPRs(project, store, updateStore, options = {}) 
   try {
     prs = await fetchProjectPRs(owner, repo, { state: 'all', since: sinceDate, per_page: 30 });
   } catch (err) {
-    console.error(`[pullPipeline] fetchProjectPRs failed for ${owner}/${repo}:`, err.message);
+    logger.error(`[pullPipeline] fetchProjectPRs failed for ${owner}/${repo}:`, err.message);
     return { added: 0, updated: 0, pulls: [] };
   }
 
@@ -213,7 +215,7 @@ export async function syncProjectPRs(project, store, updateStore, options = {}) 
       else updated++;
       results.push(pull);
     } catch (err) {
-      console.error(`[pullPipeline] failed on PR #${pr.number}:`, err.message);
+      logger.error(`[pullPipeline] failed on PR #${pr.number}:`, err.message);
     }
   }
 
@@ -249,17 +251,17 @@ export async function upsertPullFromWebhook(repoFull, prNumber, action) {
     return full.toLowerCase() === repoFull.toLowerCase();
   });
   if (!project) {
-    console.warn(`[pullPipeline] PR webhook: no project for repo ${repoFull}`);
+    logger.warn(`[pullPipeline] PR webhook: no project for repo ${repoFull}`);
     return null;
   }
 
   try {
     const prDetail = await fetchPRDetail(owner, repoName, prNumber);
     const { pull } = await upsertPullIntoStore(prDetail, project.id, update, store);
-    console.log(`[pullPipeline] PR #${prNumber} (${action}) upserted via webhook`);
+    logger.info(`[pullPipeline] PR #${prNumber} (${action}) upserted via webhook`);
     return pull;
   } catch (err) {
-    console.error(`[pullPipeline] upsertPullFromWebhook failed:`, err.message);
+    logger.error(`[pullPipeline] upsertPullFromWebhook failed:`, err.message);
     return null;
   }
 }
@@ -279,17 +281,17 @@ export async function handlePrAgentSink(payload, store, updateStore) {
   });
 
   if (!project) {
-    console.warn(`[pullPipeline] PR-Agent sink: no project found for repo ${repo}`);
+    logger.warn(`[pullPipeline] PR-Agent sink: no project found for repo ${repo}`);
     return null;
   }
 
   try {
     const prDetail = await fetchPRDetail(owner, repoName, pr_number);
     const { pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store);
-    console.log(`[pullPipeline] PR #${pr_number} upserted (project: ${project.id})`);
+    logger.info(`[pullPipeline] PR #${pr_number} upserted (project: ${project.id})`);
     return pull;
   } catch (err) {
-    console.error(`[pullPipeline] handlePrAgentSink failed:`, err.message);
+    logger.error(`[pullPipeline] handlePrAgentSink failed:`, err.message);
     return null;
   }
 }

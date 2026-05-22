@@ -7,6 +7,8 @@ import {
   reassignChecklistPhaseIds
 } from './stageChecklist.js';
 import { todayText } from './dailyBrief.js';
+import logger from '../logger.js';
+
 
 const ownerProfiles = [
   { name: '胡佳涛', keywords: ['后端', 'api', 'webhook', 'github', '数据库', '架构', '安全', '签名'] },
@@ -155,7 +157,7 @@ export async function generatePlan(goal, existingMembers = []) {
     if (Array.isArray(tasks) && tasks.length > 0) {
       return tasks.map((task, index) => normalizeGeneratedTask(task, index));
     }
-    console.warn('[Planner] LLM 输出解析失败，降级到规则引擎');
+    logger.warn('[Planner] LLM 输出解析失败，降级到规则引擎');
   }
   return generatePlanWithRules(goal, existingMembers);
 }

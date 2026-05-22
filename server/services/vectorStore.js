@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 // server/services/vectorStore.js
 // P2: sqlite-vec + 真正的 RAG（替换 ORDER BY confidence 假 RAG）
 //
@@ -128,10 +129,10 @@ export async function initVectorStore(db) {
     `);
 
     _vecReady = true;
-    console.log(`[vectorStore] sqlite-vec loaded (${DIM}d); memory_vec ready`);
+    logger.info(`[vectorStore] sqlite-vec loaded (${DIM}d); memory_vec ready`);
     return { supported: true };
   } catch (err) {
-    console.warn('[vectorStore] sqlite-vec init failed, gracefully degrading:', err.message);
+    logger.warn('[vectorStore] sqlite-vec init failed, gracefully degrading:', err.message);
     _vecReady = false;
     return { supported: false };
   }
@@ -158,7 +159,7 @@ export function indexMemoryEntry(db, { memoryId, text }) {
     db.prepare('DELETE FROM memory_vec WHERE rowid = ?').run(memoryId);
     db.prepare('INSERT INTO memory_vec(rowid, embedding) VALUES (?, ?)').run(memoryId, vecJson);
   } catch (err) {
-    console.warn(`[vectorStore] indexMemoryEntry(${memoryId}) failed:`, err.message);
+    logger.warn(`[vectorStore] indexMemoryEntry(${memoryId}) failed:`, err.message);
   }
 }
 
@@ -185,10 +186,10 @@ export function rebuildMemoryIndex(db, tenantId = 'default') {
         indexed++;
       }
     }
-    if (indexed > 0) console.log(`[vectorStore] rebuilt ${indexed} missing vectors (tenant=${tenantId})`);
+    if (indexed > 0) logger.info(`[vectorStore] rebuilt ${indexed} missing vectors (tenant=${tenantId})`);
     return { indexed };
   } catch (err) {
-    console.warn('[vectorStore] rebuildMemoryIndex failed:', err.message);
+    logger.warn('[vectorStore] rebuildMemoryIndex failed:', err.message);
     return { indexed: 0 };
   }
 }
@@ -254,7 +255,7 @@ export function searchSimilarMemory(db, { tenantId, query, projectId, limit = 10
       _vecDistance: distMap.get(r.id) ?? null,
     }));
   } catch (err) {
-    console.warn('[vectorStore] searchSimilarMemory failed, falling back:', err.message);
+    logger.warn('[vectorStore] searchSimilarMemory failed, falling back:', err.message);
     return null; // 降级信号
   }
 }

@@ -10,6 +10,8 @@
 //   sendCard     → Header + Section + Actions（Button blocks）
 
 import { NotificationAdapter } from './base.js';
+import logger from '../logger.js';
+
 
 // Slack mrkdwn 转换规则（与标准 Markdown 差异）
 function toSlackMrkdwn(markdown) {
@@ -176,21 +178,21 @@ export class SlackAdapter extends NotificationAdapter {
               if (res.statusCode === 200 && data === 'ok') {
                 resolve(true);
               } else {
-                console.warn(`[SlackAdapter] webhook error ${res.statusCode}: ${data}`);
+                logger.warn(`[SlackAdapter] webhook error ${res.statusCode}: ${data}`);
                 resolve(false);
               }
             });
           }
         );
         req.on('error', (e) => {
-          console.error('[SlackAdapter] webhook request error:', e.message);
+          logger.error('[SlackAdapter] webhook request error:', e.message);
           resolve(false);
         });
         req.write(body);
         req.end();
       });
     } catch (e) {
-      console.error('[SlackAdapter] sendViaWebhook error:', e.message);
+      logger.error('[SlackAdapter] sendViaWebhook error:', e.message);
       return false;
     }
   }
@@ -221,7 +223,7 @@ export class SlackAdapter extends NotificationAdapter {
                 if (json.ok) {
                   resolve(true);
                 } else {
-                  console.warn(`[SlackAdapter] API error: ${json.error}`);
+                  logger.warn(`[SlackAdapter] API error: ${json.error}`);
                   resolve(false);
                 }
               } catch {
@@ -231,14 +233,14 @@ export class SlackAdapter extends NotificationAdapter {
           }
         );
         req.on('error', (e) => {
-          console.error('[SlackAdapter] API request error:', e.message);
+          logger.error('[SlackAdapter] API request error:', e.message);
           resolve(false);
         });
         req.write(body);
         req.end();
       });
     } catch (e) {
-      console.error('[SlackAdapter] sendViaApi error:', e.message);
+      logger.error('[SlackAdapter] sendViaApi error:', e.message);
       return false;
     }
   }

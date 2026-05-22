@@ -10,6 +10,8 @@
 
 import { getDb } from '../db/index.js';
 import { searchSimilarMemory } from './vectorStore.js';
+import logger from '../logger.js';
+
 
 const MAX_MEMORY_CHARS = 8000; // 单次注入的 project_memory 字符上限
 
@@ -183,7 +185,7 @@ export async function recordAgentOutcome({ tenantId, taskId, agentId, outcome, e
   `).run(tenantId, task.project_id, kind, body, outcome === 'success' ? 0.6 : 0.8,
     'auto-extracted', new Date().toISOString());
 
-  console.log(`[contextInjector] recorded ${kind} for task ${taskId}`);
+  logger.info(`[contextInjector] recorded ${kind} for task ${taskId}`);
 }
 
 function tryParseJson(str, fallback) {

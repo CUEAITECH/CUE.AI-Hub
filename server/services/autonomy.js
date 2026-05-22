@@ -408,14 +408,7 @@ export async function adjustAutonomy({ tenantId, actorId, newLevel, reason, chan
 export function checkCircuitBreaker({ tenantId, actorId }) {
   const db = getDb();
 
-  const recent = db.prepare(`
-    SELECT polarity FROM ai_outcomes
-    WHERE tenant_id = ? AND observer != 'human-label'
-    ORDER BY observed_at DESC
-    LIMIT 10
-  `).all(tenantId);
-
-  // 过滤出属于该 actor 的 outcomes（通过 action_ref_id 关联 tasks.actor_id）
+  // 通过 action_ref_id 关联 tasks.actor_id，筛选属于该 actor 的 outcomes
   const actorOutcomes = db.prepare(`
     SELECT o.polarity
     FROM ai_outcomes o

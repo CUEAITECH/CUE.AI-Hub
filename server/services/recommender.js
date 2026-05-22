@@ -14,6 +14,8 @@ import { callClaude } from './claude.js';
 import { getDb } from '../db/index.js';
 import { getRankerWeights } from './weeklyLearning.js';
 import { searchSimilarMemory } from './vectorStore.js';
+import logger from '../logger.js';
+
 
 // ── Phase 1: 特征提取 ────────────────────────────────────────
 
@@ -324,7 +326,7 @@ export async function recommendForTask({ taskId, tenantId, options = {} }) {
   try {
     dynamicWeights = getRankerWeights(tenantId);
   } catch (err) {
-    console.warn('[recommender] getRankerWeights failed, using defaults:', err.message);
+    logger.warn('[recommender] getRankerWeights failed, using defaults:', err.message);
   }
 
   // ── Phase 1 + 2：特征提取 + 评分 ───────────────────────────
@@ -400,7 +402,7 @@ export async function batchRecommend({ tenantId, projectId, options = {} }) {
       const r = await recommendForTask({ taskId: id, tenantId, options: { ...options, explain: false } });
       if (r.recommendations.length > 0) results.push(r);
     } catch (err) {
-      console.warn(`[recommender] batch skip task ${id}: ${err.message}`);
+      logger.warn(`[recommender] batch skip task ${id}: ${err.message}`);
     }
   }
 

@@ -18,6 +18,8 @@ import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
 import Graph from 'graphology';
 import pagerank from 'graphology-pagerank';
+import logger from '../logger.js';
+
 
 const PRIORITY_MULTIPLIER = { P0: 1.5, P1: 1.3, P2: 1.0, P3: 0.8 };
 const PAGERANK_ALPHA = 0.85;  // damping factor（Haveliwala 2002）
@@ -216,7 +218,7 @@ export function scanRisks({ tenantId, projectId }) {
         riskMap.set(taskId, { ...riskInfo, score: Math.round(amplified * 10) / 10 });
       }
     } catch (prErr) {
-      console.warn('[riskPropagation] pagerank failed, skipping propagation:', prErr.message);
+      logger.warn('[riskPropagation] pagerank failed, skipping propagation:', prErr.message);
     }
   }
 
@@ -275,7 +277,7 @@ export async function propagateRiskSignals({ tenantId, projectId, threshold = 7 
     updated++;
   }
 
-  console.log(`[riskPropagation] propagated ${updated} risk signals`);
+  logger.info(`[riskPropagation] propagated ${updated} risk signals`);
   return { updated, threshold, critical: criticalRisks.length };
 }
 

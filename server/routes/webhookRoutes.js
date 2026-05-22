@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 // 进行中的项目级任务（防止 webhook 突发流量导致 LLM 调用堆积）
 const inFlightDocsSync = new Set();
 const inFlightPlanAdjust = new Set();
@@ -111,7 +112,7 @@ export function createWebhookRoutes({
       const prNumber = json.pull_request?.number;
       if (repoFull && prNumber) {
         upsertPullFromWebhook(repoFull, prNumber, json.action)
-          .catch((err) => console.error('[Webhook/PR]', err.message));
+          .catch((err) => logger.error('[Webhook/PR]', err.message));
       }
     }
 
@@ -156,11 +157,11 @@ export function createWebhookRoutes({
         generatePlanAdjustment(boundActivities, nextStore).then((adjustment) => {
           if (!adjustment) return null;
           return persistPlanAdjustment(adjustment, boundActivities, 'github-webhook');
-        }).catch((err) => console.error('[PlanAdjust]', err.message)).finally(() => {
+        }).catch((err) => logger.error('[PlanAdjust]', err.message)).finally(() => {
           inFlightPlanAdjust.delete(planKey);
         });
       } else {
-        console.log(`[Webhook] plan-adjust 跳过 ${planKey}：已有进行中任务`);
+        logger.info(`[Webhook] plan-adjust 跳过 ${planKey}：已有进行中任务`);
       }
     }
 
@@ -177,14 +178,14 @@ export function createWebhookRoutes({
       );
       for (const project of candidateProjects) {
         if (inFlightDocsSync.has(project.id)) {
-          console.log(`[Webhook] docs sync 跳过 ${project.githubFullRepo}：已有进行中任务`);
+          logger.info(`[Webhook] docs sync 跳过 ${project.githubFullRepo}：已有进行中任务`);
           continue;
         }
         inFlightDocsSync.add(project.id);
         importDocsForProject(project, project.id).then((result) => {
-          console.log(`[Webhook] docs/ 变更触发 sync-docs：${project.githubFullRepo} — 新增任务 ${result.imported || 0}，phases ${result.phases || 0}`);
+          logger.info(`[Webhook] docs/ 变更触发 sync-docs：${project.githubFullRepo} — 新增任务 ${result.imported || 0}，phases ${result.phases || 0}`);
         }).catch((err) => {
-          console.error(`[Webhook] docs sync 失败 ${project.githubFullRepo}：`, err.message);
+          logger.error(`[Webhook] docs sync 失败 ${project.githubFullRepo}：`, err.message);
         }).finally(() => {
           inFlightDocsSync.delete(project.id);
         });

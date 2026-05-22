@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 export function createReportRoutes({
   loadStore,
   updateStore,
@@ -184,7 +185,7 @@ ${alerts.filter((alert) => alert.severity === 'P1').map((alert) => `- ${alert.ti
       if (isWeComAvailable()) {
         const wecomMsg = buildMeetingSummaryWeComMsg(date, todayAssignments, summaryText || '', hubUrl);
         wecomSent = await sendWeComMarkdown(wecomMsg).catch((err) => {
-          console.error('[WeCom] 会后总结推送失败:', err.message);
+          logger.error('[WeCom] 会后总结推送失败:', err.message);
           return false;
         });
       }

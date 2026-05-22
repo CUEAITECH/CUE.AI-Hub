@@ -5,6 +5,8 @@
 // 接口与 githubApi.js 保持 100% 兼容，可直接替换
 
 import { Octokit } from '@octokit/rest';
+import logger from '../logger.js';
+
 
 // ── 作者映射（GitHub login → 中文成员名） ─────────────────
 const authorMap = [
@@ -35,8 +37,8 @@ export function getOctokit() {
       log: {
         debug: () => {},
         info: () => {},
-        warn: console.warn,
-        error: console.error,
+        warn: (...args) => logger.warn(args.join(' ')),
+        error: (...args) => logger.error(args.join(' ')),
       }
     });
   }
@@ -257,7 +259,7 @@ export async function scanGitHubProject(project, options = {}) {
         }
         diff = accumulated;
       } catch (err) {
-        console.warn(`[githubClient] 无法获取 commit ${sha.slice(0, 7)} 详情:`, err.message);
+        logger.warn(`[githubClient] 无法获取 commit ${sha.slice(0, 7)} 详情:`, err.message);
       }
     } else {
       files = (raw.files || []).map(f => f.filename || f);

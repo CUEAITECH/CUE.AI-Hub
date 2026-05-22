@@ -15,6 +15,8 @@
 
 import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
+import logger from '../logger.js';
+
 
 // ══════════════════════════════════════════════════════════════
 // 1. 记录单条 Outcome
@@ -337,7 +339,7 @@ export async function batchAutoLabel({ tenantId, since }) {
       const result = await autoLabelTaskOutcome({ tenantId, taskId: id });
       if (result !== null) tasksLabeled++;
     } catch (err) {
-      console.warn(`[outcomeLedger] autoLabel task ${id}: ${err.message}`);
+      logger.warn(`[outcomeLedger] autoLabel task ${id}: ${err.message}`);
     }
   }
 
@@ -362,10 +364,10 @@ export async function batchAutoLabel({ tenantId, since }) {
       await autoLabelReviewOutcome({ tenantId, reviewId: id });
       reviewsLabeled++;
     } catch (err) {
-      console.warn(`[outcomeLedger] autoLabel review ${id}: ${err.message}`);
+      logger.warn(`[outcomeLedger] autoLabel review ${id}: ${err.message}`);
     }
   }
 
-  console.log(`[outcomeLedger] batchAutoLabel: ${tasksLabeled} tasks + ${reviewsLabeled} reviews labeled`);
+  logger.info(`[outcomeLedger] batchAutoLabel: ${tasksLabeled} tasks + ${reviewsLabeled} reviews labeled`);
   return { tasksLabeled, reviewsLabeled };
 }

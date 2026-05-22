@@ -18,6 +18,8 @@
 import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
 import { recordOutcome } from './outcomeLedger.js';
+import logger from '../logger.js';
+
 
 // ══════════════════════════════════════════════════════════════
 // 表初始化（启动时检查，不依赖 schema.sql 的手动维护）
@@ -49,7 +51,7 @@ export function ensureLearningQueueTable() {
   // Schema migration：为已存在的旧表添加 ai_confidence 列（幂等）
   try {
     db.prepare('ALTER TABLE learning_queue ADD COLUMN ai_confidence REAL DEFAULT 0.5').run();
-    console.log('[activeLearning] migrated: learning_queue.ai_confidence added');
+    logger.info('[activeLearning] migrated: learning_queue.ai_confidence added');
   } catch { /* 列已存在，跳过 */ }
 }
 
@@ -116,17 +118,43 @@ export function dequeue({ tenantId, status = 'pending', actionType, limit = 20, 
   const countQ = q.replace('SELECT *', 'SELECT COUNT(*) as c');
   const total = db.prepare(countQ).get(...params).c;
 
-  // Uncertainty sampling：ai_confidence 越低（越不确定）越优先标注
-  // 同等置信度下，业务优先级高的先处理
-  q += ' ORDER BY ai_confidence ASC, priority DESC, created_at ASC LIMIT ? OFFSET ?';
-  params.push(limit, offset);
+  // ── UCB1 采样排序（Auer 2002，Multi-armed Bandit）──────────────
+  // UCB1 score = (1 - ai_confidence) + sqrt(2 * ln(N) / max(n_i, 1))
+  //   (1 - ai_confidence) → 不确定性项（越不确定越高）
+  //   sqrt(2 * ln(N) / n_i) → 探索项（访问少的 action_type 被优先采样）
+  // N = 总条目数，n_i = 该 action_type 的条目数
+  // 退化为纯 uncertainty sampling 当所有 action_type n_i 相同时
+  const allItems = db.prepare(q + ' ORDER BY created_at ASC').all(...params);
 
-  const items = db.prepare(q).all(...params).map(row => ({
+  // 统计各 action_type 数量（用于探索项）
+  const typeCounts = {};
+  for (const row of allItems) {
+    typeCounts[row.action_type] = (typeCounts[row.action_type] || 0) + 1;
+  }
+  const N = allItems.length;
+
+  // 计算 UCB1 得分并排序
+  const scored = allItems.map(row => {
+    const ni = typeCounts[row.action_type] || 1;
+    const uncertainty = 1 - (row.ai_confidence ?? 0.5);
+    const exploration  = N > 1 ? Math.sqrt(2 * Math.log(N) / ni) : 0;
+    return { ...row, _ucb1: uncertainty + exploration };
+  });
+
+  scored.sort((a, b) => {
+    if (Math.abs(b._ucb1 - a._ucb1) > 0.001) return b._ucb1 - a._ucb1;
+    // 同分：业务优先级高的先处理
+    const pOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
+    return (pOrder[a.priority] ?? 9) - (pOrder[b.priority] ?? 9);
+  });
+
+  const paged = scored.slice(offset, offset + limit).map(row => ({
     ...row,
     metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
+    _ucb1: parseFloat(row._ucb1.toFixed(4)), // 保留供调试
   }));
 
-  return { items, total };
+  return { items: paged, total };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -303,6 +331,6 @@ export async function autoEnqueue({ tenantId, since }) {
     if (id !== null) enqueued++;
   }
 
-  console.log(`[activeLearning] autoEnqueue: ${enqueued} items added to queue`);
+  logger.info(`[activeLearning] autoEnqueue: ${enqueued} items added to queue`);
   return { enqueued };
 }

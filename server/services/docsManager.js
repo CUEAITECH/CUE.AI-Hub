@@ -12,6 +12,8 @@
 import { callClaude, parseJsonOutput } from './claude.js';
 import { createId, loadStore, updateStore } from '../store.js';
 import { defaultStageChecklist, reassignChecklistPhaseIds } from './stageChecklist.js';
+import logger from '../logger.js';
+
 
 const API_BASE = 'https://api.github.com';
 const PROGRESS_DOC_PATH = 'docs/阶段进度追踪.md';
@@ -134,11 +136,11 @@ export async function parseDocsForTasks(docs) {
 
   // 文档任务解析容易输出长 JSON 数组（40+ 任务、详细描述），把 max_tokens 拉到 8192 防止截断
   const raw = await callClaude(PARSE_SYSTEM_PROMPT, userPrompt, { maxTokens: 8192 });
-  if (!raw) { console.error('[DocsManager] callClaude 返回 null，API key 缺失或调用失败'); return []; }
+  if (!raw) { logger.error('[DocsManager] callClaude 返回 null，API key 缺失或调用失败'); return []; }
 
   const parsed = extractJsonArray(raw);
   if (!parsed) {
-    console.error('[DocsManager] LLM 输出解析失败，原始内容前 500 字:', raw.slice(0, 500));
+    logger.error('[DocsManager] LLM 输出解析失败，原始内容前 500 字:', raw.slice(0, 500));
     return [];
   }
   return Array.isArray(parsed) ? parsed : [];
@@ -181,15 +183,15 @@ export function extractJsonArray(raw) {
           if (repaired) {
             try {
               const result = JSON.parse(repaired);
-              console.warn('[DocsManager] JSON 经过自动修复后解析成功（建议改进 LLM prompt）');
+              logger.warn('[DocsManager] JSON 经过自动修复后解析成功（建议改进 LLM prompt）');
               return result;
             } catch { /* 继续报错 */ }
           }
-          console.error('[DocsManager] JSON.parse 失败:', e.message);
+          logger.error('[DocsManager] JSON.parse 失败:', e.message);
           const m = e.message.match(/position\s+(\d+)/);
           if (m) {
             const pos = Number(m[1]);
-            console.error('[DocsManager] 错误位置上下文:', JSON.stringify(jsonStr.slice(Math.max(0, pos - 80), pos + 80)));
+            logger.error('[DocsManager] 错误位置上下文:', JSON.stringify(jsonStr.slice(Math.max(0, pos - 80), pos + 80)));
           }
           return null;
         }
@@ -665,7 +667,7 @@ export async function writeProgressToGitHub(owner, repo, markdown) {
     throw new Error(`写入文档失败 ${res.status}: ${err.slice(0, 200)}`);
   }
 
-  console.log(`[DocsManager] 写回成功: ${owner}/${repo}/${PROGRESS_DOC_PATH}`);
+  logger.info(`[DocsManager] 写回成功: ${owner}/${repo}/${PROGRESS_DOC_PATH}`);
   return true;
 }
 

@@ -10,6 +10,8 @@
 // 环境变量：FEISHU_WEBHOOK_URL
 
 import { NotificationAdapter } from './base.js';
+import logger from '../logger.js';
+
 
 // 飞书 post 富文本节点构建器
 function textNode(content) {
@@ -237,7 +239,7 @@ export class FeishuAdapter extends NotificationAdapter {
                 if (json.code === 0 || json.StatusCode === 0) {
                   resolve(true);
                 } else {
-                  console.warn(`[FeishuAdapter] API error code=${json.code}: ${json.msg || JSON.stringify(json)}`);
+                  logger.warn(`[FeishuAdapter] API error code=${json.code}: ${json.msg || JSON.stringify(json)}`);
                   resolve(false);
                 }
               } catch {
@@ -245,7 +247,7 @@ export class FeishuAdapter extends NotificationAdapter {
                 if (res.statusCode >= 200 && res.statusCode < 300) {
                   resolve(true);
                 } else {
-                  console.warn(`[FeishuAdapter] HTTP ${res.statusCode}: ${data}`);
+                  logger.warn(`[FeishuAdapter] HTTP ${res.statusCode}: ${data}`);
                   resolve(false);
                 }
               }
@@ -253,14 +255,14 @@ export class FeishuAdapter extends NotificationAdapter {
           }
         );
         req.on('error', (e) => {
-          console.error('[FeishuAdapter] request error:', e.message);
+          logger.error('[FeishuAdapter] request error:', e.message);
           resolve(false);
         });
         req.write(body);
         req.end();
       });
     } catch (e) {
-      console.error('[FeishuAdapter] postWebhook error:', e.message);
+      logger.error('[FeishuAdapter] postWebhook error:', e.message);
       return false;
     }
   }

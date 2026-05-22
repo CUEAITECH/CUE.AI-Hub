@@ -4,6 +4,8 @@ import { Kysely, SqliteDialect } from 'kysely';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import logger from '../logger.js';
+
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = join(__dirname, '..', 'data', 'v2.db');
@@ -37,7 +39,7 @@ export function initDb() {
     dialect: new SqliteDialect({ database: _db })
   });
 
-  console.log('[DB] initialized:', DB_PATH);
+  logger.info('[DB] initialized:', DB_PATH);
   return { db: _db, kysely: _kysely };
 }
 

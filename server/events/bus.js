@@ -6,6 +6,8 @@ import { EventEmitter } from 'node:events';
 import { validateEvent } from './types.js';
 import { dbWrite } from '../db/actor.js';
 import { getDb } from '../db/index.js';
+import logger from '../logger.js';
+
 
 const emitter = new EventEmitter();
 emitter.setMaxListeners(50);
@@ -42,7 +44,7 @@ export async function emit(type, payload, meta = {}) {
     emitter.emit(type, validated);
     emitter.emit('*', type, validated);  // 通配符订阅
   } catch (err) {
-    console.error(`[EventBus] subscriber error for ${type}:`, err.message);
+    logger.error(`[EventBus] subscriber error for ${type}:`, err.message);
   }
 }
 
@@ -58,7 +60,7 @@ export function on(types, handler) {
       try {
         await handler(payload);
       } catch (err) {
-        console.error(`[EventBus] handler error for ${t}:`, err.message);
+        logger.error(`[EventBus] handler error for ${t}:`, err.message);
       }
     });
   }
@@ -82,7 +84,7 @@ export async function replayUnprocessed() {
     SELECT * FROM events WHERE processed_at IS NULL ORDER BY id ASC LIMIT 100
   `).all();
 
-  console.log(`[EventBus] replaying ${pending.length} unprocessed events`);
+  logger.info(`[EventBus] replaying ${pending.length} unprocessed events`);
   for (const row of pending) {
     try {
       const payload = JSON.parse(row.payload_json);
@@ -90,7 +92,7 @@ export async function replayUnprocessed() {
       emitter.emit('*', row.type, payload);
       db.prepare('UPDATE events SET processed_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
     } catch (err) {
-      console.error(`[EventBus] replay failed for event ${row.id}:`, err.message);
+      logger.error(`[EventBus] replay failed for event ${row.id}:`, err.message);
     }
   }
 }

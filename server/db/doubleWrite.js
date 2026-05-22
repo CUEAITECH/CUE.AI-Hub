@@ -3,6 +3,8 @@
 // 7 天后确认一致性，运行 cutover.js 删除此层
 
 import { loadStore, saveStore } from '../store.js';
+import logger from '../logger.js';
+
 
 let _enabled = process.env.DOUBLE_WRITE !== 'false';
 
@@ -36,6 +38,6 @@ export async function syncToJsonStore(table, id, data) {
     await saveStore(store);
   } catch (err) {
     // 双写失败不应阻断主流程
-    console.error('[doubleWrite] sync failed:', err.message);
+    logger.error('[doubleWrite] sync failed:', err.message);
   }
 }

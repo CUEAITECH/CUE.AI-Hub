@@ -15,6 +15,8 @@ import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
 import { computeHealth } from './observability.js';
 import { scanRisks } from './riskPropagation.js';
+import logger from '../logger.js';
+
 
 // ══════════════════════════════════════════════════════════════
 // A. Runbook 库
@@ -318,7 +320,7 @@ export async function runAlertCycle({ tenantId, cooldownHours = 4 }) {
     const id = await persistAlert({ tenantId, alert, cooldownHours });
     if (id !== null) {
       persisted++;
-      console.log(`[runbook] 📢 ${alert.severity.toUpperCase()}: ${alert.runbookName} (metric=${alert.metric}, value=${alert.value})`);
+      logger.info(`[runbook] 📢 ${alert.severity.toUpperCase()}: ${alert.runbookName} (metric=${alert.metric}, value=${alert.value})`);
     } else {
       suppressed++;
     }

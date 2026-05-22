@@ -6,6 +6,8 @@ import { on } from '../events/bus.js';
 import { dbWrite } from '../db/actor.js';
 import { syncToJsonStore } from '../db/doubleWrite.js';
 import { getDb } from '../db/index.js';
+import logger from '../logger.js';
+
 
 // ── 任务状态机（显式枚举，见 Part I 决策 6）───────────────
 const VALID_TRANSITIONS = {
@@ -32,7 +34,7 @@ on('task.claimed', async ({ tenantId, taskId, actorId }) => {
     const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND tenant_id = ?').get(taskId, tenantId);
     if (!task) return null;
     if (!canTransition(task.state, 'claimed')) {
-      console.warn(`[reducer] task.claimed blocked: ${task.state} → claimed`);
+      logger.warn(`[reducer] task.claimed blocked: ${task.state} → claimed`);
       return null;
     }
     const ts = now();
@@ -50,7 +52,7 @@ on('task.state.changed', async ({ tenantId, taskId, from, to }) => {
     const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND tenant_id = ?').get(taskId, tenantId);
     if (!task || task.state !== from) return null;
     if (!canTransition(from, to)) {
-      console.warn(`[reducer] invalid transition ${from} → ${to} for ${taskId}`);
+      logger.warn(`[reducer] invalid transition ${from} → ${to} for ${taskId}`);
       return null;
     }
     const ts = now();
@@ -123,13 +125,13 @@ on('agent.task.accepted', async ({ tenantId, agentId, taskId }) => {
     const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND tenant_id = ?').get(taskId, tenantId);
     if (!task) return;
     if (!canTransition(task.state, 'claimed') && task.state !== 'claimed') {
-      console.warn(`[reducer] agent.task.accepted: unexpected state ${task.state} for ${taskId}`);
+      logger.warn(`[reducer] agent.task.accepted: unexpected state ${task.state} for ${taskId}`);
       return;
     }
     if (task.state === 'claimed') return; // 幂等：已经 claimed 则跳过
     db.prepare('UPDATE tasks SET actor_id = ?, state = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
       .run(agentId, 'claimed', now(), taskId, tenantId);
-    console.log(`[reducer] agent ${agentId} accepted task ${taskId}`);
+    logger.info(`[reducer] agent ${agentId} accepted task ${taskId}`);
   });
 });
 
@@ -172,7 +174,7 @@ on('agent.task.completed', async ({ tenantId, agentId, taskId, artifacts, acStat
       now(), now()
     );
 
-    console.log(`[reducer] agent ${agentId} completed task ${taskId}, artifacts: ${(artifacts || []).length}`);
+    logger.info(`[reducer] agent ${agentId} completed task ${taskId}, artifacts: ${(artifacts || []).length}`);
   });
 });
 
@@ -187,7 +189,7 @@ on('agent.task.blocked', async ({ tenantId, agentId, taskId, reason }) => {
     if (!task) return;
     db.prepare('UPDATE tasks SET signal = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
       .run(`🚧 [${agentId}] ${reason || '被阻塞'}`, now(), taskId, tenantId);
-    console.warn(`[reducer] agent ${agentId} blocked on task ${taskId}: ${reason}`);
+    logger.warn(`[reducer] agent ${agentId} blocked on task ${taskId}: ${reason}`);
   });
 });
 
@@ -202,7 +204,7 @@ on('agent.task.needs-human', async ({ tenantId, agentId, taskId, question }) => 
     if (!task) return;
     db.prepare('UPDATE tasks SET signal = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
       .run(`❓ [${agentId}] ${question || '需要人工确认'}`, now(), taskId, tenantId);
-    console.log(`[reducer] agent ${agentId} needs human for task ${taskId}`);
+    logger.info(`[reducer] agent ${agentId} needs human for task ${taskId}`);
   });
 });
 
@@ -218,8 +220,8 @@ on('standup.submitted', async ({ tenantId, actorId, date, yesterday, today, bloc
         (id, tenant_id, date, actor_id, yesterday, today, blockers, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, tenantId, date, actorId, yesterday, today, blockers || null, 'submitted', now());
-    console.log(`[reducer] standup submitted by ${actorId} for ${date}`);
+    logger.info(`[reducer] standup submitted by ${actorId} for ${date}`);
   });
 });
 
-console.log('[reducer] ✅ registered (W4: agent lifecycle + standup)');
+logger.info('[reducer] ✅ registered (W4: agent lifecycle + standup)');

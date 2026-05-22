@@ -15,6 +15,8 @@ import { callClaude } from './claude.js';
 import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
 import { searchSimilarMemory } from './vectorStore.js';
+import logger from '../logger.js';
+
 
 const PR_TEMPLATE = `## 变更说明
 
@@ -118,7 +120,7 @@ ${memory.map(m => `[${m.kind}] ${m.body}`).join('\n') || '（暂无）'}
       source = 'template';
     }
   } catch (err) {
-    console.warn('[prPromptGenerator] LLM 调用失败，降级到模板:', err.message);
+    logger.warn('[prPromptGenerator] LLM 调用失败，降级到模板:', err.message);
     body = buildTemplateDescription({ task, acItems, memory, branchName, artifacts });
     source = 'template';
   }
@@ -137,7 +139,7 @@ ${memory.map(m => `[${m.kind}] ${m.body}`).join('\n') || '（暂无）'}
     });
   }
 
-  console.log(`[prPromptGenerator] generated PR description for ${taskId} via ${source}`);
+  logger.info(`[prPromptGenerator] generated PR description for ${taskId} via ${source}`);
   return { body, source };
 }
 
@@ -154,7 +156,7 @@ export async function injectPRDescription({ tenantId, pullId, taskId, branchName
 
   // 如果已有内容且超过 50 字，视为已人工填写，跳过
   if (pull.body && pull.body.length > 50) {
-    console.log(`[prPromptGenerator] pull ${pullId} already has body, skipping injection`);
+    logger.info(`[prPromptGenerator] pull ${pullId} already has body, skipping injection`);
     return { skipped: true };
   }
 

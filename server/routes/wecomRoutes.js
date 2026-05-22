@@ -5,6 +5,7 @@ import {
   normalizeAttendanceRecord,
   parseAttendanceMessage
 } from '../services/scoring.js';
+import logger from '../logger.js';
 
 function formatShanghaiTime(value) {
   if (!value) return '暂无';
@@ -555,7 +556,7 @@ export function createWeComRoutes({
           }
           return draft;
         }))
-        .catch((err) => console.error('[Brief/WeComClaim]', err.message));
+        .catch((err) => logger.error('[Brief/WeComClaim]', err.message));
       sendJson(res, 200, { result: `✅ ${owner} 已认领「${task.title}」，任务细则正在生成，稍后可在 Hub 查看。` });
       return true;
     }

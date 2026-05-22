@@ -11,7 +11,9 @@
     "test:regression": "node scripts/regression-tests.mjs",
     "test:invariants": "node scripts/test-invariants.mjs",
     "test:event-replay": "node scripts/test-event-replay.mjs",
-    "test:all": "npm run test:regression && npm run test:invariants && npm run test:event-replay"
+    "test:all": "npm run test:regression && npm run test:invariants && npm run test:event-replay",
+    "seed:memory": "node scripts/seed-project-memory.mjs",
+    "seed:memory:dry": "node scripts/seed-project-memory.mjs --dry-run"
   },
   "engines": {
     "node": ">=18"

@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 /**
  * GitHub REST API v3 封装
  * 用于从远端仓库拉取 commits、文件变更和 patch，替代本地 git 命令
@@ -138,7 +139,7 @@ export async function scanGitHubProject(project, options = {}) {
         }
         diff = accumulated;
       } catch (err) {
-        console.warn(`[GitHub API] 无法获取 commit ${sha.slice(0, 7)} 详情:`, err.message);
+        logger.warn(`[GitHub API] 无法获取 commit ${sha.slice(0, 7)} 详情:`, err.message);
       }
     } else {
       // 不拉 diff 时，尝试从列表中获取文件名（列表返回的 files 字段视 API 版本而定）

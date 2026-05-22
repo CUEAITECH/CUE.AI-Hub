@@ -4,6 +4,8 @@
 
 import PQueue from 'p-queue';
 import { getDb } from './index.js';
+import logger from '../logger.js';
+
 
 const writeQueue = new PQueue({ concurrency: 1 });
 
@@ -25,7 +27,7 @@ export async function dbWrite(label, fn) {
     try {
       return db.transaction(fn)(db);
     } catch (err) {
-      console.error(`[actor] write failed (${label}):`, err.message);
+      logger.error(`[actor] write failed (${label}):`, err.message);
       throw err;
     }
   }, { priority: 0 });

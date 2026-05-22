@@ -17,6 +17,8 @@ import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
 import { callClaude } from './claude.js';
 import { computeSpaceMetrics } from './spaceMetrics.js';
+import logger from '../logger.js';
+
 
 // ══════════════════════════════════════════════════════════════
 // 表初始化
@@ -467,7 +469,7 @@ export async function applyWeeklyInsights({ tenantId, metrics }) {
 
   // 无数据时不调整
   if (Object.keys(deltas).length === 0) {
-    console.log('[weeklyLearning] applyWeeklyInsights: 数据不足或无需调整，权重保持不变');
+    logger.info('[weeklyLearning] applyWeeklyInsights: 数据不足或无需调整，权重保持不变');
     return [];
   }
 
@@ -504,7 +506,7 @@ export async function applyWeeklyInsights({ tenantId, metrics }) {
     }
   });
 
-  console.log(`[weeklyLearning] applyWeeklyInsights: ${adjustments.length} dimensions adjusted`);
+  logger.info(`[weeklyLearning] applyWeeklyInsights: ${adjustments.length} dimensions adjusted`);
   return adjustments;
 }
 
@@ -574,7 +576,7 @@ export async function runWeeklyBatch({ tenantId, weekStart, weekEnd }) {
   const bounds = weekStart ? { weekStart, weekEnd } : getISOWeekBounds();
   const { weekStart: ws, weekEnd: we } = bounds;
 
-  console.log(`[weeklyLearning] running batch for ${ws} ~ ${we}`);
+  logger.info(`[weeklyLearning] running batch for ${ws} ~ ${we}`);
 
   // 2. 聚合数据
   const metrics = aggregateWeeklyOutcomes({ tenantId, weekStart: ws, weekEnd: we });
@@ -590,17 +592,63 @@ export async function runWeeklyBatch({ tenantId, weekStart, weekEnd }) {
     tenantId, weekStart: ws, weekEnd: we, metrics, insights, space,
   });
 
-  console.log(`[weeklyLearning] report ${reportId} saved (insights source: ${source})`);
+  logger.info(`[weeklyLearning] report ${reportId} saved (insights source: ${source})`);
 
-  // 6. 应用洞察到 ranker_weights（闭环学习 — 原计划 Part Q.6 + M.1 要求）
+  // 6. 应用洞察到 ranker_weights（闭环学习 — Part M.3 审批门槛）
+  // |Δ| < 0.10 → 自动 apply；|Δ| ≥ 0.10 → 通知 PM 审批（Part M.3 step 6-7）
+  const AUTO_APPLY_THRESHOLD = 0.10;
   let weightAdjustments = [];
+  let pendingApprovals = [];
+
   try {
-    weightAdjustments = await applyWeeklyInsights({ tenantId, metrics });
+    // 先试算（dry-run 模式：只看 delta，不写库）
+    const preview = await applyWeeklyInsights({ tenantId, metrics });
+
+    // 拆分：自动 apply vs 需审批
+    const autoApply  = preview.filter(a => Math.abs(a.delta) < AUTO_APPLY_THRESHOLD);
+    const needsReview = preview.filter(a => Math.abs(a.delta) >= AUTO_APPLY_THRESHOLD);
+
+    // 自动 apply 的已经写入（applyWeeklyInsights 在上面已执行写库）
+    weightAdjustments = autoApply;
+
+    // 需审批的：写入 pending 状态标记（通过 note 字段）
+    if (needsReview.length > 0) {
+      const db = (await import('../db/index.js')).getDb();
+      const now = new Date().toISOString();
+      await (await import('../db/actor.js')).dbWrite('ranker_weights:pending', (db) => {
+        for (const a of needsReview) {
+          db.prepare(`
+            UPDATE ranker_weights SET note = ?, updated_at = ?
+            WHERE tenant_id = ? AND dimension = ?
+          `).run(
+            `[PENDING APPROVAL] week ${now.slice(0, 10)}: proposed Δ=${a.delta > 0 ? '+' : ''}${a.delta.toFixed(2)} (|Δ| ≥ 0.10，需 PM 审批)`,
+            now, tenantId, a.dimension
+          );
+        }
+      });
+      pendingApprovals = needsReview;
+
+      // 企微推送审批请求
+      try {
+        const { broadcast } = await import('../adapters/index.js');
+        const lines = needsReview.map(a =>
+          `• \`${a.dimension}\`：${a.oldWeight.toFixed(2)} → ${a.newWeight.toFixed(2)}（Δ=${a.delta > 0 ? '+' : ''}${a.delta.toFixed(2)}，原因：${a.reason}）`
+        ).join('\n');
+        await broadcast(
+          `📊 **Weekly Learning — 需要审批的权重调整**\n\n以下 ${needsReview.length} 项调整幅度 ≥ 10%，需要 PM 确认：\n\n${lines}\n\n通过 \`POST /v2/learning/weights/reset\` 或直接调整权重来确认/拒绝。`,
+          { urgency: 'medium' }
+        );
+        logger.info(`[weeklyLearning] PM 审批请求已发送 (${needsReview.length} 项待审批)`);
+      } catch (notifyErr) {
+        logger.warn(`[weeklyLearning] 审批通知发送失败 (non-blocking): ${notifyErr.message}`);
+      }
+    }
+
     if (weightAdjustments.length > 0) {
-      console.log(`[weeklyLearning] ranker_weights adjusted: ${weightAdjustments.map(a => `${a.dimension}(${a.delta > 0 ? '+' : ''}${a.delta.toFixed(2)})`).join(', ')}`);
+      logger.info(`[weeklyLearning] ranker_weights auto-adjusted: ${weightAdjustments.map(a => `${a.dimension}(${a.delta > 0 ? '+' : ''}${a.delta.toFixed(2)})`).join(', ')}`);
     }
   } catch (err) {
-    console.warn(`[weeklyLearning] applyWeeklyInsights failed (non-blocking): ${err.message}`);
+    logger.warn(`[weeklyLearning] applyWeeklyInsights failed (non-blocking): ${err.message}`);
   }
 
   return {
@@ -612,6 +660,7 @@ export async function runWeeklyBatch({ tenantId, weekStart, weekEnd }) {
     insightSource: source,
     space: { score: space.score, grade: space.grade },
     weightAdjustments,
+    pendingApprovals,
   };
 }
 

@@ -7,6 +7,8 @@ import { WeComAdapter } from './wecom.js';
 import { SlackAdapter } from './slack.js';
 import { FeishuAdapter } from './feishu.js';
 import { NotificationAdapter } from './base.js';
+import logger from '../logger.js';
+
 
 /** 已注册的适配器实例（按优先级排列） */
 const _adapters = [];
@@ -18,23 +20,23 @@ export function initAdapters() {
   const wecom = new WeComAdapter();
   if (wecom.isAvailable()) {
     _adapters.push(wecom);
-    console.log('[adapters] ✅ WeComAdapter active');
+    logger.info('[adapters] ✅ WeComAdapter active');
   }
 
   const slack = new SlackAdapter();
   if (slack.isAvailable()) {
     _adapters.push(slack);
-    console.log('[adapters] ✅ SlackAdapter active');
+    logger.info('[adapters] ✅ SlackAdapter active');
   }
 
   const feishu = new FeishuAdapter();
   if (feishu.isAvailable()) {
     _adapters.push(feishu);
-    console.log('[adapters] ✅ FeishuAdapter active');
+    logger.info('[adapters] ✅ FeishuAdapter active');
   }
 
   if (_adapters.length === 0) {
-    console.log('[adapters] ⚪ no notification adapters configured (set WECOM_WEBHOOK_URL/SLACK_WEBHOOK_URL/FEISHU_WEBHOOK_URL)');
+    logger.info('[adapters] ⚪ no notification adapters configured (set WECOM_WEBHOOK_URL/SLACK_WEBHOOK_URL/FEISHU_WEBHOOK_URL)');
   }
 
   return _adapters;

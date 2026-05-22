@@ -7,6 +7,8 @@ import { bindActivityToExplicitRefs } from './bindingEngine.js';
 import { buildMetrics, scanRisks } from './riskEngine.js';
 import { generatePlanAdjustment, persistPlanAdjustment, estimateTasksProgress } from './planner.js';
 import { buildHybridAnalysis } from './semanticLinker.js';
+import logger from '../logger.js';
+
 
 // 自动收口的进度阈值（默认 95；可通过 AUTO_CLOSE_PROGRESS_THRESHOLD 调整）
 // 设为 100 则只在 LLM 报 100% 时才自动收口；设为 90 则更宽松
@@ -95,7 +97,7 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
     generatePlanAdjustment(newActivities, nextStore).then((adjustment) => {
       if (!adjustment) return null;
       return persistPlanAdjustment(adjustment, newActivities, 'github-sync');
-    }).catch((err) => console.error('[PlanAdjust/GitHubSync]', err.message));
+    }).catch((err) => logger.error('[PlanAdjust/GitHubSync]', err.message));
 
     estimateTasksProgress(nextStore).then(async (results) => {
       if (!results.length) return;
@@ -159,10 +161,10 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
             await sendWeComMarkdown(lines);
           }
         } catch (err) {
-          console.error('[AutoClose/WeCom] 推送失败:', err.message);
+          logger.error('[AutoClose/WeCom] 推送失败:', err.message);
         }
       }
-    }).catch((err) => console.error('[AIProgress/GitHubSync]', err.message));
+    }).catch((err) => logger.error('[AIProgress/GitHubSync]', err.message));
 
     buildHybridAnalysis(nextStore).then((analysis) => {
       return updateStore((draft) => ({
@@ -172,7 +174,7 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
         healthAnalysis: analysis.healthAnalysis || null,
         aiAnalysisUpdatedAt: analysis.generatedAt
       }));
-    }).catch((err) => console.error('[SemanticLinker/GitHubSync]', err.message));
+    }).catch((err) => logger.error('[SemanticLinker/GitHubSync]', err.message));
   }
   // PR 同步（fire-and-forget，不阻塞 commit 同步流程）
   trace('github-sync-trigger', {
@@ -183,10 +185,10 @@ export async function syncGitHubProjectIntoStore(project, scanOptions = {}) {
   syncProjectPRs(project, nextStore, updateStore, { since: '14 days ago' })
     .then(({ added, updated }) => {
       if (added || updated) {
-        console.log(`[GitHubSync] PR 同步 ${project.githubFullRepo}：新增 ${added} 条，更新 ${updated} 条`);
+        logger.info(`[GitHubSync] PR 同步 ${project.githubFullRepo}：新增 ${added} 条，更新 ${updated} 条`);
       }
     })
-    .catch((err) => console.error('[GitHubSync/PRSync]', err.message));
+    .catch((err) => logger.error('[GitHubSync/PRSync]', err.message));
 
   return {
     project: nextStore.projects.find((item) => item.id === project.id),

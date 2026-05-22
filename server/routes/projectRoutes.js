@@ -1,5 +1,7 @@
 import { isProjectFounder, verifySessionToken } from '../services/auth.js';
 import { importDocsForProject, makeSlugId } from '../services/docsManager.js';
+import logger from '../logger.js';
+
 
 function getProjectRepo(project) {
   if (project.githubFullRepo?.includes('/')) {
@@ -71,7 +73,7 @@ export function createProjectRoutes({
       return scanGitHubProject(project, scanOptions);
     }
     if (project.localPath) {
-      console.warn(`[Sync] 项目 ${project.id} 未配置 githubOwner，降级到本地 git（建议配置远端）`);
+      logger.warn(`[Sync] 项目 ${project.id} 未配置 githubOwner，降级到本地 git（建议配置远端）`);
       return scanLocalGitProject(project, scanOptions);
     }
     throw new Error(`项目 "${project.name || project.id}" 既未配置 githubOwner，也没有 localPath，无法同步`);

@@ -1,0 +1,75 @@
+name: v2 Test Suite
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  test:
+    name: Run v2 Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── LLM dry-run（CI 默认不调真实 LLM，Part O.1）─────────────
+      - name: Set dry-run env
+        run: echo "LLM_DRY_RUN=true" >> $GITHUB_ENV
+
+      # ── Schema migration check（Part O.1）───────────────────────
+      - name: Schema integrity check
+        run: |
+          node -e "
+          import { initDb } from './server/db/index.js';
+          import { readFileSync } from 'fs';
+          const { db } = initDb(':memory:');
+          // Verify all core tables exist with required columns
+          const tables = ['tasks','actors','pulls','reviews','events',
+                          'project_memory','ai_outcomes','learning_queue',
+                          'actor_autonomy','autonomy_history','api_keys',
+                          'api_audit_log','ranker_weights','standups',
+                          'weekly_reports','runbooks','llm_calls'];
+          let missing = [];
+          for (const t of tables) {
+            try {
+              db.prepare('SELECT 1 FROM ' + t + ' LIMIT 1').get();
+            } catch(e) {
+              missing.push(t + ': ' + e.message);
+            }
+          }
+          if (missing.length) {
+            console.error('SCHEMA CHECK FAILED:');
+            missing.forEach(m => console.error(' -', m));
+            process.exit(1);
+          }
+          console.log('Schema check passed: all ' + tables.length + ' tables present');
+          " --input-type=module
+        env:
+          LLM_DRY_RUN: 'true'
+
+      # ── 不变量测试（状态机 / polarity / 向量 / 权重 / 网关）────
+      - name: Invariant tests
+        run: npm run test:invariants
+        env:
+          LLM_DRY_RUN: 'true'
+
+      # ── 事件重放测试（outbox顺序 / 重放幂等 / 持久性）──────────
+      - name: Event replay tests
+        run: npm run test:event-replay
+        env:
+          LLM_DRY_RUN: 'true'
+
+      # ── 语法检查（原有 npm run check）──────────────────────────
+      - name: Syntax check
+        run: node --check server/index.js && node --check server/v2/app.js && node --check server/logger.js
