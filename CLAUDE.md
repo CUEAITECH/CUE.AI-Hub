@@ -18,7 +18,7 @@ npm run check    # 语法检查所有 server + src/app.js
 ## 技术栈
 
 - Node.js 18+ ES Modules，零框架（原生 `http` 模块）
-- 唯一依赖：`@anthropic-ai/sdk`（LLM 调用）
+- LLM：`openai` SDK（`gpt-5.5` 规划/解释 + `gpt-5.4-mini` review map-chunk 高频低成本）
 - 数据持久化：`server/data/db.json`（JSON 文件，进程内 in-memory cache）
 - 前端：单文件 `index.html` + `src/app.js`（无打包、无框架、浏览器原生 ESM）
 
@@ -100,8 +100,10 @@ index.html              ← 8 个 section.view 对应 8 个导航页
 
 | 变量 | 说明 |
 |------|------|
-| `ANTHROPIC_API_KEY` | Claude API Key，缺失时 LLM 功能降级为规则引擎 |
-| `ANTHROPIC_BASE_URL` | 第三方代理地址（可选） |
+| `OPENAI_API_KEY` | OpenAI API Key，缺失时 LLM 功能降级为规则引擎 |
+| `OPENAI_BASE_URL` | 代理地址（可选，如 Azure / LiteLLM） |
+| `OPENAI_MODEL` | 主力模型（默认 `gpt-5.5`，规划/解释/生成类） |
+| `OPENAI_MINI_MODEL` | 轻量模型（默认 `gpt-5.4-mini`，review map-chunk 高频场景） |
 | `GITHUB_TOKEN` | GitHub PAT，缺失时匿名限速 60次/小时 |
 | `DOC_TASK_IMPORT_LIMIT` | docs 候选任务每轮自动导入上限，默认 8，最大 20 |
 | `WECOM_WEBHOOK_URL` | 企微群机器人 Webhook URL |

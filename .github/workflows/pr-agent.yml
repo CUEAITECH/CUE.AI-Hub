@@ -1,6 +1,4 @@
 name: PR-Agent Review
-# Phase 2 时填入真实 secrets 后激活
-# 目前 if: false，Actions 不会实际执行 PR-Agent
 
 on:
   pull_request:
@@ -12,7 +10,6 @@ on:
 
 jobs:
   pr_agent_job:
-    if: ${{ true }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -23,8 +20,9 @@ jobs:
         uses: Codium-ai/pr-agent@main
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_BASE: https://api.anthropic.com/v1
-          CONFIG.AI_PROVIDER: anthropic
+          # 使用标准 OpenAI API（gpt-5.4-mini 做 review，成本低）
+          CONFIG.MODEL: gpt-5.4-mini
+          CONFIG.AI_PROVIDER: openai
           github_action_config.auto_review: "true"
           github_action_config.auto_improve: "false"
           github_action_config.auto_describe: "true"
