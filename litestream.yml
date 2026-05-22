@@ -1,0 +1,37 @@
+# litestream.yml — CUE Hub v2 数据库持续备份
+#
+# 部署方式：
+#   brew install litestream   (macOS)
+#   apt install litestream    (Debian/Ubuntu)
+#
+# 启动：
+#   litestream replicate -config litestream.yml
+#
+# 恢复：
+#   litestream restore -config litestream.yml -db server/data/v2.db
+#
+# 文档：https://litestream.io/reference/config/
+
+dbs:
+  - path: server/data/v2.db
+    replicas:
+      # ── 本地文件系统备份（简单，无外部依赖）───────────────────
+      # 保留最近 7 天的 WAL 段（每段 ~16MB）
+      - url: file:///var/backups/cue-hub/v2.db
+        retention: 168h       # 7 天
+        retention-check-interval: 1h
+        sync-interval: 10s    # WAL 段刷写频率（10s 内数据不丢失）
+
+      # ── S3 兼容对象存储（可选，注释掉则只用本地备份）──────────
+      # 支持：AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO
+      # 取消注释并填写 bucket/endpoint：
+      #
+      # - url: s3://your-bucket-name/cue-hub/v2.db
+      #   access-key-id:     ${LITESTREAM_ACCESS_KEY_ID}
+      #   secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+      #   # Cloudflare R2（无 egress 费用）:
+      #   # endpoint: https://<account-id>.r2.cloudflarestorage.com
+      #   # 阿里云 OSS:
+      #   # endpoint: https://oss-cn-hangzhou.aliyuncs.com
+      #   retention: 720h     # 30 天
+      #   sync-interval: 30s
