@@ -11,6 +11,7 @@
 
 import parseDiff from 'parse-diff';
 import { getOctokit } from './githubClient.js';
+import * as acorn from 'acorn';
 
 // 跳过 review 意义不大的文件
 const SKIP_PATTERNS = [
@@ -28,6 +29,96 @@ const SKIP_PATTERNS = [
 
 // 每个文件 chunk 合并后的字符上限（控制 Map LLM 输入大小）
 const MAX_FILE_DIFF_CHARS = 6000;
+
+// JS/TS 文件扩展名正则
+const JS_TS_RE = /\.(js|mjs|cjs|ts|tsx|jsx)$/;
+
+/**
+ * 智能截断：在空行处截断，避免截断在行中间
+ */
+function smartTruncate(text, maxChars) {
+  if (text.length <= maxChars) return text;
+  const cutPoint = text.lastIndexOf('\n\n', maxChars);
+  if (cutPoint > maxChars * 0.5) {
+    return text.slice(0, cutPoint) + '\n[diff truncated at function boundary...]';
+  }
+  return text.slice(0, maxChars) + '\n[diff truncated...]';
+}
+
+/**
+ * 对 JS/TS 文件，用 acorn 解析 diff 中提取的新版代码，
+ * 找出包含变更行的顶层函数/类节点，只返回那些语义单元。
+ * 其他文件类型降级为 smartTruncate。
+ *
+ * @param {string} filePath - 文件路径（用于判断扩展名）
+ * @param {string} diffText - 完整 diff 文本
+ * @param {number} maxChars - 字符上限
+ * @returns {string}
+ */
+function extractChangedFunctions(filePath, diffText, maxChars) {
+  if (!JS_TS_RE.test(filePath)) {
+    return smartTruncate(diffText, maxChars);
+  }
+
+  try {
+    const lines = diffText.split('\n');
+    const changedLineNums = new Set();
+    const contentLines = [];
+    let lineNum = 0;
+
+    for (const line of lines) {
+      if (line.startsWith('@@')) {
+        const m = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (m) lineNum = parseInt(m[1], 10) - 1;
+        contentLines.push('');  // placeholder so line numbers align
+      } else if (line.startsWith('+')) {
+        lineNum++;
+        changedLineNums.add(lineNum);
+        contentLines.push(line.slice(1));
+      } else if (line.startsWith('-')) {
+        contentLines.push('');  // placeholder to keep line count stable
+      } else if (line.startsWith(' ')) {
+        lineNum++;
+        contentLines.push(line.slice(1));
+      } else {
+        contentLines.push(line);
+      }
+    }
+
+    const source = contentLines.join('\n');
+
+    const ast = acorn.parse(source, {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      allowHashBang: true,
+      allowImportExportEverywhere: true,
+    });
+
+    const selectedNodes = [];
+    for (const node of ast.body) {
+      const startLine = source.slice(0, node.start).split('\n').length;
+      const endLine = source.slice(0, node.end).split('\n').length;
+      const overlaps = [...changedLineNums].some(l => l >= startLine && l <= endLine);
+      if (overlaps) {
+        selectedNodes.push({ startLine, endLine, text: source.slice(node.start, node.end) });
+      }
+    }
+
+    if (selectedNodes.length === 0) {
+      return smartTruncate(diffText, maxChars);
+    }
+
+    const joined = selectedNodes.map(n => n.text).join('\n\n');
+    const prefix = `// [AST-sliced: showing ${selectedNodes.length} changed function(s)]\n`;
+    const result = prefix + joined;
+    return result.length > maxChars
+      ? result.slice(0, maxChars) + '\n// [truncated]'
+      : result;
+
+  } catch {
+    return smartTruncate(diffText, maxChars);
+  }
+}
 
 /**
  * @typedef {object} FileDiff
@@ -109,13 +200,13 @@ export async function fetchAndParseDiff({ owner, repo, prNumber, options = {} })
     // 跳过无实质变更的文件（只有元数据行）
     if (additions + deletions === 0) continue;
 
-    // 拼接并截断
+    // 拼接并截断（智能 AST 切片）
     const fullDiff = `--- ${file.from || '/dev/null'}\n+++ ${filePath}\n${chunkTexts.join('\n')}`;
     let diffText = fullDiff;
     let truncated = false;
     if (diffText.length > maxDiffChars) {
-      diffText = diffText.slice(0, maxDiffChars) + '\n[diff truncated...]';
-      truncated = true;
+      diffText = extractChangedFunctions(filePath, fullDiff, maxDiffChars);
+      truncated = diffText.length < fullDiff.length;
     }
 
     // 判断变更类型
@@ -175,16 +266,19 @@ export function parseDiffText(rawDiff, options = {}) {
     if (additions + deletions === 0) continue;
 
     const fullDiff = `--- ${file.from || '/dev/null'}\n+++ ${filePath}\n${chunkTexts.join('\n')}`;
-    const diffText = fullDiff.length > maxDiffChars
-      ? fullDiff.slice(0, maxDiffChars) + '\n[diff truncated...]'
-      : fullDiff;
+    let diffText = fullDiff;
+    let truncated = false;
+    if (fullDiff.length > maxDiffChars) {
+      diffText = extractChangedFunctions(filePath, fullDiff, maxDiffChars);
+      truncated = diffText.length < fullDiff.length;
+    }
 
     files.push({
       path: filePath,
       changeType: file.new ? 'added' : file.deleted ? 'deleted' : 'modified',
       additions, deletions,
       diffText,
-      truncated: fullDiff.length > maxDiffChars,
+      truncated,
     });
   }
 

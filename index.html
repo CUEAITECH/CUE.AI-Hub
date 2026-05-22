@@ -120,6 +120,7 @@
           <div class="header-sub-group" data-sub="output">
             <button class="nav-item" type="button" data-route="report">日报&amp;晚报</button>
             <button class="nav-item" type="button" data-route="automation">自动提醒</button>
+            <button class="nav-item" type="button" data-route="observatory">观察台</button>
           </div>
           <div class="header-sub-group" data-sub="personal">
             <button class="nav-item" type="button" data-route="pc-workspace">我的工作台</button>
@@ -750,6 +751,16 @@
                 </div>
                 <pre class="report-box" id="meetingEveningReport">点击「生成晚会对账」后，这里会输出前一天任务领取、当前提交、AI Review 风险和会后跟进建议。</pre>
               </article>
+              <!-- V4: 24h Timeline 视图 -->
+              <article class="meeting-panel">
+                <div class="meeting-panel-head">
+                  <div><span>24h 活动 Timeline</span><strong>按成员/系统的事件时间轴</strong></div>
+                  <button type="button" class="pc-btn-ghost" style="font-size:0.8em;" onclick="renderEveningTimeline()">刷新</button>
+                </div>
+                <div id="eveningTimeline" style="padding:12px;min-height:80px;">
+                  <p style="color:#9ca3af;font-size:0.83em;">点击「刷新」加载今日事件 Timeline</p>
+                </div>
+              </article>
             </div>
           </section>
         </section>
@@ -1073,6 +1084,8 @@
               </div>
             </div>
             <div class="task-detail-grid" id="taskDetailContent"></div>
+            <!-- V1: 推荐理由区块（v2 新增，动态注入） -->
+            <div id="taskDetailRecommendation" style="margin:0 16px 16px;"></div>
           </section>
         </section>
 
@@ -1136,6 +1149,48 @@
             </article>
           </section>
         </section>
+
+        <!-- ══ V5：管理观察台 ══════════════════════════════════════════ -->
+        <section class="view" id="observatory">
+          <div class="section-header">
+            <h2>管理观察台</h2>
+            <button class="refresh-btn" type="button" id="observatoryRefreshBtn">🔄 刷新</button>
+          </div>
+
+          <!-- LLM 调用账本 -->
+          <div class="panel" id="obsLlmPanel">
+            <h3 class="panel-title">🤖 LLM 调用账本</h3>
+            <div id="obsLlmContent" class="obs-card">
+              <span class="obs-loading">加载中…</span>
+            </div>
+          </div>
+
+          <!-- 事件流 -->
+          <div class="panel" id="obsEventsPanel">
+            <h3 class="panel-title">📡 事件流</h3>
+            <div class="obs-filters">
+              <input type="text" id="obsEventTypeFilter" placeholder="按 type 过滤…" class="obs-filter-input" />
+              <select id="obsEventSourceFilter" class="obs-filter-select">
+                <option value="">所有来源</option>
+                <option value="webhook">webhook</option>
+                <option value="ui">ui</option>
+                <option value="agent">agent</option>
+                <option value="scheduler">scheduler</option>
+              </select>
+            </div>
+            <div id="obsEventsContent" class="obs-events-list">
+              <span class="obs-loading">加载中…</span>
+            </div>
+          </div>
+
+          <!-- 三端同步健康度 -->
+          <div class="panel" id="obsSyncPanel">
+            <h3 class="panel-title">🔗 三端同步健康度</h3>
+            <div id="obsSyncContent" class="obs-card">
+              <span class="obs-loading">加载中…</span>
+            </div>
+          </div>
+        </section>
       </main>
       <!-- PR 详情侧滑 -->
       <div id="pullDrawerBackdrop" class="drawer-backdrop hidden" onclick="closePullDrawer()"></div>
@@ -1144,7 +1199,10 @@
           <button class="drawer-close" onclick="closePullDrawer()">✕</button>
           <h3 id="pullDrawerTitle">PR 详情</h3>
         </div>
-        <div id="pullDrawerBody" class="drawer-body"></div>
+        <div id="pullDrawerBody" class="drawer-body">
+          <!-- V2: 实时 AC checklist（SSE 注入） -->
+          <div id="prAcChecklist"></div>
+        </div>
       </aside>
       <nav class="mobile-app-nav" aria-label="移动端主导航">
         <button class="mobile-app-nav-item active" type="button" data-route="overview" aria-label="总览">

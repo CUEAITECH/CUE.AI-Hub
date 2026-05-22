@@ -4118,7 +4118,8 @@ function setRoute(route) {
     'pc-workspace': 'personal',
     'pc-profile': 'personal',
     'pc-account': 'personal',
-    pulls: 'pulls'
+    pulls: 'pulls',
+    observatory: 'output',
   };
   const activeParent = parentByRoute[route] || route;
   document.querySelectorAll('.nav-item').forEach((item) => {
@@ -4161,6 +4162,10 @@ function setRoute(route) {
   }
   if (route === 'pc-account') {
     openAccountSettings().catch((e) => toast(e.message));
+  }
+  // V5: 观察台
+  if (route === 'observatory') {
+    renderObservatory().catch((e) => toast(`观察台加载失败: ${e.message}`));
   }
 }
 
@@ -4799,6 +4804,287 @@ window.openPullDrawer = openPullDrawer;
 window.closePullDrawer = closePullDrawer;
 window.submitPullDecision = submitPullDecision;
 window.openTaskDetail = openTaskDetail;
+// V4/V5 补丁（Part L）
+window.renderEveningTimeline = renderEveningTimeline;
+window.renderObservatory = renderObservatory;
+window.loadAndRenderSpaceModal = loadAndRenderSpaceModal;
+
+// ════════════════════════════════════════════════════════════════
+// V1-V5 前端补丁（Part L 最小增量补丁，≤800 行）
+// ════════════════════════════════════════════════════════════════
+
+// ── V1: 任务卡片"推荐理由"区块 ─────────────────────────────────
+// 展示推荐引擎对 top actor 的评分理由（来自 /v2/tasks/:id/explanation）
+const _taskExplanationCache = new Map();
+
+async function loadTaskExplanation(taskId) {
+  if (_taskExplanationCache.has(taskId)) return _taskExplanationCache.get(taskId);
+  try {
+    const data = await fetch(`/v2/tasks/${taskId}/explanation`, {
+      headers: { 'X-Tenant-Id': 'default' },
+    }).then(r => r.ok ? r.json() : null);
+    _taskExplanationCache.set(taskId, data);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function renderTaskRecommendationBlock(explanation) {
+  if (!explanation?.topActor) return '';
+  const { displayName, type, confidence, explanation: reason, scoreBreakdown } = explanation.topActor;
+  const confPct = Math.round((confidence || 0.5) * 100);
+  const typeLabel = type === 'ai-agent' ? '🤖' : '👤';
+  const breakdownHtml = scoreBreakdown
+    ? Object.entries(scoreBreakdown).slice(0, 4).map(([k, v]) =>
+        `<li class="rec-dim">${k}: <strong>${typeof v === 'number' ? v.toFixed(2) : v}</strong></li>`
+      ).join('')
+    : '';
+  return `
+    <details class="task-recommendation" style="margin-top:8px;border-top:1px solid #e8e8e8;padding-top:8px;">
+      <summary style="cursor:pointer;font-size:0.82em;color:#6b7280;user-select:none;">
+        ${typeLabel} 为什么推给 ${escapeHtml(displayName)}（v2 推荐引擎）
+      </summary>
+      <div class="rec-body" style="margin-top:6px;font-size:0.8em;color:#374151;">
+        ${reason ? `<p style="margin:0 0 4px">${escapeHtml(reason)}</p>` : ''}
+        ${breakdownHtml ? `<ul style="margin:0;padding-left:16px;">${breakdownHtml}</ul>` : ''}
+        <p style="margin:4px 0 0;color:#9ca3af;">置信度：${confPct}%</p>
+      </div>
+    </details>`;
+}
+
+// 挂载到 task-detail 打开时：异步加载解释并注入
+async function enrichTaskDetailWithExplanation(taskId) {
+  const container = document.querySelector('#taskDetailRecommendation');
+  if (!container) return;
+  const data = await loadTaskExplanation(taskId);
+  container.innerHTML = renderTaskRecommendationBlock(data);
+}
+
+// ── V2: PR 详情面板实时 AC checklist（SSE 订阅）──────────────────
+let _prSseSource = null;
+let _prSseTargetId = null;
+
+function startPrAcSse(prId) {
+  if (_prSseSource && _prSseTargetId === prId) return; // already connected
+  stopPrAcSse();
+  _prSseTargetId = prId;
+  try {
+    _prSseSource = new EventSource(`/v2/events/stream?type=pr.review.posted`);
+    _prSseSource.onmessage = (evt) => {
+      try {
+        const payload = JSON.parse(evt.data);
+        if (payload.payload?.prId === prId || payload.payload?.prNumber == prId) {
+          refreshPrAcChecklist(prId, payload.payload);
+        }
+      } catch { /* skip */ }
+    };
+    _prSseSource.onerror = () => { stopPrAcSse(); };
+  } catch { /* browser may not support EventSource */ }
+}
+
+function stopPrAcSse() {
+  if (_prSseSource) { _prSseSource.close(); _prSseSource = null; }
+  _prSseTargetId = null;
+}
+
+function refreshPrAcChecklist(prId, payload) {
+  const container = document.querySelector('#prAcChecklist');
+  if (!container) return;
+  const items = payload?.acItems || payload?.checklist || [];
+  if (!items.length) return;
+  container.innerHTML = `
+    <div class="ac-checklist" style="margin-top:8px;font-size:0.83em;">
+      <strong>验收对照（v2 实时）</strong>
+      <ul style="list-style:none;padding:0;margin:4px 0 0;">
+        ${items.map(item => `
+          <li style="padding:3px 0;">
+            ${item.status === 'pass' ? '✅' : item.status === 'warn' ? '⚠️' : '🔶'}
+            ${escapeHtml(item.text || item.criterion || '')}
+          </li>`).join('')}
+      </ul>
+      <p style="color:#9ca3af;margin:4px 0 0;font-size:0.9em;">
+        来源：${escapeHtml(payload?.source || 'hub')}（${new Date().toLocaleTimeString('zh-CN')}）
+      </p>
+    </div>`;
+}
+
+// ── V3: 健康度弹窗 SPACE 维度扩展 ────────────────────────────────
+async function loadAndRenderSpaceModal() {
+  const overlay = document.getElementById('spaceDetailOverlay') || document.getElementById('healthModal');
+  if (!overlay) return;
+  try {
+    const tenantId = 'default';
+    const data = await fetch('/v2/space', { headers: { 'X-Tenant-Id': tenantId } }).then(r => r.ok ? r.json() : null);
+    if (!data) return;
+    const dims = data.dimensions || {};
+    const dimLabels = {
+      satisfaction:  'S — 满意度',
+      performance:   'P — 交付质量',
+      activity:      'A — 生产活动',
+      communication: 'C — 协作效率',
+      efficiency:    'E — 流动效率',
+    };
+    const dimRows = Object.entries(dimLabels).map(([key, label]) => {
+      const d = dims[key] || {};
+      const score = d.score ?? 0;
+      const bar = `<div style="display:inline-block;width:${Math.round(score * 0.6)}px;height:6px;background:#3b82f6;border-radius:3px;margin-left:4px;vertical-align:middle;"></div>`;
+      return `<tr><td style="padding:3px 8px 3px 0;color:#6b7280;">${label}</td><td><strong>${score}</strong>${bar}</td></tr>`;
+    }).join('');
+
+    const existing = overlay.querySelector('.space-dims-v2');
+    if (existing) existing.remove();
+    const section = document.createElement('div');
+    section.className = 'space-dims-v2';
+    section.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;';
+    section.innerHTML = `
+      <p style="font-size:0.82em;color:#6b7280;margin:0 0 8px;">SPACE 五维（v2 新增）</p>
+      <table style="font-size:0.83em;width:100%;">${dimRows}</table>
+      <p style="margin:8px 0 0;font-size:0.8em;color:#9ca3af;">
+        综合分：<strong>${data.score}</strong> ${data.grade || ''} · 窗口：${data.windowDays}天
+      </p>`;
+    overlay.appendChild(section);
+  } catch { /* graceful */ }
+}
+
+// ── V4: 晚会作战包 Timeline 视图 ────────────────────────────────
+async function renderEveningTimeline(dateStr) {
+  const container = document.getElementById('eveningTimeline');
+  if (!container) return;
+  container.innerHTML = '<p style="color:#9ca3af;font-size:0.83em;">加载 timeline…</p>';
+  try {
+    const data = await fetch(`/v2/events/grouped?hours=24`, {
+      headers: { 'X-Tenant-Id': 'default' },
+    }).then(r => r.ok ? r.json() : null);
+    if (!data?.grouped) { container.innerHTML = '<p style="color:#9ca3af;">暂无数据</p>'; return; }
+
+    const actors = Object.entries(data.grouped);
+    if (!actors.length) { container.innerHTML = '<p style="color:#9ca3af;">今日暂无事件</p>'; return; }
+
+    const TYPE_EMOJI = {
+      'task.claimed': '📋', 'task.progressed': '🔄', 'pr.opened': '🔀',
+      'pr.merged': '✅', 'pr.review.posted': '🔍', 'standup.submitted': '📢',
+      'agent.task.completed': '🤖',
+    };
+
+    const rows = actors.slice(0, 8).map(([actor, events]) => {
+      const dots = events.slice(-10).map(e => {
+        const t = new Date(e.createdAt);
+        const h = t.getHours() + t.getMinutes() / 60;
+        const pct = Math.round(h / 24 * 100);
+        const emoji = TYPE_EMOJI[e.type] || '•';
+        return `<span class="tl-dot" title="${e.type}\n${new Date(e.createdAt).toLocaleTimeString('zh-CN')}"
+          style="left:${pct}%;position:absolute;">${emoji}</span>`;
+      }).join('');
+      return `
+        <div class="tl-row" style="display:flex;align-items:center;margin-bottom:10px;font-size:0.83em;">
+          <span style="width:80px;flex-shrink:0;color:#374151;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+            title="${escapeHtml(actor)}">${escapeHtml(actor.slice(0, 8))}</span>
+          <div style="flex:1;position:relative;height:22px;background:#f3f4f6;border-radius:4px;overflow:visible;">
+            ${dots}
+          </div>
+        </div>`;
+    }).join('');
+
+    container.innerHTML = `
+      <div class="tl-header" style="display:flex;margin-bottom:4px;padding-left:80px;font-size:0.72em;color:#9ca3af;">
+        <span style="flex:0 0 25%">0h</span><span style="flex:0 0 25%">6h</span>
+        <span style="flex:0 0 25%">12h</span><span style="flex:0 0 25%">18h</span><span>24h</span>
+      </div>
+      ${rows}
+      <p style="font-size:0.75em;color:#9ca3af;margin:8px 0 0;">
+        共 ${data.totalEvents} 个事件 · ${actors.length} 个成员/系统</p>`;
+  } catch {
+    container.innerHTML = '<p style="color:#ef4444;font-size:0.83em;">Timeline 加载失败</p>';
+  }
+}
+
+// ── V5: 管理观察台 ────────────────────────────────────────────────
+state.observatory = { llm: null, events: [], syncHealth: null };
+
+async function renderObservatory() {
+  const llmEl = document.getElementById('obsLlmContent');
+  const eventsEl = document.getElementById('obsEventsContent');
+  const syncEl = document.getElementById('obsSyncContent');
+
+  const tenantHeaders = { 'X-Tenant-Id': 'default' };
+
+  // LLM 账本
+  if (llmEl) {
+    llmEl.innerHTML = '<span class="obs-loading">加载中…</span>';
+    try {
+      const d = await fetch('/v2/observability/llm', { headers: tenantHeaders }).then(r => r.json());
+      const hr = d.recentFailRate != null ? `${(d.recentFailRate * 100).toFixed(1)}%` : '—';
+      const byPurp = (d.byPurpose || []).map(p =>
+        `<li>${escapeHtml(p.purpose || '?')}: ${p.calls}次</li>`).join('');
+      llmEl.innerHTML = `
+        <div class="obs-stat-grid">
+          <div class="obs-stat"><span class="obs-label">今日调用</span><strong>${d.totalCalls ?? 0}</strong></div>
+          <div class="obs-stat"><span class="obs-label">cache命中率</span><strong>${d.cacheHitRate ?? '—'}</strong></div>
+          <div class="obs-stat"><span class="obs-label">近5min失败率</span><strong>${hr}</strong></div>
+          <div class="obs-stat"><span class="obs-label">今日成本估算</span><strong>${d.estimatedCostCNY != null ? '¥'+d.estimatedCostCNY.toFixed(2) : '—'}</strong></div>
+        </div>
+        ${byPurp ? `<ul style="margin:8px 0 0;padding-left:16px;font-size:0.82em;color:#6b7280;">${byPurp}</ul>` : ''}`;
+    } catch (e) {
+      llmEl.innerHTML = `<span style="color:#ef4444">加载失败: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+
+  // 事件流
+  if (eventsEl) {
+    eventsEl.innerHTML = '<span class="obs-loading">加载中…</span>';
+    const typeFilter = document.getElementById('obsEventTypeFilter')?.value || '';
+    const srcFilter = document.getElementById('obsEventSourceFilter')?.value || '';
+    const qp = new URLSearchParams({ limit: 30 });
+    if (typeFilter) qp.set('type', typeFilter);
+    if (srcFilter) qp.set('source', srcFilter);
+    try {
+      const d = await fetch(`/v2/observability/events?${qp}`, { headers: tenantHeaders }).then(r => r.json());
+      const rows = (d.events || []).map(e => {
+        const t = new Date(e.createdAt).toLocaleTimeString('zh-CN', { hour12: false });
+        return `<div class="obs-event-row">
+          <span class="obs-event-time">${t}</span>
+          <span class="obs-event-type">${escapeHtml(e.type)}</span>
+          <span class="obs-event-source" style="color:#9ca3af;">${escapeHtml(e.source || '')}</span>
+        </div>`;
+      }).join('');
+      eventsEl.innerHTML = rows || '<p style="color:#9ca3af;font-size:0.83em;">暂无事件</p>';
+      state.observatory.events = d.events || [];
+    } catch (e) {
+      eventsEl.innerHTML = `<span style="color:#ef4444">加载失败: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+
+  // 三端同步健康度
+  if (syncEl) {
+    syncEl.innerHTML = '<span class="obs-loading">加载中…</span>';
+    try {
+      const d = await fetch('/v2/observability/sync-health', { headers: tenantHeaders }).then(r => r.json());
+      const pct = d.activeTasks > 0 ? Math.round(d.linkedTasks / d.activeTasks * 100) : 100;
+      syncEl.innerHTML = `
+        <div class="obs-stat-grid">
+          <div class="obs-stat"><span class="obs-label">task↔PR 一致性</span><strong>${pct}%</strong></div>
+          <div class="obs-stat"><span class="obs-label">孤儿 PR</span><strong class="${d.orphanPRs > 0 ? 'obs-warn' : ''}">${d.orphanPRs ?? 0}${d.orphanPRs > 0 ? ' ⚠' : ''}</strong></div>
+          <div class="obs-stat"><span class="obs-label">防循环签名命中</span><strong>${d.signatureHits ?? 0}</strong></div>
+        </div>`;
+      state.observatory.syncHealth = d;
+    } catch (e) {
+      syncEl.innerHTML = `<span style="color:#ef4444">加载失败: ${escapeHtml(e.message)}</span>`;
+    }
+  }
+}
+
+// 注册观察台路由
+document.addEventListener('DOMContentLoaded', () => {
+  const refreshBtn = document.getElementById('observatoryRefreshBtn');
+  if (refreshBtn) refreshBtn.addEventListener('click', renderObservatory);
+
+  // 事件过滤器触发重刷
+  ['obsEventTypeFilter', 'obsEventSourceFilter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', renderObservatory);
+  });
+});
 
 async function initApp() {
   setAuthVisible(state.isAuthenticated);

@@ -5,6 +5,59 @@ import { scanRisks } from './riskEngine.js';
 import { isWeComAvailable, sendWeComMarkdown, buildPreMeetingWeComMsg } from './wecom.js';
 import { aggregateTaskCompliance } from './complianceAggregator.js';
 import logger from '../logger.js';
+import { Eta } from 'eta';
+
+const eta = new Eta({ cache: false, views: '.' });
+
+// ─── Eta 模板常量 ────────────────────────────────────────────────────────────
+
+const REPORT_MARKDOWN_TEMPLATE = `# CUE 项目中枢晚会作战包 · <%= it.dateText %>
+
+时间窗口：<%= it.windowText %>
+
+当前阶段：<%= it.stageName %> · 进度 <%= it.stageProgress %>%
+
+## 1. 前一天任务领取复盘
+
+<%= it.reconciliationTable %>
+
+## 2. 今日提交汇总
+
+<%= it.commitTable %>
+
+未关联任务提交：<%= it.unassignedCount %> 条。
+
+## 3. AI Review 风险
+
+Block：<%= it.blockCount %> 条；Warning：<%= it.warningCount %> 条。
+
+<%= it.blockTable %>
+
+## 4. 未完成任务与调整建议
+
+<%= it.nextTargetsTable %>
+
+## 5. 晚会动作
+
+1. 逐条确认无提交支撑的领取任务：继续、拆分、转派或关闭。
+2. Block Review 必须明确处理人和下次检查时间。
+3. 晚会确认后的任务在企业微信领取，并回写到项目中枢。
+4. 明天 18:00 前继续按 Git 信号和 Review 结果自动对账。
+`;
+
+const EVENING_USER_PROMPT_TEMPLATE = `请生成 <%= it.date %> 的研发晚报。
+
+今日 GitHub 提交（共 <%= it.commitCount %> 条）：
+<%= it.commitLines %>
+
+今日分工领取 vs 提交对照（共 <%= it.assignmentCount %> 条领取）：
+<%= it.assignmentLines %>
+
+今日 AI Review（共 <%= it.reviewCount %> 条）：
+<%= it.reviewLines %>
+
+未完成领取项：
+<%= it.unfinishedLines %>`;
 
 
 const timezone = 'Asia/Shanghai';
@@ -182,60 +235,38 @@ function buildReportMarkdown(store, dateText, reconciliation, nextTargets, stage
     commits: commits.slice(0, 3).map((commit) => commit.shortSha || commit.title).join('、')
   }));
 
-  return [
-    `# CUE 项目中枢晚会作战包 · ${dateText}`,
-    '',
-    `时间窗口：${windowText}`,
-    '',
-    `当前阶段：${store.currentStage?.name || 'MVP'} · 进度 ${stageProgress}%`,
-    '',
-    '## 1. 前一天任务领取复盘',
-    '',
-    formatTable(reconciliation.rows, [
+  return eta.renderString(REPORT_MARKDOWN_TEMPLATE, {
+    dateText,
+    windowText,
+    stageName: store.currentStage?.name || 'MVP',
+    stageProgress,
+    reconciliationTable: formatTable(reconciliation.rows, [
       { label: '成员', value: (row) => row.assignment.owner },
       { label: '领取任务', value: (row) => taskLabel(row.task) },
       { label: '完成判断', value: (row) => row.result },
       { label: 'Git 支撑', value: (row) => row.commits.length ? `${row.commits.length} 条` : '无' },
       { label: '晚会处理', value: (row) => row.completed ? '确认验收或关闭' : row.hasCommitSupport ? '确认剩余验收项' : '拆分/转派/标记阻塞' }
     ]),
-    '',
-    '## 2. 今日提交汇总',
-    '',
-    formatTable(ownerRows, [
+    commitTable: formatTable(ownerRows, [
       { label: '成员', value: (row) => row.owner },
       { label: '提交数', value: (row) => `${row.count}` },
       { label: '代表提交', value: (row) => row.commits || '-' }
     ]),
-    '',
-    `未关联任务提交：${unassignedCommits.length} 条。`,
-    '',
-    '## 3. AI Review 风险',
-    '',
-    `Block：${blockReviews.length} 条；Warning：${warningReviews.length} 条。`,
-    '',
-    formatTable(blockReviews.slice(0, 6), [
+    unassignedCount: unassignedCommits.length,
+    blockCount: blockReviews.length,
+    warningCount: warningReviews.length,
+    blockTable: formatTable(blockReviews.slice(0, 6), [
       { label: '负责人', value: (review) => review.owner },
       { label: '变更', value: (review) => review.title },
       { label: '主要问题', value: (review) => (review.findings || []).slice(0, 2).join('；') }
     ]),
-    '',
-    '## 4. 未完成任务与调整建议',
-    '',
-    formatTable(nextTargets, [
+    nextTargetsTable: formatTable(nextTargets, [
       { label: '负责人', value: (target) => target.owner },
       { label: '细化目标', value: (target) => target.taskTitle },
       { label: '优先级', value: (target) => target.priority },
       { label: '建议', value: (target) => target.reason }
-    ]),
-    '',
-    '## 5. 晚会动作',
-    '',
-    '1. 逐条确认无提交支撑的领取任务：继续、拆分、转派或关闭。',
-    '2. Block Review 必须明确处理人和下次检查时间。',
-    '3. 晚会确认后的任务在企业微信领取，并回写到项目中枢。',
-    '4. 明天 18:00 前继续按 Git 信号和 Review 结果自动对账。',
-    ''
-  ].join('\n');
+    ])
+  });
 }
 
 export function todayText() {

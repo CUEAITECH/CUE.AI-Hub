@@ -30,6 +30,7 @@ import './events/eveningReportHandler.js';  // 晚会作战包 EventBus 迁移�
 import { replayUnprocessed } from './events/bus.js';
 import { initAdapters } from './adapters/index.js';
 import { handleV2 } from './v2/app.js';
+import { getFastifyApp } from './v2/fastifyApp.js';  // Part N.1 Fastify 层
 import logger from './logger.js';
 const { db: _v2db, kysely: _v2kysely } = initDb();
 await replayUnprocessed();            // 重启后回放未处理事件
@@ -38,7 +39,9 @@ initAdapters();                       // 通信平台适配器
 import { initVectorStore, rebuildMemoryIndex } from './services/vectorStore.js';
 const { supported: _vecSupported } = await initVectorStore(_v2db);
 if (_vecSupported) rebuildMemoryIndex(_v2db); // 补全旧数据向量（首次启动）
-logger.info(`[V2] DB + EventBus + reducers + outcome-handlers + adapters + vector-store(${_vecSupported ? 'ON' : 'OFF'}) initialized`);
+// Part N.1: 初始化 Fastify v2 层（/v2/health 走 Fastify，其余桥接 handleV2）
+const _fastifyApp = await getFastifyApp();
+logger.info(`[V2] DB + EventBus + reducers + outcome-handlers + adapters + vector-store(${_vecSupported ? 'ON' : 'OFF'}) + Fastify initialized`);
 // ── END V2 初始化 ───────────────────────────────────────────
 
 import { createId, loadStore, saveStore, updateStore } from './store.js';
@@ -386,9 +389,10 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   try {
-    // ── V2 路由：/v2/* 走 handleV2 ───────────────────────────────
+    // ── V2 路由：/v2/* 走 Fastify（Part N.1）───────────────────
+    // Fastify /v2/health → 原生处理；其余 → handleV2 bridge
     if (url.pathname.startsWith('/v2/')) {
-      await handleV2(req, res, url);
+      _fastifyApp.routing()(req, res);
       return;
     }
 

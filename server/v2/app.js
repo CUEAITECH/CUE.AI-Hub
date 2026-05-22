@@ -54,6 +54,13 @@ const TaskDispatchSchema = z.object({
   contextOverride: z.record(z.any()).optional(),
 });
 
+// Actor-aware 自动派发：不需要指定 agentId，由推荐引擎选择
+const AutoDispatchSchema = z.object({
+  taskId: z.string(),
+  contextOverride: z.record(z.any()).optional(),
+  dryRun: z.boolean().optional().default(false),  // true = 只返回推荐，不实际 dispatch
+});
+
 const StandupSchema = z.object({
   agentId: z.string(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
@@ -380,6 +387,97 @@ export async function handleV2(req, res, url) {
         ok: true,
         agentId: body.agentId,
         taskId: body.taskId,
+        memoryStats: dispatchPayload.context?.memoryStats,
+      });
+      return true;
+    }
+
+    // POST /v2/agents/auto-dispatch — Actor-aware 自动派发（#25 Part Q.1）
+    // 由推荐引擎（recommender.js）选出最合适的 actor（人类或 AI Agent）
+    // 选出 AI Agent → 自动 dispatch 到 endpoint
+    // 选出人类      → 分配 actor_id，通过 WeCom 通知（无需 HTTP dispatch）
+    if (method === 'POST' && path === '/v2/agents/auto-dispatch') {
+      const rawBody = await readBody(req);
+      const body = AutoDispatchSchema.parse(rawBody);
+      const db = getDb();
+
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND tenant_id = ?')
+        .get(body.taskId, tenantId);
+      if (!task) { sendV2Error(res, 404, 'task not found'); return true; }
+      if (task.state !== 'pending') {
+        sendV2Error(res, 409, `task state is '${task.state}', only pending tasks can be auto-dispatched`);
+        return true;
+      }
+
+      // ── 推荐引擎：全 actor 评分（不生成 LLM 解释，加速）──
+      const { recommendForTask } = await import('../services/recommender.js');
+      const result = await recommendForTask({
+        taskId: body.taskId,
+        tenantId,
+        options: { explain: false, limit: 1 },
+      });
+
+      if (!result.recommendations || result.recommendations.length === 0) {
+        sendV2Error(res, 422, 'recommender returned no candidates');
+        return true;
+      }
+
+      const top = result.recommendations[0];
+      const actorId = top.actorId;
+      const actorType = top.type;      // 'human' | 'ai-agent'
+      const score = top.score;
+
+      if (body.dryRun) {
+        sendV2Json(res, 200, {
+          ok: true, dryRun: true,
+          recommendation: { actorId, actorType, score, breakdown: top.scoreBreakdown },
+        });
+        return true;
+      }
+
+      // ── 人类 actor：直接分配，发企微通知 ───────────────────
+      if (actorType === 'human') {
+        await dbWrite(db, () => {
+          db.prepare(
+            `UPDATE tasks SET actor_id = ?, state = 'claimed', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`
+          ).run(actorId, body.taskId, tenantId);
+        });
+        await emit('task.claimed', { tenantId, taskId: body.taskId, actorId, source: 'auto-dispatch' }, { source: 'v2' });
+        sendV2Json(res, 200, { ok: true, actorType: 'human', actorId, score, taskId: body.taskId });
+        return true;
+      }
+
+      // ── AI Agent：拿取 endpoint 发 dispatch 请求 ─────────────
+      const agent = db.prepare('SELECT * FROM actors WHERE id = ? AND tenant_id = ?').get(actorId, tenantId);
+      if (!agent?.agent_endpoint) {
+        sendV2Error(res, 422, `top agent '${actorId}' has no endpoint; cannot auto-dispatch`);
+        return true;
+      }
+
+      const dispatchPayload = await buildAgentContext({
+        taskId: body.taskId, tenantId, agentId: actorId,
+        contextOverride: body.contextOverride || {},
+      });
+
+      try {
+        const resp = await fetch(agent.agent_endpoint, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json', 'x-cue-hub-dispatch': '1',
+            ...(agent.agent_api_key_ref ? { 'x-agent-api-key': agent.agent_api_key_ref } : {}),
+          },
+          body: JSON.stringify(dispatchPayload),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!resp.ok) { sendV2Error(res, 502, `agent returned ${resp.status}`); return true; }
+      } catch (err) {
+        sendV2Error(res, 502, `agent unreachable: ${err.message}`);
+        return true;
+      }
+
+      await emit('task.claimed', { tenantId, taskId: body.taskId, actorId, source: 'auto-dispatch' }, { source: 'v2' });
+      sendV2Json(res, 200, {
+        ok: true, actorType: 'ai-agent', actorId, score, taskId: body.taskId,
         memoryStats: dispatchPayload.context?.memoryStats,
       });
       return true;
@@ -1481,6 +1579,77 @@ export async function handleV2(req, res, url) {
       // 客户端断开时清理
       req.on('close', () => { clearInterval(interval); });
       req.on('error', () => { clearInterval(interval); });
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // GET /v2/tasks/:taskId/explanation — V1 推荐理由（Part L 前端补丁依赖）
+    // ════════════════════════════════════════════════════════════
+    const taskExplainMatch = path.match(/^\/v2\/tasks\/([^/]+)\/explanation$/);
+    if (method === 'GET' && taskExplainMatch) {
+      const taskId = taskExplainMatch[1];
+      const db = getDb();
+      const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND tenant_id = ?').get(taskId, tenantId);
+      if (!task) { sendV2Error(res, 404, 'task not found'); return true; }
+
+      // 从推荐引擎获取解释（带 LLM 解释，稍慢但有意义）
+      const { recommendForTask } = await import('../services/recommender.js');
+      const result = await recommendForTask({ taskId, tenantId, options: { explain: true, limit: 3 } });
+
+      const topRec = result.recommendations?.[0];
+      sendV2Json(res, 200, {
+        taskId,
+        topActor: topRec ? {
+          actorId:        topRec.actorId,
+          displayName:    topRec.displayName,
+          type:           topRec.type,
+          score:          topRec.score,
+          confidence:     topRec.aiConfidence ?? topRec.score / 100,
+          explanation:    topRec.explanation || topRec.explainText || null,
+          scoreBreakdown: topRec.scoreBreakdown || null,
+        } : null,
+        allCandidates: (result.recommendations || []).map(r => ({
+          actorId: r.actorId,
+          displayName: r.displayName,
+          type: r.type,
+          score: r.score,
+        })),
+      });
+      return true;
+    }
+
+    // GET /v2/events/grouped — V4 Timeline（24h 事件按 actor 分组）
+    if (method === 'GET' && path === '/v2/events/grouped') {
+      const params = new URL(`http://x${req.url}`).searchParams;
+      const hours = Math.min(parseInt(params.get('hours') || '24', 10), 72);
+      const db = getDb();
+      const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+
+      const rows = db.prepare(`
+        SELECT e.id, e.type, e.source, e.created_at, e.payload_json
+        FROM events e
+        WHERE e.created_at >= ? AND e.tenant_id = ?
+        ORDER BY e.created_at ASC
+        LIMIT 500
+      `).all(since, tenantId);
+
+      // 按 actorId 分组（从 payload 提取）
+      const grouped = {};
+      for (const row of rows) {
+        let payload = {};
+        try { payload = JSON.parse(row.payload_json); } catch { /* skip */ }
+        const actor = payload.actorId || payload.actor_id || payload.owner || 'system';
+        if (!grouped[actor]) grouped[actor] = [];
+        grouped[actor].push({
+          id:        row.id,
+          type:      row.type,
+          source:    row.source,
+          createdAt: row.created_at,
+          payload,
+        });
+      }
+
+      sendV2Json(res, 200, { since, hours, grouped, totalEvents: rows.length });
       return true;
     }
 
