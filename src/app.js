@@ -1235,6 +1235,8 @@ function openHealthModal() {
     }).join('')}
   `;
   document.querySelector('#healthModalBackdrop').style.display = 'flex';
+  // V3: 异步注入 SPACE 维度扩展
+  loadAndRenderSpaceModal().catch(() => {});
 }
 
 function closeHealthModal() {
@@ -3367,11 +3369,14 @@ function openPullDrawer(pullId) {
   body.innerHTML = buildPullDrawerHtml(pull);
   drawer.classList.remove('hidden');
   backdrop.classList.remove('hidden');
+  // V2: 启动 SSE 实时 AC checklist 订阅
+  startPrAcSse(pull.number || pullId);
 }
 
 function closePullDrawer() {
   document.getElementById('pullDrawer')?.classList.add('hidden');
   document.getElementById('pullDrawerBackdrop')?.classList.add('hidden');
+  stopPrAcSse(); // V2: 关闭时断开 SSE
 }
 
 function buildPullDrawerHtml(pull) {
@@ -4176,6 +4181,8 @@ function openTaskDetail(taskId) {
   renderTaskDetail();
   setRoute('task-detail');
   scheduleBriefPoll();
+  // V1: 异步加载推荐理由（不阻塞主流程）
+  enrichTaskDetailWithExplanation(taskId).catch(() => {});
 }
 
 function scheduleBriefPoll() {
