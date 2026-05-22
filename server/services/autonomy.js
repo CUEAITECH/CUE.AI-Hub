@@ -18,6 +18,11 @@
 //   - 最近 10 个任务 successRate < 60%        → 降至 1 级
 //   - 连续 2 次 Block review                  → 降 1 级
 //   - 存在卡住超过 72 小时的任务               → 降 1 级
+//
+// Circuit Breaker（新增）：
+//   - 最近 10 个任务负向率 > 20%               → 立即挂起（降至 1 级）+ 企微告警
+//   - 挂起后需人工 POST /v2/autonomy/:id/adjust 才能恢复
+//   - 负向率 = polarity=-1 条目 / 总条目
 
 import { getDb } from '../db/index.js';
 import { dbWrite } from '../db/actor.js';
@@ -388,13 +393,59 @@ export async function adjustAutonomy({ tenantId, actorId, newLevel, reason, chan
 // 自动调整所有 Agent
 // ══════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════
+// Circuit Breaker
+// ══════════════════════════════════════════════════════════════
+
 /**
- * 扫描所有 AI Agent，自动升降级
+ * 检查 Circuit Breaker：最近 10 个负向率 > 20% → 挂起
+ *
+ * @param {object} params
+ * @param {string} params.tenantId
+ * @param {string} params.actorId
+ * @returns {{ tripped: boolean, negativeRate: number, sampleSize: number }}
+ */
+export function checkCircuitBreaker({ tenantId, actorId }) {
+  const db = getDb();
+
+  const recent = db.prepare(`
+    SELECT polarity FROM ai_outcomes
+    WHERE tenant_id = ? AND observer != 'human-label'
+    ORDER BY observed_at DESC
+    LIMIT 10
+  `).all(tenantId);
+
+  // 过滤出属于该 actor 的 outcomes（通过 action_ref_id 关联 tasks.actor_id）
+  const actorOutcomes = db.prepare(`
+    SELECT o.polarity
+    FROM ai_outcomes o
+    JOIN tasks t ON o.action_ref_id = t.id
+    WHERE o.tenant_id = ? AND t.actor_id = ?
+    ORDER BY o.observed_at DESC
+    LIMIT 10
+  `).all(tenantId, actorId);
+
+  if (actorOutcomes.length < 3) {
+    return { tripped: false, negativeRate: 0, sampleSize: actorOutcomes.length };
+  }
+
+  const negCount  = actorOutcomes.filter(r => r.polarity === -1).length;
+  const negativeRate = negCount / actorOutcomes.length;
+
+  return {
+    tripped: negativeRate > 0.2,
+    negativeRate: Math.round(negativeRate * 100),
+    sampleSize: actorOutcomes.length,
+  };
+}
+
+/**
+ * 扫描所有 AI Agent，自动升降级（含 Circuit Breaker）
  *
  * @param {object} params
  * @param {string} params.tenantId
  * @param {boolean} [params.dryRun=false]  - 仅评估，不写入
- * @returns {Promise<object>} { evaluated, promoted, demoted, maintained, results[] }
+ * @returns {Promise<object>} { evaluated, promoted, demoted, maintained, circuitTripped, results[] }
  */
 export async function autoAdjustAll({ tenantId, dryRun = false }) {
   ensureAutonomyTables();
@@ -409,31 +460,97 @@ export async function autoAdjustAll({ tenantId, dryRun = false }) {
   let promoted = 0;
   let demoted = 0;
   let maintained = 0;
+  let circuitTripped = 0;
 
   for (const agent of agents) {
+    // ── Circuit Breaker 优先检查（高于普通 demote 逻辑）────────
+    const cb = checkCircuitBreaker({ tenantId, actorId: agent.id });
+    const currentInfo = getAutonomyLevel({ tenantId, actorId: agent.id });
+
+    if (cb.tripped && currentInfo.level > 1) {
+      const reason = `Circuit Breaker 触发：最近 ${cb.sampleSize} 个行为负向率 ${cb.negativeRate}%（阈值 20%），立即降至监督级`;
+
+      const result = {
+        actorId:            agent.id,
+        actorName:          agent.display_name,
+        currentLevel:       currentInfo.level,
+        recommendation:     'circuit-break',
+        newLevel:           1,
+        reason,
+        metrics:            { circuitBreaker: cb },
+        applied:            false,
+        circuitBreakerFired: true,
+      };
+
+      if (!dryRun) {
+        await adjustAutonomy({
+          tenantId,
+          actorId:   agent.id,
+          newLevel:  1,
+          reason,
+          changedBy: 'circuit-breaker',
+          direction: 'demoted',
+        });
+        result.applied = true;
+
+        // 企微告警（fire and forget）
+        try {
+          const { broadcast } = await import('../adapters/index.js');
+          await broadcast(
+            `🚨 **Circuit Breaker 触发**\n\n` +
+            `Agent \`${agent.display_name}\` 已从 **${currentInfo.levelName}** 降至 **Supervised**\n` +
+            `原因：${reason}\n\n` +
+            `需要人工通过 \`POST /v2/autonomy/${agent.id}/adjust\` 恢复。`,
+            { urgency: 'high' }
+          );
+        } catch {}
+      }
+
+      circuitTripped++;
+      demoted++;
+      results.push(result);
+      continue; // 跳过普通 evaluate，circuit break 优先
+    }
+
+    // ── 普通升降级评估 ──────────────────────────────────────────
     const evaluation = evaluateAutonomy({ tenantId, actorId: agent.id });
 
     const result = {
-      actorId: agent.id,
-      actorName: agent.display_name,
+      actorId:     agent.id,
+      actorName:   agent.display_name,
       currentLevel: evaluation.currentLevel,
       recommendation: evaluation.recommendation,
-      newLevel: evaluation.newLevel,
-      reason: evaluation.reason,
-      metrics: evaluation.metrics,
-      applied: false,
+      newLevel:    evaluation.newLevel,
+      reason:      evaluation.reason,
+      metrics:     evaluation.metrics,
+      applied:     false,
+      circuitBreakerFired: false,
     };
 
     if (evaluation.recommendation !== 'maintain' && !dryRun) {
       await adjustAutonomy({
         tenantId,
-        actorId: agent.id,
-        newLevel: evaluation.newLevel,
-        reason: evaluation.reason,
+        actorId:   agent.id,
+        newLevel:  evaluation.newLevel,
+        reason:    evaluation.reason,
         changedBy: 'auto',
         direction: evaluation.direction,
       });
       result.applied = true;
+
+      // 降级时企微告警
+      if (evaluation.recommendation === 'demote') {
+        try {
+          const { broadcast } = await import('../adapters/index.js');
+          await broadcast(
+            `⚠️ **Agent 自主等级自动降级**\n\n` +
+            `Agent \`${agent.display_name}\`：` +
+            `**${AUTONOMY_LEVELS[evaluation.currentLevel]?.name}** → **${AUTONOMY_LEVELS[evaluation.newLevel]?.name}**\n` +
+            `原因：${evaluation.reason}`,
+            { urgency: 'medium' }
+          );
+        } catch {}
+      }
     }
 
     if (evaluation.recommendation === 'promote') promoted++;
@@ -448,6 +565,7 @@ export async function autoAdjustAll({ tenantId, dryRun = false }) {
     promoted,
     demoted,
     maintained,
+    circuitTripped,
     dryRun,
     results,
     runAt: new Date().toISOString(),

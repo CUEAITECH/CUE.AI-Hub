@@ -10,6 +10,20 @@ import { dbWrite } from '../db/actor.js';
 import { emit } from '../events/bus.js';
 import { broadcast } from '../adapters/index.js';
 import { buildAgentContext } from '../services/contextInjector.js';
+import {
+  gatewayAuth,
+  extractApiKey,
+  auditLog,
+  ensureGatewayTables,
+} from '../middleware/apiGateway.js';
+
+// ── 鉴权豁免路径（无需 API Key）────────────────────────────
+const V2_AUTH_EXEMPT = new Set([
+  '/v2/health',
+  '/v2/info',
+  '/v2/openapi.json',
+  '/v2/gateway/validate',
+]);
 
 // ── zod schemas ───────────────────────────────────────────────
 const ActorCreateSchema = z.object({
@@ -107,17 +121,76 @@ async function readBody(req) {
 export async function handleV2(req, res, url) {
   const method = req.method;
   const path = url.pathname;
-  const tenantId = req.headers['x-tenant-id'] || 'default';
+  const startTs = Date.now();
 
   // ── CORS preflight ───────────────────────────────────────────
   if (method === 'OPTIONS') {
     res.writeHead(204, {
       'access-control-allow-origin': '*',
       'access-control-allow-methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-      'access-control-allow-headers': 'content-type, x-cue-api-key, x-tenant-id',
+      'access-control-allow-headers': 'content-type, x-cue-api-key, x-api-key, authorization, x-tenant-id',
     });
     res.end();
     return true;
+  }
+
+  // ── 拦截 writeHead 以记录响应状态码 ──────────────────────────
+  let _capturedStatus = 200;
+  const _origWriteHead = res.writeHead.bind(res);
+  res.writeHead = (code, ...rest) => { _capturedStatus = code; return _origWriteHead(code, ...rest); };
+
+  // ── API Gateway 鉴权 ─────────────────────────────────────────
+  // tenantId 优先来自鉴权结果（API Key 携带 tenantId）
+  let tenantId = req.headers['x-tenant-id'] || 'default';
+  let _authKeyPrefix = null;
+
+  if (!V2_AUTH_EXEMPT.has(path)) {
+    const rawKey = extractApiKey(req);
+
+    if (rawKey?.startsWith('cue_')) {
+      // V2 API Key — 完整 gateway 校验（rate limit + 多租户隔离 + 审计）
+      const auth = await gatewayAuth(req, tenantId !== 'default' ? tenantId : undefined);
+      if (!auth.ok) {
+        const headers = { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*' };
+        if (auth.errorCode === 429 && auth.rateLimitInfo) {
+          headers['x-ratelimit-limit']     = String(auth.rateLimitInfo.limit);
+          headers['x-ratelimit-remaining'] = '0';
+          headers['x-ratelimit-reset']     = String(Math.ceil(auth.rateLimitInfo.resetAt / 1000));
+        }
+        res.writeHead(auth.errorCode, headers);
+        res.end(JSON.stringify({ error: auth.errorMessage }));
+        return true;
+      }
+      // 覆盖 tenantId：API Key 携带的 tenantId 优先，防止跨租户伪造
+      tenantId = auth.tenantId;
+      _authKeyPrefix = auth.keyPrefix;
+
+      // 在响应头中暴露剩余 rate limit 额度
+      if (auth.rateLimitInfo) {
+        _origWriteHead; // 确保已绑定原始方法
+        const rl = auth.rateLimitInfo;
+        // 等响应发出时再写 — 通过 writeHead 拦截保证正确顺序（已在上面绑定）
+        const _prevWriteHead2 = res.writeHead.bind(res);
+        res.writeHead = (code, hdrs, ...rest) => {
+          const merged = typeof hdrs === 'object' ? hdrs : {};
+          merged['x-ratelimit-limit']     = String(rl.limit);
+          merged['x-ratelimit-remaining'] = String(rl.remaining);
+          merged['x-ratelimit-reset']     = String(Math.ceil(rl.resetAt / 1000));
+          return _prevWriteHead2(code, merged, ...rest);
+        };
+      }
+    } else {
+      // Legacy CUE_API_KEY（环境变量配置的固定 key，向下兼容 v1）
+      const cueApiKey = process.env.CUE_API_KEY;
+      if (cueApiKey) {
+        const legacyProvided = req.headers?.['x-cue-api-key'];
+        if (legacyProvided !== cueApiKey) {
+          sendV2Error(res, 401, 'invalid API key — use Authorization: Bearer cue_xxx or X-CUE-API-Key');
+          return true;
+        }
+      }
+      // CUE_API_KEY 未配置 → 开发模式，放行所有请求（与 v1 行为一致）
+    }
   }
 
   try {
@@ -1063,6 +1136,30 @@ export async function handleV2(req, res, url) {
       return true;
     }
 
+    // GET /v2/learning/weights — 查询当前 ranker_weights（供推荐器/调试使用）
+    if (method === 'GET' && path === '/v2/learning/weights') {
+      const { getRankerWeights } = await import('../services/weeklyLearning.js');
+      const weights = getRankerWeights(tenantId);
+      sendV2Json(res, 200, { weights, tenantId, ts: new Date().toISOString() });
+      return true;
+    }
+
+    // POST /v2/learning/weights/reset — 重置 ranker_weights 到默认值
+    if (method === 'POST' && path === '/v2/learning/weights/reset') {
+      const { ensureRankerWeightsTable, getRankerWeights } = await import('../services/weeklyLearning.js');
+      const db = getDb();
+      await import('../db/actor.js').then(({ dbWrite }) =>
+        dbWrite('ranker_weights:reset', (db) => {
+          db.prepare('DELETE FROM ranker_weights WHERE tenant_id = ?').run(tenantId);
+        })
+      );
+      // 重新插入默认值（ensureRankerWeightsTable 里有初始化逻辑，但只针对 'default' tenant）
+      ensureRankerWeightsTable(); // 会为 'default' 重新插入默认值
+      const weights = getRankerWeights(tenantId);
+      sendV2Json(res, 200, { ok: true, weights, message: 'ranker_weights reset to defaults' });
+      return true;
+    }
+
     // SSE 实时事件流
     // ════════════════════════════════════════════════════════════
 
@@ -1146,13 +1243,13 @@ export async function handleV2(req, res, url) {
           '/gateway/validate': { get: { summary: '验证当前 API Key', tags: ['gateway'] } },
         },
       };
-      sendV2Json(res, spec);
+      sendV2Json(res, 200, spec);
       return true;
     }
 
     // POST /v2/gateway/keys — 生成新 API Key
     if (method === 'POST' && path === '/v2/gateway/keys') {
-      const body = await parseBody(req);
+      const body = await readBody(req);
       const { name, scopes, rateLimit, expiresAt } = z.object({
         name: z.string().optional(),
         scopes: z.array(z.string()).optional(),
@@ -1161,10 +1258,10 @@ export async function handleV2(req, res, url) {
       }).parse(body);
       const { generateApiKey } = await import('../middleware/apiGateway.js');
       const result = await generateApiKey({ tenantId, name, scopes, rateLimit, expiresAt });
-      sendV2Json(res, {
+      sendV2Json(res, 201, {
         ...result,
         warning: 'Store this key securely — it cannot be retrieved again',
-      }, 201);
+      });
       return true;
     }
 
@@ -1172,7 +1269,7 @@ export async function handleV2(req, res, url) {
     if (method === 'GET' && path === '/v2/gateway/keys') {
       const { listApiKeys } = await import('../middleware/apiGateway.js');
       const keys = listApiKeys({ tenantId });
-      sendV2Json(res, { keys, count: keys.length });
+      sendV2Json(res, 200, { keys, count: keys.length });
       return true;
     }
 
@@ -1182,7 +1279,7 @@ export async function handleV2(req, res, url) {
       const { revokeApiKey } = await import('../middleware/apiGateway.js');
       const ok = await revokeApiKey({ tenantId, keyId });
       if (!ok) { sendV2Error(res, 404, 'API key not found or already revoked'); return true; }
-      sendV2Json(res, { revoked: true, keyId });
+      sendV2Json(res, 200, { revoked: true, keyId });
       return true;
     }
 
@@ -1197,24 +1294,24 @@ export async function handleV2(req, res, url) {
         limit: Math.min(200, parseInt(q.get('limit') || '50', 10)),
         offset: parseInt(q.get('offset') || '0', 10),
       });
-      sendV2Json(res, result);
+      sendV2Json(res, 200, result);
       return true;
     }
 
-    // GET /v2/gateway/validate — 验证当前 API Key 信息
+    // GET /v2/gateway/validate — 验证当前 API Key 信息（豁免鉴权，自助查询）
     if (method === 'GET' && path === '/v2/gateway/validate') {
-      const rawKey = req.headers?.['x-api-key'] || req.headers?.authorization?.replace('Bearer ', '') || '';
-      const { validateApiKey, checkRateLimit } = await import('../middleware/apiGateway.js');
-      if (!rawKey.startsWith('cue_')) {
-        sendV2Json(res, { valid: false, reason: 'not a v2 API key (must start with cue_)' });
+      const rawKey = extractApiKey(req);
+      const { validateApiKey } = await import('../middleware/apiGateway.js');
+      if (!rawKey?.startsWith('cue_')) {
+        sendV2Json(res, 200, { valid: false, reason: 'not a v2 API key (must start with cue_)' });
         return true;
       }
       const info = await validateApiKey(rawKey);
       if (!info) {
-        sendV2Json(res, { valid: false, reason: 'invalid or expired key' });
+        sendV2Json(res, 200, { valid: false, reason: 'invalid or expired key' });
         return true;
       }
-      sendV2Json(res, { valid: true, tenantId: info.tenantId, scopes: info.scopes, rateLimit: info.rateLimit });
+      sendV2Json(res, 200, { valid: true, tenantId: info.tenantId, scopes: info.scopes, rateLimit: info.rateLimit });
       return true;
     }
 
@@ -1224,7 +1321,7 @@ export async function handleV2(req, res, url) {
     if (method === 'GET' && path === '/v2/autonomy') {
       const { listAutonomyLevels } = await import('../services/autonomy.js');
       const levels = listAutonomyLevels({ tenantId });
-      sendV2Json(res, { levels, count: levels.length });
+      sendV2Json(res, 200, { levels, count: levels.length });
       return true;
     }
 
@@ -1234,26 +1331,27 @@ export async function handleV2(req, res, url) {
       const { getAutonomyLevel, getAutonomyHistory, AUTONOMY_LEVELS } = await import('../services/autonomy.js');
       const current = getAutonomyLevel({ tenantId, actorId });
       const history = getAutonomyHistory({ tenantId, actorId, limit: 20 });
-      sendV2Json(res, { actorId, ...current, history, allLevels: AUTONOMY_LEVELS });
+      sendV2Json(res, 200, { actorId, ...current, history, allLevels: AUTONOMY_LEVELS });
       return true;
     }
 
     // POST /v2/autonomy/:actorId/adjust — 手动调整自主级别
     if (method === 'POST' && path.match(/^\/v2\/autonomy\/[^/]+\/adjust$/)) {
       const actorId = path.split('/')[3];
-      const body = await parseBody(req);
-      const { level, reason } = z.object({
-        level: z.number().int().min(1).max(5),
-        reason: z.string().optional(),
-      }).parse(body);
+      const rawBody = await readBody(req);
+      const { level, reason, changedBy } = z.object({
+        level:     z.number().int().min(1).max(5),
+        reason:    z.string().optional(),
+        changedBy: z.string().optional(),
+      }).parse(rawBody);
       const { adjustAutonomy } = await import('../services/autonomy.js');
       const result = await adjustAutonomy({
         tenantId, actorId, newLevel: level,
-        reason: reason || '手动调整',
-        changedBy: body.changedBy || 'manual',
+        reason:    reason    || '手动调整',
+        changedBy: changedBy || 'manual',
         direction: 'manual',
       });
-      sendV2Json(res, result, 200);
+      sendV2Json(res, 200, result);
       return true;
     }
 
@@ -1262,17 +1360,17 @@ export async function handleV2(req, res, url) {
       const actorId = path.split('/')[3];
       const { evaluateAutonomy } = await import('../services/autonomy.js');
       const evaluation = evaluateAutonomy({ tenantId, actorId });
-      sendV2Json(res, evaluation);
+      sendV2Json(res, 200, evaluation);
       return true;
     }
 
     // POST /v2/autonomy/auto-adjust — 自动扫描并调整所有 Agent
     if (method === 'POST' && path === '/v2/autonomy/auto-adjust') {
-      const body = await parseBody(req);
-      const dryRun = body.dryRun === true;
+      const rawBody = await readBody(req);
+      const dryRun = rawBody.dryRun === true;
       const { autoAdjustAll } = await import('../services/autonomy.js');
       const result = await autoAdjustAll({ tenantId, dryRun });
-      sendV2Json(res, result);
+      sendV2Json(res, 200, result);
       return true;
     }
 
@@ -1284,7 +1382,7 @@ export async function handleV2(req, res, url) {
       const { canPerform, getAutonomyLevel } = await import('../services/autonomy.js');
       const allowed = canPerform({ tenantId, actorId, action });
       const { level } = getAutonomyLevel({ tenantId, actorId });
-      sendV2Json(res, { actorId, action, allowed, level });
+      sendV2Json(res, 200, { actorId, action, allowed, level });
       return true;
     }
 
@@ -1300,5 +1398,19 @@ export async function handleV2(req, res, url) {
     console.error('[v2] error:', method, path, err.message);
     sendV2Error(res, 500, err.message || 'internal error');
     return true;
+  } finally {
+    // ── 审计日志（fire and forget，仅 cue_ key 请求）────────────
+    if (_authKeyPrefix) {
+      auditLog({
+        tenantId,
+        keyPrefix: _authKeyPrefix,
+        method,
+        path,
+        statusCode: _capturedStatus,
+        latencyMs: Date.now() - startTs,
+        ip: req.socket?.remoteAddress,
+        userAgent: req.headers?.['user-agent'],
+      });
+    }
   }
 }

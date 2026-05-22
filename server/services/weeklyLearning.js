@@ -40,6 +40,44 @@ export function ensureLearningReportsTable() {
   `).run();
 }
 
+/**
+ * ranker_weights 表：记录推荐器各维度的动态权重
+ * 由 applyWeeklyInsights() 根据周度 outcome 数据自动调整
+ *
+ * 权重格式：{ dimension: string, weight: float, lastAdjusted: ISO }
+ * 初始权重来自推荐器的 SKILL_SCORE_WEIGHT / RECENCY_WEIGHT 等硬编码常量
+ */
+export function ensureRankerWeightsTable() {
+  const db = getDb();
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS ranker_weights (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id    TEXT NOT NULL DEFAULT 'default',
+      dimension    TEXT NOT NULL,   -- e.g. 'skill_match', 'recency', 'load_balance', 'diversity'
+      weight       REAL NOT NULL DEFAULT 1.0,
+      note         TEXT,            -- 调整原因摘要
+      updated_at   DATETIME NOT NULL,
+      UNIQUE(tenant_id, dimension)
+    )
+  `).run();
+
+  // 初始化默认权重（幂等，已存在时跳过）
+  const now = new Date().toISOString();
+  const defaults = [
+    ['skill_match',    1.0, '技能匹配分（关键词/同义词）'],
+    ['recency',        0.8, '近期活跃度加成'],
+    ['load_balance',   0.6, '当前任务负载惩罚'],
+    ['diversity',      0.4, 'agent/human 多样性加成'],
+    ['success_history', 1.2, '历史成功率加成（来自 outcome ledger）'],
+  ];
+  for (const [dim, w, note] of defaults) {
+    db.prepare(`
+      INSERT OR IGNORE INTO ranker_weights (tenant_id, dimension, weight, note, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('default', dim, w, note, now);
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // 周边界工具
 // ══════════════════════════════════════════════════════════════
@@ -379,6 +417,113 @@ function ruleInsights(metrics) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// 3. 应用周度洞察到 ranker_weights（闭环学习）
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * 根据本周 outcome 数据，调整 ranker_weights 表中的权重
+ *
+ * 规则（简化版 logistic-like 调整，无外部 ML 依赖）：
+ *   - 全局成功率 >= 80%  → success_history weight += 0.05（强化历史记录的重要性）
+ *   - 全局成功率 < 60%   → success_history weight -= 0.10（历史记录已不可信，降权）
+ *   - Block 审阅多（> 30%）→ skill_match weight += 0.08（技能匹配比通量更重要）
+ *   - 完成率 < 50%       → load_balance weight += 0.05（工作量平衡权重提升）
+ *   - 调整幅度限制：每次 |Δ| < 0.15，权重范围 [0.1, 3.0]
+ *
+ * @param {object} params
+ * @param {string} params.tenantId
+ * @param {object} params.metrics  - aggregateWeeklyOutcomes 返回值
+ * @returns {Promise<object[]>}    - 实际修改的 adjustment 列表
+ */
+export async function applyWeeklyInsights({ tenantId, metrics }) {
+  ensureRankerWeightsTable();
+
+  const { outcomes, tasks, reviews } = metrics;
+  const adjustments = [];
+  const now = new Date().toISOString();
+
+  // ── 计算调整量 ─────────────────────────────────────────────
+  const successRate = outcomes.grand.successRate ?? null;
+  const blockRate   = reviews.total > 0 ? reviews.blocked / reviews.total : 0;
+  const complRate   = tasks.total    > 0 ? tasks.done    / tasks.total    : null;
+
+  const deltas = {};
+
+  if (successRate !== null) {
+    if (successRate >= 80) {
+      deltas['success_history'] = +0.05;
+    } else if (successRate < 60) {
+      deltas['success_history'] = -0.10;
+    }
+  }
+
+  if (blockRate > 0.30) {
+    deltas['skill_match'] = +0.08;
+  }
+
+  if (complRate !== null && complRate < 0.50 && tasks.total >= 5) {
+    deltas['load_balance'] = +0.05;
+  }
+
+  // 无数据时不调整
+  if (Object.keys(deltas).length === 0) {
+    console.log('[weeklyLearning] applyWeeklyInsights: 数据不足或无需调整，权重保持不变');
+    return [];
+  }
+
+  // ── 批量写入（使用 dbWrite 保证序列化）────────────────────
+  await dbWrite('ranker_weights:apply', (db) => {
+    for (const [dim, delta] of Object.entries(deltas)) {
+      const row = db.prepare(
+        'SELECT weight FROM ranker_weights WHERE tenant_id = ? AND dimension = ?'
+      ).get(tenantId, dim);
+
+      if (!row) continue; // 该租户无此维度权重（不自动创建，只更新）
+
+      // 限制调整幅度并约束范围
+      const clampedDelta = Math.max(-0.15, Math.min(0.15, delta));
+      const newWeight = Math.max(0.1, Math.min(3.0, row.weight + clampedDelta));
+
+      db.prepare(`
+        UPDATE ranker_weights SET weight = ?, note = ?, updated_at = ?
+        WHERE tenant_id = ? AND dimension = ?
+      `).run(
+        newWeight,
+        `week ${now.slice(0, 10)}: successRate=${successRate}% blockRate=${Math.round(blockRate * 100)}% Δ=${clampedDelta > 0 ? '+' : ''}${clampedDelta.toFixed(2)}`,
+        now,
+        tenantId, dim
+      );
+
+      adjustments.push({
+        dimension:  dim,
+        oldWeight:  row.weight,
+        newWeight,
+        delta:      clampedDelta,
+        reason:     `successRate=${successRate}%, blockRate=${Math.round(blockRate * 100)}%`,
+      });
+    }
+  });
+
+  console.log(`[weeklyLearning] applyWeeklyInsights: ${adjustments.length} dimensions adjusted`);
+  return adjustments;
+}
+
+/**
+ * 读取当前 ranker_weights（供推荐器使用）
+ *
+ * @param {string} tenantId
+ * @returns {object} { dimension: weight }
+ */
+export function getRankerWeights(tenantId = 'default') {
+  ensureRankerWeightsTable();
+  const db = getDb();
+  const rows = db.prepare(
+    'SELECT dimension, weight FROM ranker_weights WHERE tenant_id = ?'
+  ).all(tenantId);
+  return Object.fromEntries(rows.map(r => [r.dimension, r.weight]));
+}
+
+// ══════════════════════════════════════════════════════════════
 // 3. 持久化周报
 // ══════════════════════════════════════════════════════════════
 
@@ -447,6 +592,17 @@ export async function runWeeklyBatch({ tenantId, weekStart, weekEnd }) {
 
   console.log(`[weeklyLearning] report ${reportId} saved (insights source: ${source})`);
 
+  // 6. 应用洞察到 ranker_weights（闭环学习 — 原计划 Part Q.6 + M.1 要求）
+  let weightAdjustments = [];
+  try {
+    weightAdjustments = await applyWeeklyInsights({ tenantId, metrics });
+    if (weightAdjustments.length > 0) {
+      console.log(`[weeklyLearning] ranker_weights adjusted: ${weightAdjustments.map(a => `${a.dimension}(${a.delta > 0 ? '+' : ''}${a.delta.toFixed(2)})`).join(', ')}`);
+    }
+  } catch (err) {
+    console.warn(`[weeklyLearning] applyWeeklyInsights failed (non-blocking): ${err.message}`);
+  }
+
   return {
     reportId,
     weekStart: ws,
@@ -455,6 +611,7 @@ export async function runWeeklyBatch({ tenantId, weekStart, weekEnd }) {
     insights,
     insightSource: source,
     space: { score: space.score, grade: space.grade },
+    weightAdjustments,
   };
 }
 

@@ -24,14 +24,15 @@ import { dirname } from 'node:path';
 }
 // ── V2 地基初始化（在任何路由注册之前）──────────────────────
 import { initDb } from './db/index.js';
-import './state/reducer.js';          // 注册 reducer 订阅者
+import './state/reducer.js';           // 注册 reducer 订阅者（状态机）
+import './events/outcomeHandlers.js';  // 注册 Outcome Ledger 事件订阅（W9 闭合）
 import { replayUnprocessed } from './events/bus.js';
 import { initAdapters } from './adapters/index.js';
 import { handleV2 } from './v2/app.js';
 const { db: _v2db, kysely: _v2kysely } = initDb();
 await replayUnprocessed();            // 重启后回放未处理事件
 initAdapters();                       // 通信平台适配器
-console.log('[V2] DB + EventBus + reducers + adapters initialized');
+console.log('[V2] DB + EventBus + reducers + outcome-handlers + adapters initialized');
 // ── END V2 初始化 ───────────────────────────────────────────
 
 import { createId, loadStore, saveStore, updateStore } from './store.js';
@@ -109,6 +110,7 @@ import {
   LLMUnavailableError
 } from './services/dailyTaskSuggester.js';
 import { startScheduler, runStartupPhaseCorrection } from './scheduler.js';
+import { startCron } from './cron/index.js';
 import { createPullRoutes } from './routes/pullRoutes.js';
 import { handlePrAgentSink, upsertPullFromWebhook } from './services/pullPipeline.js';
 
@@ -431,6 +433,17 @@ startScheduler({
   meetingHour,
   hubUrl,
   wecomBotName
+});
+
+// ── node-cron 定时调度（替代 scheduler.js setInterval，P2 迁移进行中）──────
+// 当前：仅启用每日 db.json 快照（23:55 CST）
+// 晚会和 GitHub 同步仍由 scheduler.js setInterval 负责，避免双重触发
+// 完全迁移需要为 evening.report.due / doc.scan.requested 事件添加 v2 reducer 处理
+startCron({
+  meetingHour,
+  githubSyncIntervalMinutes: 0,   // 禁用 cron 侧的 GitHub 同步（scheduler.js 已有）
+  isCompanyWorkday,
+  todayText,
 });
 
 setTimeout(() => runStartupPhaseCorrection({
