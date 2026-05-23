@@ -1252,13 +1252,14 @@ await test('scheduler prompts use unified WeCom bot name', async () => {
       githubSyncDiffLimit: 5,
       meetingHour: 18,
       hubUrl: 'https://hub.cueai.top',
-      wecomBotName: 'CUE项目中枢'
+      wecomBotName: 'CUE项目中枢',
+      attendanceBotName: '团队考勤'
     });
     assert.ok(callbacks.length >= 1);
     await callbacks[0]();
     await new Promise((resolve) => originalSetTimeout(resolve, 0));
-    assert.match(sentMessages[0], /@CUE项目中枢/);
-    assert.match(sentMessages[0], /示例：@CUE项目中枢 林世棋正常完成/);
+    assert.match(sentMessages[0], /@团队考勤/);
+    assert.match(sentMessages[0], /示例：@团队考勤 林世棋正常完成/);
 
     globalThis.Date = class extends originalDate {
       constructor(...args) {
@@ -1272,8 +1273,8 @@ await test('scheduler prompts use unified WeCom bot name', async () => {
     globalThis.Date.parse = originalDate.parse;
     await callbacks[0]();
     await new Promise((resolve) => originalSetTimeout(resolve, 0));
-    assert.match(sentMessages[1], /@CUE项目中枢/);
-    assert.match(sentMessages[1], /示例：@CUE项目中枢 林世棋正常出席/);
+    assert.match(sentMessages[1], /@团队考勤/);
+    assert.match(sentMessages[1], /示例：@团队考勤 林世棋正常出席/);
   } finally {
     globalThis.setInterval = originalSetInterval;
     globalThis.setTimeout = originalSetTimeout;

@@ -108,6 +108,7 @@ const githubWebhookSecret = process.env.GITHUB_WEBHOOK_SECRET || '';
 const cueApiKey = process.env.CUE_API_KEY || '';
 const hubUrl = process.env.HUB_URL || 'https://hub.cueai.top';
 const wecomBotName = process.env.WECOM_BOT_NAME || 'CUE项目中枢';
+const attendanceBotName = process.env.WECOM_ATTENDANCE_BOT_NAME || '团队考勤';
 // MEETING_HOUR：每日晚会时间（默认 18），作战包在 15 分钟前自动推送
 const meetingHour = Number(process.env.MEETING_HOUR || 18);
 // GITHUB_SYNC_INTERVAL_MINUTES：自动同步 GitHub 的间隔，设为 0 可关闭
@@ -412,7 +413,8 @@ startScheduler({
   githubSyncDiffLimit,
   meetingHour,
   hubUrl,
-  wecomBotName
+  wecomBotName,
+  attendanceBotName
 });
 
 setTimeout(() => runStartupPhaseCorrection({
@@ -437,7 +439,8 @@ server.listen(port, host, () => {
     ANTHROPIC_API_KEY  ${process.env.ANTHROPIC_API_KEY ? '✅ 已配置（LLM 功能启用）' : '❌ 未配置（降级规则引擎）'}
     GITHUB_TOKEN       ${process.env.GITHUB_TOKEN ? '✅ 已配置（GitHub API 同步）' : '❌ 未配置（限速 60次/小时）'}
     WECOM_WEBHOOK_URL  ${process.env.WECOM_WEBHOOK_URL ? '✅ 已配置（企微推送启用）' : '❌ 未配置（推送不可用）'}
-    WECOM_BOT_NAME     @${wecomBotName}（成员只需记这个机器人）
+    WECOM_BOT_NAME     @${wecomBotName}（项目中枢/查询机器人）
+    WECOM_ATTENDANCE_BOT_NAME @${attendanceBotName}（任务完成/晚会出席签到机器人）
     CUE_API_KEY        ${process.env.CUE_API_KEY ? '✅ 已配置（写接口鉴权）' : '⚪ 未配置（写接口对外开放）'}
     SMTP               ${process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS ? '✅ 已配置（邮箱验证码启用）' : '⚪ 未配置（页面显示开发验证码）'}
     HUB_URL            ${hubUrl}
