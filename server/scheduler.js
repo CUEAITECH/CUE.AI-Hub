@@ -268,7 +268,7 @@ export function startScheduler(deps) {
             ``,
             `成功 ${ok} 人，失败 ${failed} 人（forDate=${tomorrow}）`,
             ``,
-            `检查 ANTHROPIC_API_KEY 配置或服务可用性。`
+            `检查 OPENAI_API_KEY 配置或服务可用性。`
           ].join('\n')).catch((e) => logger.error('[Scheduler] 推荐失败告警推送失败:', e.message));
         }
       } catch (err) {

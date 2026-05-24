@@ -486,19 +486,16 @@ export async function generateEveningReport(date) {
     .map((a) => `- ⚠️ ${a.owner}：「${a.taskTitle}」状态: ${a.status}`)
     .join('\n') || '无未完成领取项';
 
-  const llmText = await callClaude(EVENING_SYSTEM_PROMPT, `请生成 ${date} 的研发晚报。
-
-今日 GitHub 提交（共 ${snapshotCommits.length} 条）：
-${commitLines}
-
-今日分工领取 vs 提交对照（共 ${snapshotAssignments.length} 条领取）：
-${assignmentLines}
-
-今日 AI Review（共 ${dateReviews.length} 条）：
-${reviewLines}
-
-未完成领取项：
-${unfinishedLines}`);
+  const llmText = await callClaude(EVENING_SYSTEM_PROMPT, eta.renderString(EVENING_USER_PROMPT_TEMPLATE, {
+    date,
+    commitCount:      snapshotCommits.length,
+    commitLines,
+    assignmentCount:  snapshotAssignments.length,
+    assignmentLines,
+    reviewCount:      dateReviews.length,
+    reviewLines,
+    unfinishedLines,
+  }));
 
   const finalEntry = {
     ...enrichedReport,
