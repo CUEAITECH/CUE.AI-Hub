@@ -273,3 +273,115 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ------------------------------------------------------------
+-- actor_autonomy + autonomy_history（自主权系统，Part M.5）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS actor_autonomy (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id   TEXT NOT NULL DEFAULT 'default',
+  actor_id    TEXT NOT NULL,
+  level       INTEGER NOT NULL DEFAULT 1,
+  reason      TEXT,
+  changed_by  TEXT NOT NULL DEFAULT 'system',
+  created_at  DATETIME NOT NULL,
+  UNIQUE(tenant_id, actor_id)
+);
+CREATE INDEX IF NOT EXISTS idx_actor_autonomy_tenant ON actor_autonomy(tenant_id, actor_id);
+
+CREATE TABLE IF NOT EXISTS autonomy_history (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id   TEXT NOT NULL DEFAULT 'default',
+  actor_id    TEXT NOT NULL,
+  old_level   INTEGER,
+  new_level   INTEGER NOT NULL,
+  direction   TEXT,           -- 'promoted' | 'demoted' | 'initialized' | 'manual'
+  reason      TEXT,
+  changed_by  TEXT NOT NULL DEFAULT 'system',
+  created_at  DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_autonomy_history_actor ON autonomy_history(tenant_id, actor_id, created_at DESC);
+
+-- ------------------------------------------------------------
+-- api_keys + api_audit_log（API Gateway，Part W.6）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS api_keys (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id   TEXT NOT NULL,
+  key_hash    TEXT NOT NULL UNIQUE,  -- SHA-256 of the key
+  key_prefix  TEXT NOT NULL,         -- 前 8 位（用于展示）
+  name        TEXT,
+  scopes      TEXT NOT NULL DEFAULT '["read","write"]',
+  rate_limit  INTEGER NOT NULL DEFAULT 100,  -- req/min
+  active      BOOLEAN NOT NULL DEFAULT 1,
+  last_used   DATETIME,
+  expires_at  DATETIME,
+  created_at  DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id, active);
+
+CREATE TABLE IF NOT EXISTS api_audit_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id   TEXT NOT NULL,
+  key_prefix  TEXT,
+  method      TEXT NOT NULL,
+  path        TEXT NOT NULL,
+  status_code INTEGER,
+  latency_ms  INTEGER,
+  ip          TEXT,
+  user_agent  TEXT,
+  created_at  DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_api_audit_tenant ON api_audit_log(tenant_id, created_at DESC);
+
+-- ------------------------------------------------------------
+-- learning_queue（Active Learning，Part M.1）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS learning_queue (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id     TEXT NOT NULL DEFAULT 'default',
+  outcome_ref   TEXT,
+  action_type   TEXT NOT NULL,
+  action_ref_id TEXT NOT NULL,
+  reason        TEXT NOT NULL,
+  priority      INTEGER DEFAULT 5,
+  ai_confidence REAL DEFAULT 0.5,
+  status        TEXT DEFAULT 'pending',  -- pending | labeled | dismissed
+  metadata_json TEXT,
+  labeled_polarity INTEGER,
+  labeled_signal   TEXT,
+  labeled_by       TEXT,
+  labeled_at       DATETIME,
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, action_type, action_ref_id)
+);
+CREATE INDEX IF NOT EXISTS idx_learning_queue_tenant ON learning_queue(tenant_id, status, priority DESC);
+
+-- ------------------------------------------------------------
+-- ranker_weights（推荐器动态权重，Part M.1）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ranker_weights (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id    TEXT NOT NULL DEFAULT 'default',
+  dimension    TEXT NOT NULL,
+  weight       REAL NOT NULL DEFAULT 1.0,
+  note         TEXT,
+  updated_at   DATETIME NOT NULL,
+  UNIQUE(tenant_id, dimension)
+);
+
+-- ------------------------------------------------------------
+-- learning_reports（周度学习报告，Part M.1）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS learning_reports (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id    TEXT NOT NULL DEFAULT 'default',
+  week_start   TEXT NOT NULL,
+  week_end     TEXT NOT NULL,
+  metrics_json TEXT NOT NULL,
+  insights_json TEXT NOT NULL,
+  space_json   TEXT,
+  generated_by TEXT DEFAULT 'auto',
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, week_start)
+);

@@ -39,7 +39,7 @@ jobs:
                           'project_memory','ai_outcomes','learning_queue',
                           'actor_autonomy','autonomy_history','api_keys',
                           'api_audit_log','ranker_weights','standups',
-                          'weekly_reports','runbooks','llm_calls'];
+                          'learning_reports','llm_calls'];
           let missing = [];
           for (const t of tables) {
             try {
