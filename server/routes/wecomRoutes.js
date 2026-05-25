@@ -29,8 +29,8 @@ function formatList(items, formatter, emptyText, limit = 3) {
 
 function resolveRankingType(input = '') {
   const text = String(input || '').toLowerCase();
-  if (/weekly|week|每周|本周|周榜|周排名/.test(text)) return 'weekly';
-  if (/daily|today|每日|今日|日榜|日排名|排名/.test(text)) return 'daily';
+  if (/weekly|week|每周|本周|周榜|周排名|周排行|周排行/.test(text)) return 'weekly';
+  if (/daily|today|每日|今日|日榜|日排名|日排行|每日排行|每日排名|排名|排行/.test(text)) return 'daily';
   return '';
 }
 
@@ -215,6 +215,59 @@ function attendanceStatusLabel(status) {
   }[status] || status;
 }
 
+function normalizeAttendanceKind(value = '') {
+  const text = String(value || '').trim().toLowerCase();
+  if (/task|completion|任务|完成/.test(text)) return 'task_completion';
+  if (/meeting|attendance|晚会|出席|会议/.test(text)) return 'meeting';
+  return '';
+}
+
+function normalizeAttendanceStatus(value = '') {
+  const text = String(value || '').trim().toLowerCase();
+  if (/normal|present|done|正常|完成|出席/.test(text)) return 'normal';
+  if (/delay|late|延迟|迟到/.test(text)) return 'delayed';
+  if (/approved|提前请假/.test(text)) return 'approved_leave';
+  if (/temp|temporary|临时请假|临时|请假/.test(text)) return 'temp_leave';
+  if (/incomplete|未完成|未出席/.test(text)) return 'reported_incomplete';
+  if (/unreported|未汇报/.test(text)) return 'unreported_done';
+  if (/absent|缺勤/.test(text)) return 'absent';
+  return '';
+}
+
+function isPlaceholderOwner(owner = '') {
+  return /^(张三|李四|王五|姓名|成员姓名|用户姓名|测试|test|user|示例)$/i.test(String(owner || '').trim());
+}
+
+function pickStructuredAttendance(json = {}) {
+  const owner = String(json.owner || json.name || json.memberName || json.userName || '').trim();
+  const kind = normalizeAttendanceKind(json.kind || json.attendanceKind || json.type || json.scene);
+  const status = normalizeAttendanceStatus(json.status || json.attendanceStatus || json.value || json.action);
+  if (!owner && !kind && !status) return null;
+  if (!owner || isPlaceholderOwner(owner) || !kind || !status) {
+    return {
+      error: '考勤记录缺少有效姓名、类型或状态。请填写真实姓名，例如：林世棋正常出席；不要使用张三/姓名等占位值。'
+    };
+  }
+  return {
+    owner,
+    kind,
+    status,
+    rawMessage: String(json.text || json.content || json.message || `${owner}${attendanceStatusLabel(status)}`).trim()
+  };
+}
+
+function logWeComToolHit(pathname, json = {}) {
+  const keys = Object.keys(json || {}).filter((key) => key !== 'token' && key !== 'apiKey');
+  const text = String(json?.text || json?.content || json?.message || '').slice(0, 80);
+  const owner = String(json?.owner || json?.name || json?.memberName || json?.userName || '').slice(0, 40);
+  const type = String(json?.type || json?.kind || json?.status || '').slice(0, 40);
+  console.info(`[WeComTool] ${pathname} keys=${keys.join(',') || '-'} text="${text}" owner="${owner}" type="${type}"`);
+}
+
+function looksLikeAttendanceIntent(text = '') {
+  return /(正常完成|延迟完成|正常出席|延迟出席|提前请假|临时请假|缺勤)/.test(String(text || ''));
+}
+
 function collectProjectMembers(store, projectId) {
   const members = new Set([
     ...(store.members || []).map((member) => member.name).filter(Boolean),
@@ -325,14 +378,38 @@ export function createWeComRoutes({
     const store = await loadStore();
     const { projectId } = resolveProjectContext(store, url, json);
     const text = String(json?.text || json?.content || json?.message || '').trim();
-    const parsed = parseAttendanceMessage(text);
-    if (!parsed) return null;
+    const structured = pickStructuredAttendance(json);
+    if (structured?.error) {
+      return { error: structured.error, result: structured.error };
+    }
+    const parsed = structured || parseAttendanceMessage(text);
+    if (!parsed) {
+      if (looksLikeAttendanceIntent(text)) {
+        return {
+          error: '未记录：缺少成员真实姓名。请发送“姓名正常出席 / 姓名延迟出席 / 姓名正常完成 / 姓名延迟完成”，例如“林世棋正常出席”。',
+          result: '未记录：缺少成员真实姓名。请发送“姓名正常出席 / 姓名延迟出席 / 姓名正常完成 / 姓名延迟完成”，例如“林世棋正常出席”。'
+        };
+      }
+      return null;
+    }
+    if (isPlaceholderOwner(parsed.owner)) {
+      return {
+        error: '未记录：检测到占位姓名。请使用成员真实姓名，不要使用张三/李四/姓名等示例值。',
+        result: '未记录：检测到占位姓名。请使用成员真实姓名，不要使用张三/李四/姓名等示例值。'
+      };
+    }
     const record = normalizeAttendanceRecord({
       ...parsed,
       projectId,
       date: String(json?.date || url.searchParams.get('date') || todayText()).trim(),
       source: 'wecom'
     });
+    if (!record.owner) {
+      return {
+        error: '未记录：缺少成员真实姓名。',
+        result: '未记录：缺少成员真实姓名。'
+      };
+    }
     await updateStore((draft) => {
       draft.attendanceRecords = draft.attendanceRecords || [];
       draft.attendanceRecords = draft.attendanceRecords.filter((item) => !(
@@ -401,6 +478,7 @@ export function createWeComRoutes({
 
     if (url.pathname === '/api/wecom/ranking' && (req.method === 'GET' || req.method === 'POST')) {
       const { json = {} } = req.method === 'POST' ? await readBody(req) : {};
+      logWeComToolHit(url.pathname, json);
       const store = await loadStore();
       const { projectId } = resolveProjectContext(store, url, json);
       const type = resolveRankingType(json?.type || url.searchParams.get('type') || 'daily') || 'daily';
@@ -415,6 +493,7 @@ export function createWeComRoutes({
 
     if (req.method === 'POST' && url.pathname === '/api/wecom/command') {
       const { json } = await readBody(req);
+      logWeComToolHit(url.pathname, json);
       const text = String(json?.text || json?.content || json?.message || '').trim();
       const attendance = await recordWeComAttendance(json, url);
       if (attendance) {
@@ -463,6 +542,7 @@ export function createWeComRoutes({
 
     if (req.method === 'POST' && url.pathname === '/api/wecom/attendance') {
       const { json } = await readBody(req);
+      logWeComToolHit(url.pathname, json);
       const attendance = await recordWeComAttendance(json, url);
       if (!attendance) {
         sendJson(res, 200, {

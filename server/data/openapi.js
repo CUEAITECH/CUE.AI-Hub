@@ -345,7 +345,7 @@ export function buildOpenApiSpec(serverUrl) {
         post: {
           operationId: 'recordAttendanceViaWecom',
           summary: '企业微信内记录考勤反馈',
-          description: '把企业微信成员回复写入考勤统计。支持"姓名正常完成"、"姓名延迟完成"、"姓名正常出席"、"姓名延迟出席"、"姓名临时请假"、"姓名缺勤"；消息前带 @机器人 或 <@bot> 也会自动忽略。',
+          description: '把企业微信成员回复写入考勤统计。支持"姓名正常完成"、"姓名延迟完成"、"姓名正常出席"、"姓名延迟出席"、"姓名临时请假"、"姓名缺勤"；也支持结构化 owner/kind/status 参数。消息前带 @机器人 或 <@bot> 会自动忽略。缺少真实姓名或使用张三等占位名时不会写入。',
           requestBody: {
             required: true,
             content: { 'application/json': { schema: {
@@ -355,6 +355,9 @@ export function buildOpenApiSpec(serverUrl) {
                 text: { type: 'string', description: '成员原始回复文本，例如：林世棋正常出席；也兼容 content / message 字段。' },
                 content: { type: 'string', description: '同 text，兼容企业微信字段配置。' },
                 message: { type: 'string', description: '同 text，兼容企业微信字段配置。' },
+                owner: { type: 'string', description: '结构化成员真实姓名，例如：林世棋。不要传张三、姓名等占位值。' },
+                kind: { type: 'string', description: '结构化考勤类型：meeting 表示晚会出席，task_completion 表示任务完成。' },
+                status: { type: 'string', description: '结构化考勤状态：normal、delayed、approved_leave、temp_leave、reported_incomplete、unreported_done、absent。' },
                 projectId: { type: 'string', description: '项目 ID；不传时使用默认项目。' },
                 date: { type: 'string', description: '考勤日期 YYYY-MM-DD；不传时使用当天。' }
               }
@@ -377,7 +380,7 @@ export function buildOpenApiSpec(serverUrl) {
         post: {
           operationId: 'handleWeComDeterministicCommand',
           summary: '企业微信模块化指令入口',
-          description: '不调用大语言模型，直接按固定指令返回结果或写入考勤。适合配置成智能机器人按钮/快捷指令：菜单、每日排名、每周排名、晚会统计、任务完成统计、今日考勤，以及"姓名正常完成/姓名正常出席"等考勤回复。',
+          description: '不调用大语言模型，直接按固定指令返回结果或写入考勤。适合配置成智能机器人按钮/快捷指令：菜单、每日排名、每日排行、每周排名、周排行、晚会统计、任务完成统计、今日考勤，以及"姓名正常完成/姓名正常出席"等考勤回复。也支持结构化 owner/kind/status 参数。',
           requestBody: {
             required: true,
             content: { 'application/json': { schema: {
@@ -387,6 +390,9 @@ export function buildOpenApiSpec(serverUrl) {
                 text: { type: 'string', description: '成员原始指令，例如：每日排名、晚会统计、林世棋正常出席。也兼容 content / message 字段。' },
                 content: { type: 'string', description: '同 text，兼容企业微信字段配置。' },
                 message: { type: 'string', description: '同 text，兼容企业微信字段配置。' },
+                owner: { type: 'string', description: '结构化成员真实姓名；按钮式打卡时必传，例如：林世棋。不要传张三、姓名等占位值。' },
+                kind: { type: 'string', description: '结构化考勤类型：meeting 表示晚会出席，task_completion 表示任务完成。' },
+                status: { type: 'string', description: '结构化考勤状态：normal、delayed、approved_leave、temp_leave、reported_incomplete、unreported_done、absent。' },
                 projectId: { type: 'string', description: '项目 ID；不传时使用默认项目。' },
                 date: { type: 'string', description: '查询/记录日期 YYYY-MM-DD；不传时使用当天。' },
                 push: { type: 'boolean', description: '是否把结果再通过 webhook 推送到群里。' }
