@@ -94,14 +94,11 @@ await test('mobile app shell exposes bottom navigation and safe touch layout', a
 });
 
 await test('mobile auth and dashboard keep phone-first density', async () => {
-  const [css, app] = await Promise.all([
+  const [css, app, renderTaskTableSrc] = await Promise.all([
     readFile(new URL('../src/styles.css', import.meta.url), 'utf8'),
-    readFile(new URL('../src/app.js', import.meta.url), 'utf8')
+    readFile(new URL('../src/app.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/features/work-graph/renderTaskTable.js', import.meta.url), 'utf8'),
   ]);
-  const renderTasksSource = app.slice(
-    app.indexOf('function renderTasks()'),
-    app.indexOf('function renderActivities()')
-  );
 
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*body:not\(\.authenticated\) \.auth-shell[\s\S]*height:\s*100dvh/);
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.auth-hero[\s\S]*min-height:\s*0/);
@@ -120,8 +117,10 @@ await test('mobile auth and dashboard keep phone-first density', async () => {
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-tasks \.task-table\.compact \.overview-task-row[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/);
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-tasks \.task-table\.compact \.task-row-actions[\s\S]*justify-self:\s*end/);
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.dashboard-tasks \.task-table\.compact \.task-row-actions \.claim-inline-btn[\s\S]*min-width:\s*58px/);
-  assert.match(renderTasksSource, /class="claim-inline-btn"/);
-  assert.doesNotMatch(renderTasksSource, /detail-btn/);
+  // claim-inline-btn and detail-btn checks target the feature module now that
+  // renderTasks() in app.js delegates to src/features/work-graph/renderTaskTable.js
+  assert.match(renderTaskTableSrc, /class="claim-inline-btn"/);
+  assert.doesNotMatch(renderTaskTableSrc, /detail-btn/);
 });
 
 await test('mobile responsive stylesheet is not swallowed by recommendation error rule', async () => {
