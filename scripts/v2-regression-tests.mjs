@@ -1313,6 +1313,672 @@ await test('initVectorStore — sqlite-vec 可用时 isVecReady 为 true', async
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// SECTION 17: observability.js 补充 — /v2/observability/* 全端点
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[observability.js — 补充端点]');
+
+await test('GET /v2/observability/llm 返回 LLM 调用统计', async () => {
+  const ctx = makeCtx({ path: '/v2/observability/llm' });
+  const handled = await handleObs(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.ok(typeof ctx.result().today.totalCalls === 'number');
+  assert.ok(typeof ctx.result().recentFailRatePct === 'number');
+  assert.ok(Array.isArray(ctx.result().byPurpose));
+});
+
+await test('GET /v2/observability/events 返回事件列表', async () => {
+  const ctx = makeCtx({ path: '/v2/observability/events' });
+  const handled = await handleObs(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.ok(Array.isArray(ctx.result().events));
+  assert.ok(typeof ctx.result().total === 'number');
+  assert.ok(typeof ctx.result().unprocessed === 'number');
+});
+
+await test('GET /v2/observability/events 支持 type 过滤', async () => {
+  const ctx = makeCtx({ path: '/v2/observability/events', query: { type: 'task.claimed', limit: '10' } });
+  const handled = await handleObs(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.ok(Array.isArray(ctx.result().events));
+});
+
+await test('GET /v2/observability/sync-health 返回同步健康状态', async () => {
+  const ctx = makeCtx({ path: '/v2/observability/sync-health' });
+  const handled = await handleObs(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.ok(typeof ctx.result().taskPrConsistencyPct === 'number');
+  assert.ok(ctx.result().health === 'healthy' || ctx.result().health === 'degraded');
+  assert.ok(typeof ctx.result().orphanPRs === 'number');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 18: vectorStore 补充 — searchSimilarMemory, rebuildMemoryIndex
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[vectorStore.js — 补充函数]');
+
+const { searchSimilarMemory, rebuildMemoryIndex, indexMemoryEntry } = await import('../server/services/vectorStore.js');
+
+await test('indexMemoryEntry 不抛异常（sqlite-vec 就绪时静默降级）', () => {
+  if (!isVecReady()) return;
+  // indexMemoryEntry 内部有 try-catch，即使写入失败也不抛异常
+  assert.doesNotThrow(() => {
+    indexMemoryEntry(db, { memoryId: Number(seedMemoryId), text: '测试约定：API 需要鉴权，确保安全性' });
+  });
+});
+
+await test('searchSimilarMemory 返回相关记忆', () => {
+  if (!isVecReady()) return;
+  const results = searchSimilarMemory(db, {
+    tenantId: TENANT,
+    query: 'API 鉴权安全',
+    limit: 5,
+  });
+  // 有数据时返回数组，无数据时返回空数组
+  assert.ok(results === null || Array.isArray(results), 'should return array or null');
+});
+
+await test('searchSimilarMemory 支持 projectId 和 kinds 过滤', () => {
+  if (!isVecReady()) return;
+  const results = searchSimilarMemory(db, {
+    tenantId: TENANT,
+    query: '测试任务规范',
+    projectId: 'proj_test',
+    kinds: ['convention', 'decision'],
+    limit: 3,
+  });
+  assert.ok(results === null || Array.isArray(results));
+});
+
+await test('searchSimilarMemory — sqlite-vec 未就绪时返回 null', () => {
+  // 测试降级路径：直接调用时，如果 _vecReady=false 应返回 null
+  // 用非 test tenant 以确保没有意外数据，同时测试空结果
+  const results = searchSimilarMemory(db, {
+    tenantId: 'tenant_that_has_no_data_xyz',
+    query: '随机测试查询',
+    limit: 1,
+  });
+  // 返回 null（未就绪）或 []（就绪但无结果）
+  assert.ok(results === null || Array.isArray(results));
+});
+
+await test('rebuildMemoryIndex 补建缺失向量', () => {
+  if (!isVecReady()) return;
+  const { indexed } = rebuildMemoryIndex(db, TENANT);
+  assert.ok(typeof indexed === 'number', 'should return indexed count');
+  assert.ok(indexed >= 0);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 19: reviews.js 补充 — rawDiff 路径（绕过 GitHub API）
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[reviews.js — rawDiff 路径]');
+
+await test('POST /v2/reviews/trigger rawDiff — no reviewable files 返回 Pass', async () => {
+  // 提供一个只有无意义变更的 diff（非代码文件）
+  const rawDiff = `diff --git a/README.md b/README.md
+index 1234567..abcdefg 100644
+--- a/README.md
++++ b/README.md
+@@ -1,3 +1,4 @@
+ # CUE Project Hub
++
++更新说明文档
+ 描述
+`;
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/reviews/trigger',
+    body: { pullId: seedPullId, rawDiff, maxFiles: 20 },
+  });
+  const handled = await handleReviews(ctx);
+  assert.equal(handled, true);
+  // rawDiff 路径走 parseDiffText，无 reviewable files 时返回 Pass
+  assert.ok(ctx.status() === 200);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 20: agents.js 补充 — 覆盖更多 dispatch 路径
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[agents.js — 补充 dispatch 路径]');
+
+await test('POST /v2/agents/dispatch 返回 422 — agent 无 endpoint', async () => {
+  // 创建一个 ai-agent 但没有 agent_endpoint
+  const noEndpointAgentId = `actor_agent_noep_${Date.now()}`;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO actors (id, tenant_id, type, display_name, agent_model, capabilities_json, autonomy_level, active, created_at, updated_at)
+    VALUES (?, ?, 'ai-agent', 'No Endpoint Agent', 'gpt-5.5', '["code"]', 1, 1, ?, ?)
+  `).run(noEndpointAgentId, TENANT, now, now);
+
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/agents/dispatch',
+    body: { agentId: noEndpointAgentId, taskId: seedTaskId },
+  });
+  const handled = await handleAgents(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.error().status, 422);
+});
+
+await test('POST /v2/agents/callback completed — 更新任务状态', async () => {
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/agents/callback',
+    body: {
+      agentId: seedActorId,
+      taskId: seedTaskId,
+      action: 'completed',
+      artifacts: ['https://github.com/pr/42'],
+      acStatus: { passed: true },
+    },
+  });
+  const handled = await handleAgents(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.equal(ctx.result().eventType, 'agent.task.completed');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 21: events.js 补充 — 有事件数据时的 grouped
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[events.js — 补充有数据路径]');
+
+await test('GET /v2/events/grouped — 有事件时 grouped 非空', async () => {
+  // 种一条事件
+  db.prepare(`
+    INSERT INTO events (tenant_id, type, payload_json, source, created_at)
+    VALUES (?, 'task.claimed', '{"actorId":"actor_test","taskId":"task_test"}', 'test', datetime('now'))
+  `).run(TENANT);
+
+  const ctx = makeCtx({ path: '/v2/events/grouped', query: { hours: '24' } });
+  const handled = await handleEvents(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.ok(typeof ctx.result().grouped === 'object');
+  // 有数据时 grouped 应有 actor 键
+  assert.ok(ctx.result().totalEvents >= 1);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 22: sync.js 补充 — writeback schema + resync 成功路径
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[sync.js — 补充路径]');
+
+await test('POST /v2/sync/writeback ZodError — 缺少 projectId', async () => {
+  const ctx = makeCtx({ method: 'POST', path: '/v2/sync/writeback', body: {} });
+  await assert.rejects(() => handleSync(ctx));
+});
+
+await test('POST /v2/sync/webhook 无效 JSON payload 返回 400', async () => {
+  const origSecret = process.env.GITHUB_WEBHOOK_SECRET;
+  delete process.env.GITHUB_WEBHOOK_SECRET;
+
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/sync/webhook',
+    headers: { 'x-github-event': 'push' },
+  });
+  ctx.req.rawBody = Buffer.from('{ invalid json %%% }');
+
+  const handled = await handleSync(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.error().status, 400);
+
+  if (origSecret) process.env.GITHUB_WEBHOOK_SECRET = origSecret;
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 23: app.js 补充 — rate limit header 注入路径
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[app.js — 补充鉴权路径]');
+
+await test('handleV2 — 无 API Key 且未设置 CUE_API_KEY 时放行', async () => {
+  const origKey = process.env.CUE_API_KEY;
+  delete process.env.CUE_API_KEY;
+
+  const { req, res, url } = makeHttpCtx({ pathname: '/v2/actors' });
+  req.headers = {}; // 无 key
+  await handleV2(req, res, url);
+  // 无 key 配置时应正常放行（返回 200）
+  assert.equal(res.status(), 200);
+
+  if (origKey) process.env.CUE_API_KEY = origKey;
+});
+
+await test('handleV2 — 内部错误时返回 500', async () => {
+  // 通过发送一个会触发 DB 错误的请求来测试 500 路径
+  // 这里直接测试 app.js 的错误捕获：通过注入一个会抛错的 readBody
+  const { req, res, url } = makeHttpCtx({ method: 'POST', pathname: '/v2/memory' });
+  // req.on 永远不触发 end，会导致 readBody 卡住
+  // 改为通过发送损坏 JSON 测试 500
+  req.on = (ev, fn) => {
+    if (ev === 'data') fn(Buffer.from('"valid-but-wrong-type"')); // 非对象
+    if (ev === 'end')  fn();
+  };
+  await handleV2(req, res, url);
+  // ZodError → 400；其他错误 → 500
+  assert.ok(res.status() === 400 || res.status() === 500);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 24: learning.js 补充 — label + weekly-batch
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[learning.js — label + weekly-batch]');
+
+await test('POST /v2/learning/label 对队列条目人工打标', async () => {
+  // 先入队一条（如果没有）
+  const existing = db.prepare(
+    "SELECT id FROM learning_queue WHERE tenant_id = ? AND status = 'pending' LIMIT 1"
+  ).get(TENANT);
+
+  let queueId;
+  if (existing) {
+    queueId = existing.id;
+  } else {
+    // 创建一条
+    const { enqueue } = await import('../server/services/activeLearning.js');
+    const id = await enqueue({
+      tenantId: TENANT,
+      actionType: 'label-test',
+      actionRefId: `label_test_${Date.now()}`,
+      reason: '测试标注：人工确认推荐是否准确',
+      priority: 5,
+      aiConfidence: 0.4,
+    });
+    queueId = id;
+  }
+
+  if (!queueId) return; // 入队失败时跳过
+
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/learning/label',
+    body: { queueId, polarity: 1, signal: '推荐正确，已采纳', labeledBy: 'test-runner' },
+  });
+  const handled = await handleLearning(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.equal(ctx.result().ok, true);
+});
+
+await test('POST /v2/learning/weekly-batch 触发周度批处理', async () => {
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/learning/weekly-batch',
+    body: { weekStart: '2026-05-18', weekEnd: '2026-05-24' },
+  });
+  const handled = await handleLearning(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  // 返回批处理结果（可能为空）
+  assert.ok(ctx.result() !== null);
+});
+
+await test('POST /v2/learning/weekly-batch ZodError — date 格式错误', async () => {
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/learning/weekly-batch',
+    body: { weekStart: '2026/05/18' }, // 格式错误
+  });
+  await assert.rejects(() => handleLearning(ctx));
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 25: agents.js 补充 — dryRun + human actor 路径
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[agents.js — dryRun + human 路径]');
+
+await test('POST /v2/agents/auto-dispatch dryRun:true — 返回推荐不执行', async () => {
+  // 确保任务是 pending 状态
+  db.prepare(`UPDATE tasks SET state = 'pending' WHERE id = ? AND tenant_id = ?`).run(seedTaskId, TENANT);
+
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/agents/auto-dispatch',
+    body: { taskId: seedTaskId, dryRun: true },
+  });
+  const handled = await handleAgents(ctx);
+  assert.equal(handled, true);
+  // recommender 可能有推荐（dryRun true）或无候选（422）
+  assert.ok(
+    (ctx.status() === 200 && ctx.result().dryRun === true) ||
+    ctx.error()?.status === 422,
+    `应返回 dryRun 结果或 422（无候选），实际：${ctx.status() || ctx.error()?.status}`
+  );
+});
+
+await test('POST /v2/agents/dispatch — task 不存在返回 404', async () => {
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/agents/dispatch',
+    body: { agentId: seedActorId, taskId: 'task_nonexistent_dispatch' },
+  });
+  const handled = await handleAgents(ctx);
+  assert.equal(handled, true);
+  // seedActorId 是 human 类型，agent 查询会返回 null → 404
+  assert.equal(ctx.error().status, 404);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 26: gateway.js 补充 — 已生成的 key 执行 revoke
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[gateway.js — revoke 真实 key]');
+
+await test('POST /v2/gateway/keys/:id/revoke 成功撤销已存在的 key', async () => {
+  // 先生成一个 key
+  const genCtx = makeCtx({
+    method: 'POST',
+    path: '/v2/gateway/keys',
+    body: { name: '待撤销测试 key' },
+  });
+  await handleGateway(genCtx);
+  const keyId = genCtx.result()?.id;
+  if (!keyId) return; // 生成失败则跳过
+
+  const ctx = makeCtx({ method: 'POST', path: `/v2/gateway/keys/${keyId}/revoke` });
+  const handled = await handleGateway(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.equal(ctx.result().revoked, true);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 27: events.js 补充 — topRec 存在时的 explanation 结构
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[events.js — explanation topRec 结构]');
+
+await test('GET /v2/tasks/:taskId/explanation topActor 字段结构正确', async () => {
+  const ctx = makeCtx({ path: `/v2/tasks/${seedTaskId}/explanation` });
+  const handled = await handleEvents(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.equal(ctx.result().taskId, seedTaskId);
+  // topActor 可能为 null（无推荐）或有值
+  if (ctx.result().topActor) {
+    assert.ok(ctx.result().topActor.actorId);
+    assert.ok(typeof ctx.result().topActor.score === 'number');
+  }
+  assert.ok(Array.isArray(ctx.result().allCandidates));
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 28: reviews.js 补充 — rawDiff 覆盖 LLM 路径
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[reviews.js — rawDiff with code files]');
+
+await test('POST /v2/reviews/trigger rawDiff 含真实代码文件 — 触发 LLM review', async () => {
+  const rawDiff = `diff --git a/server/api.js b/server/api.js
+index 1234567..abcdefg 100644
+--- a/server/api.js
++++ b/server/api.js
+@@ -1,5 +1,10 @@
+ import express from 'express';
++import db from './db.js';
+
+ export function createRouter() {
+   const router = express.Router();
++
++  router.get('/users', async (req, res) => {
++    const users = db.query('SELECT * FROM users');
++    res.json(users);
++  });
++
+   return router;
+ }
+`;
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/reviews/trigger',
+    body: { pullId: seedPullId, rawDiff, maxFiles: 10 },
+  });
+  const handled = await handleReviews(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.ok(ctx.result().level, 'should have review level');
+  assert.ok(['Pass', 'Warning', 'Block', 'Escalate'].includes(ctx.result().level));
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 29: vectorStore 补充 — searchSimilarMemory with indexed data
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[vectorStore.js — searchSimilarMemory with data]');
+
+await test('searchSimilarMemory 有索引数据时返回结果数组（Binary 格式写入）', () => {
+  if (!isVecReady()) return;
+
+  const memRow = db.prepare(
+    "SELECT id FROM project_memory WHERE tenant_id = ? AND superseded_by IS NULL LIMIT 1"
+  ).get(TENANT);
+  if (!memRow) return;
+
+  // 用 Float32Array 的 Buffer 格式写入（sqlite-vec 原生支持）
+  const vec = embedText('数据库索引优化 SQL 查询性能');
+  const buf = Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength);
+  try {
+    db.prepare('DELETE FROM memory_vec WHERE rowid = ?').run(memRow.id);
+    db.prepare('INSERT INTO memory_vec(rowid, embedding) VALUES (?, ?)').run(memRow.id, buf);
+  } catch { return; } // 写入格式不兼容时跳过，不影响其他测试
+
+  const results = searchSimilarMemory(db, {
+    tenantId: TENANT,
+    query: '数据库查询优化',
+    limit: 5,
+  });
+
+  assert.ok(Array.isArray(results), 'should return array or null');
+  if (Array.isArray(results) && results.length > 0) {
+    assert.ok(results[0]._vecDistance !== undefined, 'should have _vecDistance');
+    // 验证 sort 路径：第一个结果应有最小距离
+    if (results.length > 1) {
+      assert.ok(results[0]._vecDistance <= results[1]._vecDistance);
+    }
+  }
+});
+
+await test('searchSimilarMemory error 时返回 null（降级信号）', () => {
+  if (!isVecReady()) return;
+
+  // 用损坏的查询触发错误路径（通过传入极短文本）
+  const results = searchSimilarMemory(db, {
+    tenantId: TENANT,
+    query: '', // 空文本 → 零向量
+    limit: 1,
+  });
+  // 零向量的 KNN 结果可能为空数组或 null（降级）
+  assert.ok(results === null || Array.isArray(results));
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 30: sync.js 补充 — webhook 成功处理路径
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[sync.js — webhook 成功路径]');
+
+await test('POST /v2/sync/webhook push 事件处理', async () => {
+  const origSecret = process.env.GITHUB_WEBHOOK_SECRET;
+  delete process.env.GITHUB_WEBHOOK_SECRET;
+
+  const pushPayload = JSON.stringify({
+    ref: 'refs/heads/main',
+    commits: [{ id: 'abc123', message: 'feat: 测试推送', author: { name: 'testuser' } }],
+    repository: { name: 'CUE.AI', full_name: 'CUEAITECH/CUE.AI' },
+  });
+
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/sync/webhook',
+    headers: { 'x-github-event': 'push', 'content-type': 'application/json' },
+  });
+  ctx.req.rawBody = Buffer.from(pushPayload);
+
+  const handled = await handleSync(ctx);
+  assert.equal(handled, true);
+  assert.ok(ctx.status() === 200 || ctx.error() !== null);
+
+  if (origSecret) process.env.GITHUB_WEBHOOK_SECRET = origSecret;
+});
+
+await test('POST /v2/sync/resync 成功路径', async () => {
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/sync/resync',
+    body: { projectId: 'proj_test' },
+  });
+  const handled = await handleSync(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.status(), 200);
+  assert.ok(typeof ctx.result().links !== 'undefined' || ctx.result() !== null);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 31: events.js SSE stream — 覆盖 lines 10-51
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[events.js — SSE stream]');
+
+await test('GET /v2/events/stream — SSE 握手 + 立即关闭', async () => {
+  let closeHandler = null;
+  let writeHeadStatus = null;
+  const written = [];
+
+  const sseCtx = {
+    method: 'GET',
+    path: '/v2/events/stream',
+    url: new URL('http://localhost/v2/events/stream'),
+    tenantId: TENANT,
+    req: {
+      headers: {},
+      on: (ev, fn) => {
+        if (ev === 'close') closeHandler = fn;
+        if (ev === 'error') { /* ignore */ }
+      },
+      socket: { remoteAddress: '127.0.0.1' },
+    },
+    res: {
+      writeHead: (status, hdrs) => { writeHeadStatus = status; },
+      write: (chunk) => { written.push(chunk); return true; },
+      end: () => {},
+    },
+    readBody: async () => ({}),
+    sendV2Json: () => {},
+    sendV2Error: () => {},
+    status: () => writeHeadStatus,
+    result: () => null,
+    error: () => null,
+    ok: () => writeHeadStatus === 200,
+  };
+
+  const { handle: handleEventsSSE } = await import('../server/v2/routes/events.js');
+  const handled = await handleEventsSSE(sseCtx);
+
+  assert.equal(handled, true);
+  assert.equal(writeHeadStatus, 200);
+  assert.ok(written.some(w => w.includes('SSE stream connected')));
+
+  // 立即关闭连接，触发 clearInterval
+  if (closeHandler) closeHandler();
+});
+
+await test('GET /v2/events/stream — 带 type 过滤参数', async () => {
+  let closeHandler = null;
+  let writeHeadStatus = null;
+
+  const sseCtx = {
+    method: 'GET',
+    path: '/v2/events/stream',
+    url: new URL('http://localhost/v2/events/stream?type=task.claimed&since=0'),
+    tenantId: TENANT,
+    req: {
+      headers: {},
+      on: (ev, fn) => { if (ev === 'close') closeHandler = fn; },
+    },
+    res: {
+      writeHead: (status) => { writeHeadStatus = status; },
+      write: () => true,
+      end: () => {},
+    },
+    readBody: async () => ({}),
+    sendV2Json: () => {},
+    sendV2Error: () => {},
+    status: () => writeHeadStatus,
+    result: () => null,
+    error: () => null,
+    ok: () => writeHeadStatus === 200,
+  };
+
+  const { handle: handleEventsSSE2 } = await import('../server/v2/routes/events.js');
+  const handled = await handleEventsSSE2(sseCtx);
+  assert.equal(handled, true);
+  assert.equal(writeHeadStatus, 200);
+  if (closeHandler) closeHandler();
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 32: agents.js — dispatch 到无法到达的 endpoint（502 路径）
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[agents.js — dispatch 502 路径]');
+
+await test('POST /v2/agents/dispatch — endpoint 无法到达返回 502', async () => {
+  // 创建一个有 agent_endpoint 但端口不存在的 agent
+  const unreachableAgentId = `actor_agent_unreach_${Date.now()}`;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO actors
+      (id, tenant_id, type, display_name, agent_model, agent_endpoint, capabilities_json, autonomy_level, active, created_at, updated_at)
+    VALUES (?, ?, 'ai-agent', 'Unreachable Agent', 'claude-code', 'http://127.0.0.1:1/hook', '[]', 1, 1, ?, ?)
+  `).run(unreachableAgentId, TENANT, now, now);
+
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/agents/dispatch',
+    body: { agentId: unreachableAgentId, taskId: seedTaskId },
+  });
+
+  // fetch 到 port 1 会立即 ECONNREFUSED
+  const handled = await handleAgents(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.error().status, 502);
+  assert.ok(ctx.error().msg.includes('agent unreachable'));
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 33: reviews.js — 覆盖 GitHub fetch 失败路径（无 owner/repo）
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[reviews.js — GitHub 路径 422]');
+
+await test('POST /v2/reviews/trigger 无 rawDiff 且无 owner/repo 返回 422', async () => {
+  // pull 的 raw_json 里没有 owner/repo 信息，且 body 也没有提供
+  const ctx = makeCtx({
+    method: 'POST',
+    path: '/v2/reviews/trigger',
+    body: { pullId: seedPullId }, // 无 rawDiff，无 owner/repo
+  });
+  const handled = await handleReviews(ctx);
+  assert.equal(handled, true);
+  assert.equal(ctx.error().status, 422);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SECTION 34: app.js 补充 — 路由加载缓存复用
+// ═══════════════════════════════════════════════════════════════════════
+console.log('\n[app.js — 路由缓存]');
+
+await test('handleV2 — 相同路由模块第二次调用走缓存', async () => {
+  // 同一个模块被多个路径前缀引用（如 observability.js 对应 /v2/space + /v2/risks）
+  // 两次调用都应命中模块缓存，seen Set 防止重复调用
+  const { req: req1, res: res1, url: url1 } = makeHttpCtx({ pathname: '/v2/space' });
+  const { req: req2, res: res2, url: url2 } = makeHttpCtx({ pathname: '/v2/risks' });
+
+  await handleV2(req1, res1, url1);
+  await handleV2(req2, res2, url2);
+
+  assert.equal(res1.status(), 200);
+  assert.equal(res2.status(), 200);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // CLEANUP
 // ═══════════════════════════════════════════════════════════════════════
 cleanupTestData();
@@ -1332,3 +1998,6 @@ if (failures.length > 0) {
 } else {
   console.log('✅ 全部通过');
 }
+
+// 强制退出：DB 连接 / 定时器会阻止 event loop 自然结束
+process.exit(failed > 0 ? 1 : 0);

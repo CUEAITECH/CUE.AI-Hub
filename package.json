@@ -45,5 +45,8 @@
     "sqlite-vec": "^0.1.9",
     "unified": "^11.0.5",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "c8": "^11.0.0"
   }
 }
