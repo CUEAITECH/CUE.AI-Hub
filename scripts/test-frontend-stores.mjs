@@ -36,3 +36,21 @@ assert.equal(findById([{ id: 'x' }], 'x').id, 'x');
 assert.equal(rowsForOwner([{ owner: 'Alice' }, { owner: 'Bob' }], 'Alice').length, 1);
 
 console.log('frontend store tests OK');
+
+// PR Pipeline: additional pull store edge-case tests
+{
+  const { mergePull: mP, applyPrReviewEvent: aPRE } = await import('../src/state/pullStore.js');
+  const p0 = [];
+  const p1 = mP(p0, { id: 'pr_1', title: 'feat: add login', state: 'open', number: 42 });
+  assert.equal(p1.length, 1);
+  assert.equal(p1[0].title, 'feat: add login');
+
+  const p2 = mP(p1, { id: 'pr_1', title: 'feat: add login v2' });
+  assert.equal(p2.length, 1);
+  assert.equal(p2[0].title, 'feat: add login v2');
+
+  const p3 = aPRE(p2, { pullId: 'pr_1', complianceDelta: { 'CI 通过': true } });
+  assert.deepEqual(p3[0].realtimeCompliance['CI 通过'], true);
+
+  console.log('PR Pipeline store edge-case tests OK');
+}

@@ -4,6 +4,7 @@ import { appStateApi } from './api/appStateApi.js';
 import { pullsApi } from './api/pullsApi.js';
 import { eventsApi } from './api/eventsApi.js';
 import { observabilityApi } from './api/observabilityApi.js';
+import { renderPullList as _renderPullList } from './features/pr-pipeline/renderPullList.js';
 
 const state = {
   tasks: [],
@@ -3333,37 +3334,7 @@ async function fetchAndRenderPulls() {
 }
 
 function renderPullList() {
-  const container = document.getElementById('pullList');
-  if (!container) return;
-  const pulls = state.pulls || [];
-  if (!pulls.length) {
-    container.innerHTML = '<div class="empty-hint">暂无 PR 数据。请先同步 GitHub 项目。</div>';
-    return;
-  }
-  container.innerHTML = pulls.map((pr) => {
-    const stateLabel = { open: '待合并', merged: '已合并', closed: '已关闭' }[pr.state] || pr.state;
-    const compliance = pr.hubReview?.compliance || pr.prAgentReview?.compliance;
-    const complianceBadge = compliance
-      ? `<span class="pull-compliance-badge">✅${(compliance.done||[]).length} ❌${(compliance.notDone||[]).length} ⚠️${(compliance.needsHumanCheck||[]).length}</span>`
-      : '';
-    const dateStr = pr.mergedAt
-      ? `合并于 ${pr.mergedAt.slice(0, 10)}`
-      : `更新于 ${(pr.updatedAt || '').slice(0, 10)}`;
-    return `
-      <div class="pull-card" onclick="openPullDrawer('${escapeHtml(pr.id)}')">
-        <div class="pull-card-header">
-          <span class="pull-number">#${pr.number}</span>
-          <span class="pull-title">${escapeHtml(pr.title)}</span>
-          <span class="pull-state-badge ${pr.state}">${stateLabel}</span>
-        </div>
-        <div class="pull-card-meta">
-          <span>${escapeHtml(pr.author || '未知')}</span>
-          <span>${dateStr}</span>
-          ${complianceBadge}
-        </div>
-      </div>
-    `;
-  }).join('');
+  _renderPullList(state, { escapeHtml });
 }
 
 function openPullDrawer(pullId) {
