@@ -6,6 +6,7 @@ import { eventsApi } from './api/eventsApi.js';
 import { observabilityApi } from './api/observabilityApi.js';
 import { renderPullList as _renderPullList } from './features/pr-pipeline/renderPullList.js';
 import { openPullDrawer as _openPullDrawer, closePullDrawer as _closePullDrawer, submitPullDecision as _submitPullDecision } from './features/pr-pipeline/PullDrawer.js';
+import { renderTaskTable as _renderTaskTable } from './features/work-graph/renderTaskTable.js';
 
 const state = {
   tasks: [],
@@ -1551,50 +1552,11 @@ function renderRoadmap() {
 }
 
 function renderTasks() {
-  const table = document.querySelector('#taskTable');
-  if (!state.tasks.length) {
-    table.innerHTML = '<div class="empty-state">暂无任务。可以从 AI 排期生成任务，或手动新增。</div>';
-    return;
-  }
-
-  const overviewTasks = [...state.tasks]
-    .sort((a, b) => {
-      const riskWeight = { 高: 3, 中: 2, 低: 1 };
-      return (riskWeight[b.risk] || 0) - (riskWeight[a.risk] || 0)
-        || new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
-    })
-    .slice(0, 5);
-
-  table.innerHTML = `
-    ${overviewTasks.map((task) => {
-      const claimants = getTaskAssignments(task.id);
-      const isDone = task.status === '已完成';
-      return `
-        <div class="task-row overview-task-row">
-          <div class="overview-task-main">
-            <strong>${escapeHtml(task.title)}</strong>
-          </div>
-          <div class="overview-task-meta">
-            <span>${claimants.length ? escapeHtml(claimants.map((item) => item.owner).join('、')) : '未领'}</span>
-            <span class="risk-badge risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
-            <span>${escapeHtml(task.due || '未设置')}</span>
-          </div>
-          <div class="task-row-actions">
-            ${!isDone ? `<button class="claim-inline-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">领取</button>` : ''}
-          </div>
-        </div>
-      `;
-    }).join('')}
-    ${state.tasks.length > 5 ? '<button class="text-link-btn" type="button" data-route="assignment">查看全部任务领取</button>' : ''}
-  `;
-
-  table.querySelectorAll('.claim-inline-btn').forEach((btn) => {
-    btn.addEventListener('click', () =>
-      claimTask(btn.dataset.taskId, btn.dataset.taskTitle).catch((e) => toast(e.message))
-    );
-  });
-  table.querySelectorAll('[data-route]').forEach((btn) => {
-    btn.addEventListener('click', () => setRoute(btn.dataset.route));
+  _renderTaskTable(state, {
+    escapeHtml,
+    getTaskAssignments,
+    onClaimTask: (taskId, taskTitle) => claimTask(taskId, taskTitle).catch((e) => toast(e.message)),
+    onSetRoute: setRoute,
   });
 }
 

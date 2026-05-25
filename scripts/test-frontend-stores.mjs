@@ -54,3 +54,26 @@ console.log('frontend store tests OK');
 
   console.log('PR Pipeline store edge-case tests OK');
 }
+
+// Work Graph: additional task store edge-case tests
+{
+  const { mergeTask: mT, upsertTasks: uT } = await import('../src/state/taskStore.js');
+
+  // mergeTask: updates existing, preserves untouched fields
+  const t0 = [{ id: 't1', title: '任务A', state: 'pending', risk: '高' }];
+  const t1 = mT(t0, { id: 't1', state: 'in_progress' });
+  assert.equal(t1[0].state, 'in_progress');
+  assert.equal(t1[0].title, '任务A'); // preserved
+
+  // mergeTask: adds new task
+  const t2 = mT(t0, { id: 't2', title: '任务B', state: 'pending', risk: '中' });
+  assert.equal(t2.length, 2);
+
+  // upsertTasks: batch upsert
+  const t3 = uT(t0, [{ id: 't1', risk: '低' }, { id: 't3', title: '任务C', state: 'done', risk: '低' }]);
+  assert.equal(t3.length, 2); // t1 updated + t3 added (t0 only has t1)
+  assert.equal(t3.find((t) => t.id === 't1').risk, '低');
+  assert.ok(t3.find((t) => t.id === 't3'));
+
+  console.log('Work Graph store tests OK');
+}
