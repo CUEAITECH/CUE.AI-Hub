@@ -23,9 +23,12 @@ const DIM = 256; // Feature Hashing 向量维度
 
 // ── Voyage AI 配置（Part I 扩展）───────────────────────────────────
 const VOYAGE_API_URL  = 'https://api.voyageai.com/v1/embeddings';
-const VOYAGE_MODEL    = process.env.VOYAGE_MODEL || 'voyage-3-lite';
 const VOYAGE_DIM      = 512; // voyage-3-lite 实际输出 512 维（voyage-3 才是 1024d）
-const USE_VOYAGE      = !!process.env.VOYAGE_API_KEY;
+// 注意：USE_VOYAGE / VOYAGE_MODEL 必须在函数内动态读取，不能在模块顶层求值。
+// 原因：vectorStore.js 是静态 import，在 server/index.js 加载 .env 之前就已执行，
+// 顶层 process.env.VOYAGE_API_KEY 此时为 undefined，会永远返回 false。
+function useVoyage()   { return !!process.env.VOYAGE_API_KEY; }
+function voyageModel() { return process.env.VOYAGE_MODEL || 'voyage-3-lite'; }
 
 let _vecReady        = false; // Feature Hashing vec0 ready
 let _voyageVecReady  = false; // Voyage vec0 ready
@@ -124,7 +127,7 @@ async function embedTextVoyage(text, inputType = 'document') {
       'Authorization': `Bearer ${process.env.VOYAGE_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: VOYAGE_MODEL, input: [text], input_type: inputType }),
+    body: JSON.stringify({ model: voyageModel(), input: [text], input_type: inputType }),
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
@@ -166,14 +169,14 @@ export async function initVectorStore(db) {
     logger.info(`[vectorStore] sqlite-vec loaded (${DIM}d); memory_vec ready`);
 
     // Voyage AI 虚表（当 VOYAGE_API_KEY 已配置时）
-    if (USE_VOYAGE) {
+    if (useVoyage()) {
       try {
         db.exec(`
           CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec_voyage
           USING vec0(embedding float[${VOYAGE_DIM}])
         `);
         _voyageVecReady = true;
-        logger.info(`[vectorStore] Voyage AI embeddings enabled (${VOYAGE_MODEL}, ${VOYAGE_DIM}d)`);
+        logger.info(`[vectorStore] Voyage AI embeddings enabled (${voyageModel()}, ${VOYAGE_DIM}d)`);
       } catch (vErr) {
         logger.warn('[vectorStore] memory_vec_voyage init failed:', vErr.message);
       }
