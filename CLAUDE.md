@@ -105,7 +105,7 @@ index.html              ← 8 个 section.view 对应 8 个导航页
 | `OPENAI_MODEL` | 主力模型（默认 `gpt-5.5`，规划/解释/生成类） |
 | `OPENAI_MINI_MODEL` | 轻量模型（默认 `gpt-5.4-mini`，review map-chunk 高频场景） |
 | `GITHUB_TOKEN` | GitHub PAT，缺失时匿名限速 60次/小时 |
-| `VOYAGE_API_KEY` | Voyage AI API Key，设置后 /v2/memory 向量搜索自动从 Feature Hashing 升级为 Voyage AI 嵌入（voyage-3-lite 模型），无需其他配置 |
+| `VOYAGE_API_KEY` | Voyage AI API Key，设置后 /v2/memory 向量搜索自动从 Feature Hashing 升级为 Voyage AI 嵌入（voyage-3-lite，512d），无需其他配置 |
 | `DOC_TASK_IMPORT_LIMIT` | docs 候选任务每轮自动导入上限，默认 8，最大 20 |
 | `WECOM_WEBHOOK_URL` | 企微群机器人 Webhook URL |
 | `CUE_API_KEY` | 写接口鉴权（配置后所有 POST/PATCH/DELETE 需要请求头 `X-CUE-API-Key`） |

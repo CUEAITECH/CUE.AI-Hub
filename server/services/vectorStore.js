@@ -7,9 +7,9 @@ import logger from '../logger.js';
 //   - Tokenize → unigram + bigram → FNV-1a hash → bucket → log-TF 权重 → L2 normalize
 //   - sqlite-vec vec0 虚表做 cosine KNN 检索（< 1ms on 10k rows）
 //
-// Part I 扩展：Voyage AI 真向量嵌入（voyage-3-lite, 1024d）
+// Part I 扩展：Voyage AI 真向量嵌入（voyage-3-lite, 512d）
 //   - 设置 VOYAGE_API_KEY 后自动启用，无 key 时降级到 Feature Hashing
-//   - 独立虚表 memory_vec_voyage（1024维），不影响现有 memory_vec（256维）
+//   - 独立虚表 memory_vec_voyage（512维），不影响现有 memory_vec（256维）
 //
 // 优雅降级：sqlite-vec 加载失败时 isVecReady() = false，
 //   调用方检测后回退到 confidence 排序（三处 ORDER BY 改动均处理了此情况）
@@ -24,7 +24,7 @@ const DIM = 256; // Feature Hashing 向量维度
 // ── Voyage AI 配置（Part I 扩展）───────────────────────────────────
 const VOYAGE_API_URL  = 'https://api.voyageai.com/v1/embeddings';
 const VOYAGE_MODEL    = process.env.VOYAGE_MODEL || 'voyage-3-lite';
-const VOYAGE_DIM      = 1024;
+const VOYAGE_DIM      = 512; // voyage-3-lite 实际输出 512 维（voyage-3 才是 1024d）
 const USE_VOYAGE      = !!process.env.VOYAGE_API_KEY;
 
 let _vecReady        = false; // Feature Hashing vec0 ready
