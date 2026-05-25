@@ -10,6 +10,8 @@ import { startPrAcSse as _startPrAcSse, stopPrAcSse as _stopPrAcSse, refreshPrAc
 import { renderEveningTimeline as _renderEveningTimeline } from './features/command-center/index.js';
 import { renderTaskTable as _renderTaskTable } from './features/work-graph/renderTaskTable.js';
 import { renderTaskDetail as _renderTaskDetail } from './features/work-graph/renderTaskDetail.js';
+import { enrichTaskDetailWithExplanation as _enrichTaskDetailWithExplanation } from './features/work-graph/renderTaskRecommendation.js';
+import { tasksApi } from './api/tasksApi.js';
 import { renderObservatory as _renderObservatory, loadAndRenderSpacePanel as _loadAndRenderSpacePanel } from './features/observability/index.js';
 
 const state = {
@@ -4602,51 +4604,8 @@ window.loadAndRenderSpaceModal = loadAndRenderSpaceModal;
 // ════════════════════════════════════════════════════════════════
 
 // ── V1: 任务卡片"推荐理由"区块 ─────────────────────────────────
-// 展示推荐引擎对 top actor 的评分理由（来自 /v2/tasks/:id/explanation）
-const _taskExplanationCache = new Map();
-
-async function loadTaskExplanation(taskId) {
-  if (_taskExplanationCache.has(taskId)) return _taskExplanationCache.get(taskId);
-  try {
-    const data = await fetch(`/v2/tasks/${taskId}/explanation`, {
-      headers: { 'X-Tenant-Id': 'default' },
-    }).then(r => r.ok ? r.json() : null);
-    _taskExplanationCache.set(taskId, data);
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-function renderTaskRecommendationBlock(explanation) {
-  if (!explanation?.topActor) return '';
-  const { displayName, type, confidence, explanation: reason, scoreBreakdown } = explanation.topActor;
-  const confPct = Math.round((confidence || 0.5) * 100);
-  const typeLabel = type === 'ai-agent' ? '🤖' : '👤';
-  const breakdownHtml = scoreBreakdown
-    ? Object.entries(scoreBreakdown).slice(0, 4).map(([k, v]) =>
-        `<li class="rec-dim">${k}: <strong>${typeof v === 'number' ? v.toFixed(2) : v}</strong></li>`
-      ).join('')
-    : '';
-  return `
-    <details class="task-recommendation" style="margin-top:8px;border-top:1px solid #e8e8e8;padding-top:8px;">
-      <summary style="cursor:pointer;font-size:0.82em;color:#6b7280;user-select:none;">
-        ${typeLabel} 为什么推给 ${escapeHtml(displayName)}（v2 推荐引擎）
-      </summary>
-      <div class="rec-body" style="margin-top:6px;font-size:0.8em;color:#374151;">
-        ${reason ? `<p style="margin:0 0 4px">${escapeHtml(reason)}</p>` : ''}
-        ${breakdownHtml ? `<ul style="margin:0;padding-left:16px;">${breakdownHtml}</ul>` : ''}
-        <p style="margin:4px 0 0;color:#9ca3af;">置信度：${confPct}%</p>
-      </div>
-    </details>`;
-}
-
-// 挂载到 task-detail 打开时：异步加载解释并注入
-async function enrichTaskDetailWithExplanation(taskId) {
-  const container = document.querySelector('#taskDetailRecommendation');
-  if (!container) return;
-  const data = await loadTaskExplanation(taskId);
-  container.innerHTML = renderTaskRecommendationBlock(data);
+function enrichTaskDetailWithExplanation(taskId) {
+  return _enrichTaskDetailWithExplanation(taskId, { tasksApi, escapeHtml });
 }
 
 // ── V2: PR 详情面板实时 AC checklist（SSE 订阅）──────────────────

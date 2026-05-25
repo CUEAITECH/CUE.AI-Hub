@@ -43,6 +43,7 @@ console.log('PR Pipeline contract tests OK');
 for (const featureFile of [
   'src/features/work-graph/renderTaskTable.js',
   'src/features/work-graph/renderTaskDetail.js',
+  'src/features/work-graph/renderTaskRecommendation.js',
 ]) {
   const src = readFileSync(new URL(`../${featureFile}`, import.meta.url), 'utf8');
   // Strip line comments to avoid false positives from documentation mentioning fetch

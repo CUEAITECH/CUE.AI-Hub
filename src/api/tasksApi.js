@@ -17,6 +17,11 @@ export function createTasksApi(client = httpClient) {
     refreshRecommendations(body = {}) {
       return client.request('/api/recommendations/refresh', { method: 'POST', body: JSON.stringify(body) });
     },
+    getTaskExplanation(taskId, tenantId = 'default') {
+      return client.request(`/v2/tasks/${encodeURIComponent(taskId)}/explanation`, {
+        headers: tenantId ? { 'X-Tenant-Id': tenantId } : {},
+      });
+    },
   };
 }
 
