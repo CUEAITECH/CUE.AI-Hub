@@ -37,3 +37,18 @@ for (const featureFile of [
   assert(!hasApiEndpoint, `${featureFile} must not hardcode /api/ endpoint paths`);
 }
 console.log('PR Pipeline contract tests OK');
+
+// Work Graph: feature 模块不直接调用 fetch()，不硬编码 /api/ 端点路径
+for (const featureFile of [
+  'src/features/work-graph/renderTaskTable.js',
+  'src/features/work-graph/renderTaskDetail.js',
+]) {
+  const src = readFileSync(new URL(`../${featureFile}`, import.meta.url), 'utf8');
+  // Strip line comments to avoid false positives from documentation mentioning fetch
+  const srcNoComments = src.replace(/\/\/.*$/gm, '');
+  const hasFetch = /\bfetch\s*\(/.test(srcNoComments);
+  const hasApiEndpoint = /['"`]\/api\//.test(srcNoComments);
+  assert(!hasFetch,       `${featureFile} must not call fetch() directly`);
+  assert(!hasApiEndpoint, `${featureFile} must not hardcode /api/ endpoint paths`);
+}
+console.log('Work Graph contract tests OK');
