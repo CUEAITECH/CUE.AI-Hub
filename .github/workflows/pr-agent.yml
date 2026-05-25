@@ -1,44 +1,67 @@
 name: PR-Agent Review
-# Phase 2 时填入真实 secrets 后激活
-# 目前 if: false，Actions 不会实际执行 PR-Agent
+# PR-Agent 是自动审阅和合规信号源，不替代人工 reviewer。
+# 需要仓库 Actions secret：ANTHROPIC_KEY。
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review, review_requested]
   pull_request_review_comment:
     types: [created]
   issue_comment:
     types: [created]
+  workflow_dispatch:
 
 jobs:
   pr_agent_job:
-    if: ${{ true }}
+    if: ${{ github.event.sender.type != 'Bot' && (github.event_name != 'issue_comment' || github.event.issue.pull_request) }}
     runs-on: ubuntu-latest
+    name: Run PR-Agent review
     permissions:
       issues: write
       pull-requests: write
-      contents: read
+      contents: write
     steps:
-      - name: PR-Agent Review
-        uses: Codium-ai/pr-agent@main
+      - name: Validate PR-Agent configuration
         env:
-          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_BASE: https://api.anthropic.com/v1
-          CONFIG.AI_PROVIDER: anthropic
+          ANTHROPIC_KEY_VALUE: ${{ secrets.ANTHROPIC_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_KEY_VALUE" ]; then
+            echo "::error::Missing repository secret ANTHROPIC_KEY. PR-Agent cannot run."
+            exit 1
+          fi
+
+      - name: PR-Agent review
+        id: pragent
+        uses: the-pr-agent/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
+          config.model: ${{ vars.PR_AGENT_MODEL || 'anthropic/claude-sonnet-4-20250514' }}
+          config.fallback_models: ${{ vars.PR_AGENT_FALLBACK_MODELS || '["anthropic/claude-3-5-haiku-20241022"]' }}
           github_action_config.auto_review: "true"
           github_action_config.auto_improve: "false"
           github_action_config.auto_describe: "true"
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review", "review_requested"]'
+          pr_reviewer.require_tests_review: "true"
+          pr_reviewer.require_score_review: "true"
 
       - name: Notify Hub (sink)
         if: always()
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || '' }}
+          HUB_URL: ${{ vars.HUB_URL || secrets.CUE_HUB_URL }}
+          CUE_API_KEY: ${{ secrets.CUE_API_KEY }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
           if [ -z "$PR_NUMBER" ]; then
             echo "No PR number found, skipping Hub notification"
             exit 0
           fi
-          curl -sf -X POST "${{ secrets.CUE_HUB_URL }}/api/webhooks/pr-agent" \
+          if [ -z "$HUB_URL" ]; then
+            echo "No HUB_URL/CUE_HUB_URL configured, skipping Hub notification"
+            exit 0
+          fi
+          curl -sf -X POST "$HUB_URL/api/webhooks/pr-agent" \
             -H "Content-Type: application/json" \
-            -H "X-CUE-API-Key: ${{ secrets.CUE_API_KEY }}" \
+            -H "X-CUE-API-Key: $CUE_API_KEY" \
             -d "{\"event\":\"pr_agent_review\",\"repo\":\"${{ github.repository }}\",\"pr_number\":${PR_NUMBER},\"run_id\":\"${{ github.run_id }}\"}" \
             || echo "Hub notification failed (non-fatal)"

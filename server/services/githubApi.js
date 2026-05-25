@@ -214,10 +214,12 @@ export async function fetchProjectPRs(owner, repo, options = {}) {
  * @param {number} prNumber
  */
 export async function fetchPRDetail(owner, repo, prNumber) {
-  const [pr, reviews, comments] = await Promise.all([
+  const [pr, reviews, comments, commits, files] = await Promise.all([
     ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}`),
     ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/reviews`),
-    ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/comments`)
+    ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/comments`),
+    ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/commits`),
+    ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/files`)
   ]);
 
   return {
@@ -233,7 +235,26 @@ export async function fetchPRDetail(owner, repo, prNumber) {
     mergedAt: pr.merged_at || null,
     createdAt: pr.created_at || new Date().toISOString(),
     updatedAt: pr.updated_at || new Date().toISOString(),
-    commits: [],
+    additions: pr.additions || 0,
+    deletions: pr.deletions || 0,
+    changedFiles: pr.changed_files || (files || []).length,
+    commits: (commits || []).map((c) => ({
+      sha: c.sha || '',
+      title: (c.commit?.message || '').split('\n')[0],
+      message: c.commit?.message || '',
+      author: mapOwner(c.author?.login || c.commit?.author?.name || '', '', ''),
+      authorLogin: c.author?.login || '',
+      createdAt: c.commit?.author?.date || '',
+      htmlUrl: c.html_url || ''
+    })),
+    files: (files || []).map((f) => ({
+      filename: f.filename || '',
+      status: f.status || '',
+      additions: f.additions || 0,
+      deletions: f.deletions || 0,
+      changes: f.changes || 0,
+      patch: f.patch || ''
+    })),
     reviews: (reviews || []).map((r) => ({
       id: r.id,
       user: r.user?.login || '',

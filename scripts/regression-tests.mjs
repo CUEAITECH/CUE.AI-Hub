@@ -2158,3 +2158,53 @@ await test('cleanup endpoint resets unclaimed task owner to 待认领 and stashe
   assert.equal(store.tasks.find((t) => t.id === 't_claimed').owner, '罗子宽', '已认领 owner 不变');
   assert.equal(store.tasks.find((t) => t.id === 't_done').owner, '林世棋', '已完成 owner 不变');
 });
+
+await test('PR upsert keeps GitHub detail fields and updatedAt for list details', async () => {
+  const { upsertPullIntoStore } = await import('../server/services/pullPipeline.js');
+  const originalDryRun = process.env.LLM_DRY_RUN;
+  process.env.LLM_DRY_RUN = 'true';
+
+  let store = migrateStore({
+    projects: [{ id: 'cue_ai_classroom', githubFullRepo: 'CUEAITECH/Cue.AI' }],
+    tasks: [{ id: 'task_pr_detail', title: 'PR detail task', projectId: 'cue_ai_classroom' }],
+    pulls: []
+  });
+  const prDetail = {
+    number: 42,
+    title: 'fix: show PR details task_pr_detail',
+    body: '任务：task_pr_detail',
+    state: 'open',
+    author: 'Alice',
+    headBranch: 'fix/pr-details',
+    baseBranch: 'main',
+    htmlUrl: 'https://github.com/CUEAITECH/Cue.AI/pull/42',
+    additions: 12,
+    deletions: 3,
+    changedFiles: 2,
+    commits: [{ sha: 'abcdef123456', title: 'fix details', message: 'fix details' }],
+    files: [{ filename: 'src/app.js', status: 'modified', additions: 10, deletions: 2, changes: 12 }],
+    reviews: [],
+    reviewComments: [],
+    mergedAt: null,
+    createdAt: '2026-05-25T01:00:00Z',
+    updatedAt: '2026-05-25T02:00:00Z'
+  };
+
+  const { pull } = await upsertPullIntoStore(prDetail, 'cue_ai_classroom', async (mutator) => {
+    store = await mutator(structuredClone(store));
+    return store;
+  }, store);
+
+  assert.equal(pull.updatedAt, prDetail.updatedAt);
+  assert.equal(pull.createdAt, prDetail.createdAt);
+  assert.equal(pull.changedFiles, 2);
+  assert.equal(pull.additions, 12);
+  assert.equal(pull.deletions, 3);
+  assert.equal(pull.commits[0].sha, 'abcdef123456');
+  assert.equal(pull.files[0].filename, 'src/app.js');
+  assert.deepEqual(pull.linkedTaskIds, ['task_pr_detail']);
+  assert.ok(pull.syncedAt, 'sync write time is tracked separately');
+
+  if (originalDryRun === undefined) delete process.env.LLM_DRY_RUN;
+  else process.env.LLM_DRY_RUN = originalDryRun;
+});

@@ -3325,28 +3325,44 @@ function renderPullList() {
   if (!container) return;
   const pulls = state.pulls || [];
   if (!pulls.length) {
-    container.innerHTML = '<div class="empty-hint">暂无 PR 数据。请先同步 GitHub 项目。</div>';
+    container.innerHTML = '<div class="pull-empty-state"><b>暂无 PR 信号</b><span>同步 GitHub 项目后，这里会展示待合并、已合并和已关闭的 PR 审阅流。</span></div>';
     return;
   }
   container.innerHTML = pulls.map((pr) => {
     const stateLabel = { open: '待合并', merged: '已合并', closed: '已关闭' }[pr.state] || pr.state;
     const compliance = pr.hubReview?.compliance || pr.prAgentReview?.compliance;
+    const doneCount = (compliance?.done || []).length;
+    const notDoneCount = (compliance?.notDone || []).length;
+    const humanCount = (compliance?.needsHumanCheck || []).length;
     const complianceBadge = compliance
-      ? `<span class="pull-compliance-badge">✅${(compliance.done||[]).length} ❌${(compliance.notDone||[]).length} ⚠️${(compliance.needsHumanCheck||[]).length}</span>`
-      : '';
+      ? `<span class="pull-compliance-badge"><b>${doneCount}</b> 已验收 <b>${notDoneCount}</b> 缺口 <b>${humanCount}</b> 待确认</span>`
+      : '<span class="pull-compliance-badge muted">等待验收对照</span>';
+    const reviewLevel = pr.hubReview?.level || pr.prAgentReview?.level || '';
+    const reviewBadge = reviewLevel
+      ? `<span class="pull-review-badge level-${String(reviewLevel).toLowerCase()}">${escapeHtml(reviewLevel)}</span>`
+      : '<span class="pull-review-badge neutral">未审阅</span>';
     const dateStr = pr.mergedAt
       ? `合并于 ${pr.mergedAt.slice(0, 10)}`
       : `更新于 ${(pr.updatedAt || '').slice(0, 10)}`;
+    const branchText = `${pr.headBranch || 'head'} → ${pr.baseBranch || 'base'}`;
     return `
       <div class="pull-card" onclick="openPullDrawer('${escapeHtml(pr.id)}')">
         <div class="pull-card-header">
-          <span class="pull-number">#${pr.number}</span>
-          <span class="pull-title">${escapeHtml(pr.title)}</span>
-          <span class="pull-state-badge ${pr.state}">${stateLabel}</span>
+          <div class="pull-title-stack">
+            <div class="pull-kicker">
+              <span class="pull-number">#${pr.number}</span>
+              <span class="pull-branch">${escapeHtml(branchText)}</span>
+            </div>
+            <span class="pull-title">${escapeHtml(pr.title)}</span>
+          </div>
+          <div class="pull-card-status">
+            <span class="pull-state-badge ${pr.state}">${stateLabel}</span>
+            ${reviewBadge}
+          </div>
         </div>
         <div class="pull-card-meta">
-          <span>${escapeHtml(pr.author || '未知')}</span>
-          <span>${dateStr}</span>
+          <span class="pull-author">${escapeHtml(pr.author || '未知')}</span>
+          <span>${escapeHtml(dateStr)}</span>
           ${complianceBadge}
         </div>
       </div>
@@ -3379,8 +3395,50 @@ function buildPullDrawerHtml(pull) {
   const linkedTasks = (pull.linkedTaskIds || [])
     .map((id) => {
       const task = (state.tasks || []).find((t) => t.id === id);
-      return task ? `<a href="#" onclick="openTaskDetail('${id}'); return false;">${escapeHtml(task.title)}</a>` : id;
-    }).join(', ') || '无';
+      return task ? `<a href="#" class="pr-linked-task" onclick="openTaskDetail('${id}'); return false;">${escapeHtml(task.title)}</a>` : `<span class="pr-linked-task">${escapeHtml(id)}</span>`;
+    }).join('') || '<span class="pr-linked-task muted">暂无关联任务</span>';
+  const reviewLevel = pull.hubReview?.level || pull.prAgentReview?.level || '未审阅';
+  const reviewSource = pull.hubReview?.level ? 'Hub Review' : pull.prAgentReview?.level ? 'PR-Agent' : 'Review';
+  const commits = pull.commits || [];
+  const files = pull.files || [];
+  const statItems = [
+    { label: '提交', value: commits.length },
+    { label: '文件', value: pull.changedFiles ?? files.length },
+    { label: '新增', value: pull.additions || 0 },
+    { label: '删除', value: pull.deletions || 0 }
+  ];
+  const statsHtml = `
+    <div class="pr-stats-grid">
+      ${statItems.map((item) => `<div><span>${item.label}</span><b>${item.value}</b></div>`).join('')}
+    </div>
+  `;
+  const commitsHtml = commits.length ? `
+    <div class="pr-detail-section">
+      <div class="pr-detail-section-head"><span>提交记录</span><small>${commits.length} 条</small></div>
+      <ul class="pr-detail-list">
+        ${commits.slice(0, 8).map((commit) => `
+          <li>
+            <b>${escapeHtml((commit.sha || '').slice(0, 7) || 'commit')}</b>
+            <span>${escapeHtml(commit.title || commit.message || '无提交说明')}</span>
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+  ` : '';
+  const filesHtml = files.length ? `
+    <div class="pr-detail-section">
+      <div class="pr-detail-section-head"><span>变更文件</span><small>${files.length} 个</small></div>
+      <ul class="pr-detail-list">
+        ${files.slice(0, 12).map((file) => `
+          <li>
+            <b>${escapeHtml(file.status || 'modified')}</b>
+            <span>${escapeHtml(file.filename || '')}</span>
+            <em>+${Number(file.additions || 0)} / -${Number(file.deletions || 0)}</em>
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+  ` : '';
 
   const complianceHtml = (sourceLabel, compliance) => {
     if (!compliance) return '';
@@ -3391,33 +3449,50 @@ function buildPullDrawerHtml(pull) {
     const listItems = (arr) => arr.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
     return `
       <div class="pr-compliance-section">
-        <div class="pr-compliance-header">${sourceLabel} 验收对照</div>
-        ${done.length ? `<div class="pr-compliance-bucket bucket-done"><h4>✅ 已完成（${done.length}）</h4><ul>${listItems(done)}</ul></div>` : ''}
-        ${notDone.length ? `<div class="pr-compliance-bucket bucket-notdone"><h4>❌ 未完成（${notDone.length}）</h4><ul>${listItems(notDone)}</ul></div>` : ''}
-        ${needsHumanCheck.length ? `<div class="pr-compliance-bucket bucket-human"><h4>⚠️ 需人工确认（${needsHumanCheck.length}）</h4><ul>${listItems(needsHumanCheck)}</ul></div>` : ''}
+        <div class="pr-compliance-header"><span>${sourceLabel} 验收对照</span><small>${done.length + notDone.length + needsHumanCheck.length} 项</small></div>
+        <div class="pr-compliance-grid">
+          ${done.length ? `<div class="pr-compliance-bucket bucket-done"><h4>已完成 · ${done.length}</h4><ul>${listItems(done)}</ul></div>` : ''}
+          ${notDone.length ? `<div class="pr-compliance-bucket bucket-notdone"><h4>仍有缺口 · ${notDone.length}</h4><ul>${listItems(notDone)}</ul></div>` : ''}
+          ${needsHumanCheck.length ? `<div class="pr-compliance-bucket bucket-human"><h4>人工确认 · ${needsHumanCheck.length}</h4><ul>${listItems(needsHumanCheck)}</ul></div>` : ''}
+        </div>
       </div>
     `;
   };
 
   return `
-    <div class="pr-info-row">
+    <div class="pr-drawer-hero">
+      <div>
+        <span class="pull-number">#${pull.number}</span>
+        <h3>${escapeHtml(pull.title || '未命名 PR')}</h3>
+      </div>
       <span class="pull-state-badge ${pull.state}">${stateLabel}</span>
-      <span>${escapeHtml(pull.headBranch)} → ${escapeHtml(pull.baseBranch)}</span>
     </div>
-    <div class="pr-info-row"><strong>作者：</strong>${escapeHtml(pull.author || '未知')}</div>
-    <div class="pr-info-row"><strong>关联任务：</strong>${linkedTasks}</div>
-    ${pull.mergedAt ? `<div class="pr-info-row"><strong>合并时间：</strong>${pull.mergedAt.slice(0, 16).replace('T', ' ')}</div>` : ''}
+    <div class="pr-branch-flow">
+      <span>${escapeHtml(pull.headBranch || 'head')}</span>
+      <b>→</b>
+      <span>${escapeHtml(pull.baseBranch || 'base')}</span>
+    </div>
+    <div class="pr-summary-grid">
+      <div><span>作者</span><b>${escapeHtml(pull.author || '未知')}</b></div>
+      <div><span>${reviewSource}</span><b>${escapeHtml(reviewLevel)}</b></div>
+      <div><span>合并时间</span><b>${pull.mergedAt ? pull.mergedAt.slice(0, 16).replace('T', ' ') : '尚未合并'}</b></div>
+    </div>
+    <div class="pr-linked-section">
+      <span>关联任务</span>
+      <div>${linkedTasks}</div>
+    </div>
+    ${statsHtml}
+    ${commitsHtml}
+    ${filesHtml}
 
     ${complianceHtml('Hub Review', pull.hubReview?.compliance)}
     ${complianceHtml('PR-Agent', pull.prAgentReview?.compliance)}
 
-    ${pull.hubReview?.level ? `<div class="pr-info-row" style="margin-top:0.8rem;"><strong>Hub Review 级别：</strong>${pull.hubReview.level}</div>` : ''}
-
     <div class="pr-decision-row">
-      <button class="btn-pass" onclick="submitPullDecision('${pull.id}', 'Pass')">✓ Pass</button>
-      <button class="btn-escalate" onclick="submitPullDecision('${pull.id}', 'Escalate')">⚠ Escalate</button>
+      <button class="btn-pass" onclick="submitPullDecision('${pull.id}', 'Pass')">标记 Pass</button>
+      <button class="btn-escalate" onclick="submitPullDecision('${pull.id}', 'Escalate')">升级 Escalate</button>
     </div>
-    ${pull.humanDecision ? `<div class="pr-info-row" style="margin-top:0.5rem;color:#6b7280;font-size:0.8rem;">已决策：${pull.humanDecision}（${(pull.humanAt||'').slice(0,10)}）</div>` : ''}
+    ${pull.humanDecision ? `<div class="pr-human-decision">已决策：${escapeHtml(pull.humanDecision)} · ${(pull.humanAt||'').slice(0,10)}</div>` : ''}
   `;
 }
 
