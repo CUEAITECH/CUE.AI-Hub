@@ -85,7 +85,7 @@ export const BUILTIN_RUNBOOKS = [
     severity: 'info',
     actions: [
       '1. 检查是否有 agent 注册（GET /v2/actors?type=ai-agent）',
-      '2. 确认 ANTHROPIC_API_KEY 是否配置',
+      '2. 确认 OPENAI_API_KEY 是否配置',
       '3. 确认 agent 的 active 字段是否为 true',
       '4. 如需自动化，注册至少一个 agent',
     ],

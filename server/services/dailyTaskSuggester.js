@@ -63,7 +63,7 @@ export async function generateDailyTaskSuggestions(forDate, userId, store, optio
 
   // 3. LLM 排序
   if (!isAvailable()) {
-    throw new LLMUnavailableError('ANTHROPIC_API_KEY 未配置');
+    throw new LLMUnavailableError('OPENAI_API_KEY 未配置');
   }
 
   const deliverableTitleById = new Map(

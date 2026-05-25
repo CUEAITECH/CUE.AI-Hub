@@ -393,26 +393,19 @@ const server = createServer(async (req, res) => {
     // ── V2 路由：/v2/* 走 Fastify（Part N.1）───────────────────
     // Fastify /v2/health → 原生处理；其余 → handleV2 bridge
     if (url.pathname.startsWith('/v2/')) {
-      _fastifyApp.routing()(req, res);
+      _fastifyApp.routing(req, res);
       return;
     }
 
+    // ── [experiment/v2-standalone] v1 /api/* 已禁用 ──────────────
     if (url.pathname.startsWith('/api/')) {
-      // 处理 CORS 预检请求
       if (req.method === 'OPTIONS') {
         setCorsHeaders(res);
         res.writeHead(204);
         res.end();
         return;
       }
-
-      if (requiresApiKey(req, url) && !hasValidApiKey(req) && !hasValidSession(req)) {
-        sendError(res, 401, 'invalid api key', '写入或触发动作的 API 需要请求头 X-CUE-API-Key。');
-        return;
-      }
-
-      const handled = await handleApi(req, res, url);
-      if (!handled) sendError(res, 404, 'api route not found');
+      sendError(res, 404, 'v1 API disabled — use /v2/*');
       return;
     }
 
@@ -467,6 +460,12 @@ setTimeout(() => runStartupPhaseCorrection({
   reassignChecklistPhaseIds
 }), 3000);
 
+// ── 启动时全量同步 JSON store → SQLite（让 v2 接口读到真实业务数据）──
+import { syncJsonToSqlite } from './services/jsonToSqliteSync.js';
+loadStore().then(store => syncJsonToSqlite(store)).catch(err =>
+  logger.warn('[startup] JSON→SQLite 初始同步失败:', err.message)
+);
+
 server.listen(port, host, () => {
   const prepHour = meetingHour === 0 ? 23 : meetingHour - 1;
   logger.info(`
@@ -477,7 +476,7 @@ server.listen(port, host, () => {
   Hub：${hubUrl}
 
   环境变量状态：
-    ANTHROPIC_API_KEY  ${process.env.ANTHROPIC_API_KEY ? '✅ 已配置（LLM 功能启用）' : '❌ 未配置（降级规则引擎）'}
+    OPENAI_API_KEY     ${process.env.OPENAI_API_KEY ? '✅ 已配置（LLM 功能启用）' : '❌ 未配置（降级规则引擎）'}
     GITHUB_TOKEN       ${process.env.GITHUB_TOKEN ? '✅ 已配置（GitHub API 同步）' : '❌ 未配置（限速 60次/小时）'}
     WECOM_WEBHOOK_URL  ${process.env.WECOM_WEBHOOK_URL ? '✅ 已配置（企微推送启用）' : '❌ 未配置（推送不可用）'}
     WECOM_BOT_NAME     @${wecomBotName}（项目中枢/查询机器人）

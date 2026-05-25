@@ -12,6 +12,10 @@
 import parseDiff from 'parse-diff';
 import { getOctokit } from './githubClient.js';
 import * as acorn from 'acorn';
+import { tsPlugin } from 'acorn-typescript';
+
+// acorn parser 扩展：支持 TypeScript 语法（.ts/.tsx）
+const acornTs = acorn.Parser.extend(tsPlugin({ dts: false }));
 
 // 跳过 review 意义不大的文件
 const SKIP_PATTERNS = [
@@ -46,7 +50,7 @@ function smartTruncate(text, maxChars) {
 }
 
 /**
- * 对 JS/TS 文件，用 acorn 解析 diff 中提取的新版代码，
+ * 对 JS/TS 文件，用 acorn（+ acorn-typescript 插件）解析 diff 中提取的新版代码，
  * 找出包含变更行的顶层函数/类节点，只返回那些语义单元。
  * 其他文件类型降级为 smartTruncate。
  *
@@ -59,6 +63,10 @@ function extractChangedFunctions(filePath, diffText, maxChars) {
   if (!JS_TS_RE.test(filePath)) {
     return smartTruncate(diffText, maxChars);
   }
+
+  // .ts/.tsx 文件使用 acorn-typescript 扩展解析器，支持类型注解/泛型/装饰器
+  const isTypeScript = /\.[mc]?tsx?$/.test(filePath);
+  const parser = isTypeScript ? acornTs : acorn.Parser;
 
   try {
     const lines = diffText.split('\n');
@@ -87,7 +95,7 @@ function extractChangedFunctions(filePath, diffText, maxChars) {
 
     const source = contentLines.join('\n');
 
-    const ast = acorn.parse(source, {
+    const ast = parser.parse(source, {
       ecmaVersion: 2022,
       sourceType: 'module',
       allowHashBang: true,
@@ -109,7 +117,8 @@ function extractChangedFunctions(filePath, diffText, maxChars) {
     }
 
     const joined = selectedNodes.map(n => n.text).join('\n\n');
-    const prefix = `// [AST-sliced: showing ${selectedNodes.length} changed function(s)]\n`;
+    const label = isTypeScript ? 'TS-AST-sliced' : 'AST-sliced';
+    const prefix = `// [${label}: showing ${selectedNodes.length} changed top-level node(s)]\n`;
     const result = prefix + joined;
     return result.length > maxChars
       ? result.slice(0, maxChars) + '\n// [truncated]'
@@ -186,11 +195,8 @@ export async function fetchAndParseDiff({ owner, repo, prNumber, options = {} })
       }
       // 重建 chunk 文本（@@ header + changes）
       const header = `@@ -${chunk.oldStart},${chunk.oldLines} +${chunk.newStart},${chunk.newLines} @@${chunk.content ? ' ' + chunk.content : ''}`;
-      const changeLines = (chunk.changes || []).map(c => {
-        if (c.type === 'add') return `+${c.content}`;
-        if (c.type === 'del') return `-${c.content}`;
-        return ` ${c.content}`;
-      }).join('\n');
+      // c.content from parse-diff already includes the +/-/space prefix character
+      const changeLines = (chunk.changes || []).map(c => c.content).join('\n');
       chunkTexts.push(`${header}\n${changeLines}`);
     }
 
@@ -257,9 +263,8 @@ export function parseDiffText(rawDiff, options = {}) {
         else if (change.type === 'del') deletions++;
       }
       const header = `@@ -${chunk.oldStart},${chunk.oldLines} +${chunk.newStart},${chunk.newLines} @@`;
-      const lines = (chunk.changes || []).map(c =>
-        c.type === 'add' ? `+${c.content}` : c.type === 'del' ? `-${c.content}` : ` ${c.content}`
-      ).join('\n');
+      // c.content from parse-diff already includes the +/-/space prefix character
+      const lines = (chunk.changes || []).map(c => c.content).join('\n');
       chunkTexts.push(`${header}\n${lines}`);
     }
 

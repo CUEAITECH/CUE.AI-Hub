@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { defaultCurrentStage, defaultPhases, defaultStageChecklist, normalizeStageName, reassignChecklistPhaseIds } from './services/stageChecklist.js';
 import { rebindStoreExplicitRefs } from './services/bindingEngine.js';
 import { normalizeUserRecord, verifyPassword } from './services/auth.js';
+import { scheduleSyncJsonToSqlite } from './services/jsonToSqliteSync.js';
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
@@ -421,6 +422,8 @@ export async function saveStore(nextStore) {
   // 写入前先备份，保留上一个版本供紧急恢复
   try { await copyFile(dbPath, backupPath); } catch { /* db.json 不存在时跳过 */ }
   await writeJson(dbPath, cache);
+  // 同步进 SQLite（防抖 2s，让 v2 接口读到最新数据）
+  try { scheduleSyncJsonToSqlite(cache); } catch { /* DB 未初始化时静默跳过 */ }
   return cache;
 }
 
