@@ -8,6 +8,7 @@ import { renderPullList as _renderPullList } from './features/pr-pipeline/render
 import { openPullDrawer as _openPullDrawer, closePullDrawer as _closePullDrawer, submitPullDecision as _submitPullDecision } from './features/pr-pipeline/PullDrawer.js';
 import { renderTaskTable as _renderTaskTable } from './features/work-graph/renderTaskTable.js';
 import { renderTaskDetail as _renderTaskDetail } from './features/work-graph/renderTaskDetail.js';
+import { renderObservatory as _renderObservatory } from './features/observability/index.js';
 
 const state = {
   tasks: [],
@@ -4785,87 +4786,19 @@ async function renderEveningTimeline(dateStr) {
 // ── V5: 管理观察台 ────────────────────────────────────────────────
 state.observatory = { llm: null, events: [], syncHealth: null };
 
-async function renderObservatory() {
-  const llmEl = document.getElementById('obsLlmContent');
-  const eventsEl = document.getElementById('obsEventsContent');
-  const syncEl = document.getElementById('obsSyncContent');
-
-  const tenantId = 'default';
-
-  // LLM 账本
-  if (llmEl) {
-    llmEl.innerHTML = '<span class="obs-loading">加载中…</span>';
-    try {
-      const d = await observabilityApi.getLlmStats(tenantId);
-      const hr = d.recentFailRate != null ? `${(d.recentFailRate * 100).toFixed(1)}%` : '—';
-      const byPurp = (d.byPurpose || []).map(p =>
-        `<li>${escapeHtml(p.purpose || '?')}: ${p.calls}次</li>`).join('');
-      llmEl.innerHTML = `
-        <div class="obs-stat-grid">
-          <div class="obs-stat"><span class="obs-label">今日调用</span><strong>${d.totalCalls ?? 0}</strong></div>
-          <div class="obs-stat"><span class="obs-label">cache命中率</span><strong>${d.cacheHitRate ?? '—'}</strong></div>
-          <div class="obs-stat"><span class="obs-label">近5min失败率</span><strong>${hr}</strong></div>
-          <div class="obs-stat"><span class="obs-label">今日成本估算</span><strong>${d.estimatedCostCNY != null ? '¥'+d.estimatedCostCNY.toFixed(2) : '—'}</strong></div>
-        </div>
-        ${byPurp ? `<ul style="margin:8px 0 0;padding-left:16px;font-size:0.82em;color:#6b7280;">${byPurp}</ul>` : ''}`;
-    } catch (e) {
-      llmEl.innerHTML = `<span style="color:#ef4444">加载失败: ${escapeHtml(e.message)}</span>`;
-    }
-  }
-
-  // 事件流
-  if (eventsEl) {
-    eventsEl.innerHTML = '<span class="obs-loading">加载中…</span>';
-    const typeFilter = document.getElementById('obsEventTypeFilter')?.value || '';
-    const srcFilter = document.getElementById('obsEventSourceFilter')?.value || '';
-    const qp = new URLSearchParams({ limit: 30 });
-    if (typeFilter) qp.set('type', typeFilter);
-    if (srcFilter) qp.set('source', srcFilter);
-    try {
-      const d = await observabilityApi.getEvents(Object.fromEntries(qp), tenantId);
-      const rows = (d.events || []).map(e => {
-        const t = new Date(e.createdAt).toLocaleTimeString('zh-CN', { hour12: false });
-        return `<div class="obs-event-row">
-          <span class="obs-event-time">${t}</span>
-          <span class="obs-event-type">${escapeHtml(e.type)}</span>
-          <span class="obs-event-source" style="color:#9ca3af;">${escapeHtml(e.source || '')}</span>
-        </div>`;
-      }).join('');
-      eventsEl.innerHTML = rows || '<p style="color:#9ca3af;font-size:0.83em;">暂无事件</p>';
-      state.observatory.events = d.events || [];
-    } catch (e) {
-      eventsEl.innerHTML = `<span style="color:#ef4444">加载失败: ${escapeHtml(e.message)}</span>`;
-    }
-  }
-
-  // 三端同步健康度
-  if (syncEl) {
-    syncEl.innerHTML = '<span class="obs-loading">加载中…</span>';
-    try {
-      const d = await observabilityApi.getSyncHealth(tenantId);
-      const pct = d.activeTasks > 0 ? Math.round(d.linkedTasks / d.activeTasks * 100) : 100;
-      syncEl.innerHTML = `
-        <div class="obs-stat-grid">
-          <div class="obs-stat"><span class="obs-label">task↔PR 一致性</span><strong>${pct}%</strong></div>
-          <div class="obs-stat"><span class="obs-label">孤儿 PR</span><strong class="${d.orphanPRs > 0 ? 'obs-warn' : ''}">${d.orphanPRs ?? 0}${d.orphanPRs > 0 ? ' ⚠' : ''}</strong></div>
-          <div class="obs-stat"><span class="obs-label">防循环签名命中</span><strong>${d.signatureHits ?? 0}</strong></div>
-        </div>`;
-      state.observatory.syncHealth = d;
-    } catch (e) {
-      syncEl.innerHTML = `<span style="color:#ef4444">加载失败: ${escapeHtml(e.message)}</span>`;
-    }
-  }
+function renderObservatory() {
+  return _renderObservatory(state, { observabilityApi, escapeHtml });
 }
 
 // 注册观察台路由
 document.addEventListener('DOMContentLoaded', () => {
   const refreshBtn = document.getElementById('observatoryRefreshBtn');
-  if (refreshBtn) refreshBtn.addEventListener('click', renderObservatory);
+  if (refreshBtn) refreshBtn.addEventListener('click', () => renderObservatory().catch((e) => toast(`观察台刷新失败: ${e.message}`)));
 
   // 事件过滤器触发重刷
   ['obsEventTypeFilter', 'obsEventSourceFilter'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener('change', renderObservatory);
+    if (el) el.addEventListener('change', () => renderObservatory().catch(() => {}));
   });
 });
 
