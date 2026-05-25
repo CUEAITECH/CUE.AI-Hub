@@ -3889,25 +3889,28 @@ function setRoute(route) {
     view.classList.toggle('active', view.id === route);
   });
   const parentByRoute = {
-    overview: 'overview',
-    roadmap: 'command',
-    'ai-pm': 'command',
-    meeting: 'command',
-    attendance: 'command',
-    'account-admin': 'command',
-    'risk-detail': 'overview',
-    planning: 'execution',
-    reviews: 'execution',
-    standup: 'execution',
-    assignment: 'execution',
-    'task-detail': 'execution',
-    report: 'output',
-    automation: 'output',
-    'pc-workspace': 'personal',
-    'pc-profile': 'personal',
-    'pc-account': 'personal',
-    pulls: 'pulls',
-    observatory: 'output',
+    // ── v2 核心路由 ───────────────────────────────────────────
+    overview:        'overview',
+    'risk-detail':   'overview',
+    assignment:      'delivery',
+    'task-detail':   'delivery',
+    viewPulls:       'delivery',
+    pulls:           'delivery',
+    reviews:         'delivery',
+    observatory:     'insight',
+    meeting:         'insight',
+    'pc-workspace':  'personal',
+    'pc-profile':    'personal',
+    'pc-account':    'personal',
+    'account-admin': 'personal',
+    // ── 旧版路由（路由仍可用，导航归入 legacy） ─────────────
+    roadmap:         'legacy',
+    'ai-pm':         'legacy',
+    planning:        'legacy',
+    standup:         'legacy',
+    report:          'legacy',
+    automation:      'legacy',
+    attendance:      'legacy',
   };
   const activeParent = parentByRoute[route] || route;
   document.querySelectorAll('.nav-item').forEach((item) => {
@@ -3917,18 +3920,23 @@ function setRoute(route) {
     item.classList.toggle('active', isRouteActive || isParentActive);
   });
   const mobileRouteMap = {
-    overview: 'overview',
-    'risk-detail': 'overview',
-    roadmap: 'overview',
-    attendance: 'overview',
-    assignment: 'assignment',
-    'task-detail': 'assignment',
-    standup: 'assignment',
-    reviews: 'reviews',
-    planning: 'reviews',
-    'pc-workspace': 'pc-workspace',
-    'pc-profile': 'pc-workspace',
-    'pc-account': 'pc-workspace'
+    // 移动端底部导航：总览 / 任务 / PR / 观察 / 我的
+    overview:        'overview',
+    'risk-detail':   'overview',
+    assignment:      'assignment',
+    'task-detail':   'assignment',
+    viewPulls:       'viewPulls',
+    pulls:           'viewPulls',
+    reviews:         'assignment',  // 归入任务组
+    observatory:     'observatory',
+    meeting:         'observatory', // 归入洞察组
+    'pc-workspace':  'pc-workspace',
+    'pc-profile':    'pc-workspace',
+    'pc-account':    'pc-workspace',
+    'account-admin': 'pc-workspace',
+    // 旧版路由：不高亮任何移动端 tab
+    roadmap: '', planning: '', standup: '', report: '',
+    automation: '', attendance: '', 'ai-pm': '',
   };
   const mobileRoute = mobileRouteMap[route] || route;
   document.querySelectorAll('.mobile-app-nav-item').forEach((item) => {

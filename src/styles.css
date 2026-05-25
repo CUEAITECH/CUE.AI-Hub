@@ -8789,3 +8789,73 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 }
 
 .rec-sk-line { height: 10px; width: 55%; }
+
+/* ══════════════════════════════════════════════════════════════════
+   导航重构：Legacy 折叠区 + 旧版视觉处理
+   ══════════════════════════════════════════════════════════════════ */
+
+/* "旧版" 主导航按钮：比正常项更淡 */
+.nav-legacy-toggle {
+  color: var(--dim) !important;
+  font-size: 12px !important;
+  padding: 6px 10px !important;
+  opacity: 0.75;
+}
+
+.nav-legacy-toggle:hover {
+  opacity: 1;
+  color: var(--muted) !important;
+}
+
+.nav-legacy-toggle.active {
+  opacity: 1;
+  color: var(--muted) !important;
+  background: rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Legacy sub-group: horizontal layout */
+.header-sub-group[data-sub="legacy"] {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Legacy section header label */
+.nav-legacy-label {
+  width: 100%;
+  font-size: 0.68rem;
+  color: var(--dim);
+  padding: 2px 6px 4px;
+  letter-spacing: 0.03em;
+  font-weight: 500;
+}
+
+/* Legacy nav items: visually dimmed */
+.nav-item-legacy {
+  color: var(--dim) !important;
+  font-size: 12px !important;
+  position: relative;
+}
+
+.nav-item-legacy::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: var(--dim);
+  opacity: 0.3;
+}
+
+.nav-item-legacy:hover {
+  color: var(--muted) !important;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.nav-item-legacy.active {
+  color: var(--muted) !important;
+}

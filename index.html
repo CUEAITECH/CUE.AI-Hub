@@ -89,43 +89,48 @@
             <span class="status-pill" id="syncStatus">API 未连接</span>
             <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
           </div>
-          <!-- 右侧：主导航 -->
+          <!-- 右侧：主导航（v2 架构精简版） -->
           <div class="header-right">
             <nav class="nav" aria-label="主导航">
               <button class="nav-item nav-primary active" type="button" data-route="overview" data-nav-parent="overview">总览</button>
-              <button class="nav-item nav-primary" type="button" data-nav-parent="command">指挥</button>
-              <button class="nav-item nav-primary" type="button" data-nav-parent="execution">执行</button>
-              <button class="nav-item nav-primary" type="button" data-nav-parent="output">输出</button>
-              <button class="nav-item nav-primary" type="button" data-nav-parent="personal">个人中心</button>
+              <button class="nav-item nav-primary" type="button" data-nav-parent="delivery">交付</button>
+              <button class="nav-item nav-primary" type="button" data-nav-parent="insight">洞察</button>
+              <button class="nav-item nav-primary" type="button" data-nav-parent="personal">我的</button>
+              <button class="nav-item nav-primary nav-legacy-toggle" type="button" data-nav-parent="legacy" aria-label="旧版功能">旧版</button>
             </nav>
           </div>
         </div>
-        <!-- 展开式第二行导航（hover 一次性展开所有分组，overlay 不推动页面） -->
+        <!-- 展开式第二行导航 -->
         <div class="header-sub" id="headerSub">
-          <div class="header-sub-group" data-sub="command">
-            <button class="nav-item" type="button" data-route="roadmap">路径图</button>
-            <button class="nav-item" type="button" data-route="ai-pm">AI PM</button>
-            <button class="nav-item" type="button" data-route="meeting">晚会闭环</button>
-            <button class="nav-item" type="button" data-route="attendance">考勤统计</button>
-            <button class="nav-item" type="button" data-route="account-admin">账号管理</button>
-          </div>
-          <div class="header-sub-group" data-sub="execution">
-            <button class="nav-item" type="button" data-route="planning">AI 排期</button>
-            <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
-            <button class="nav-item" type="button" data-route="viewPulls">PR 列表</button>
-            <button class="nav-item" type="button" data-route="standup">异步站会</button>
+          <!-- ── 交付：v2 就绪核心页面 ── -->
+          <div class="header-sub-group" data-sub="delivery">
             <button class="nav-item" type="button" data-route="assignment">分工领取</button>
+            <button class="nav-item" type="button" data-route="viewPulls">PR 列表</button>
+            <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
             <button class="nav-item nav-item-hidden" type="button" data-route="task-detail">任务详情</button>
           </div>
-          <div class="header-sub-group" data-sub="output">
-            <button class="nav-item" type="button" data-route="report">日报&amp;晚报</button>
-            <button class="nav-item" type="button" data-route="automation">自动提醒</button>
+          <!-- ── 洞察：观察台 + 晚会 ── -->
+          <div class="header-sub-group" data-sub="insight">
             <button class="nav-item" type="button" data-route="observatory">观察台</button>
+            <button class="nav-item" type="button" data-route="meeting">晚会闭环</button>
           </div>
+          <!-- ── 个人中心 ── -->
           <div class="header-sub-group" data-sub="personal">
             <button class="nav-item" type="button" data-route="pc-workspace">我的工作台</button>
             <button class="nav-item" type="button" data-route="pc-profile">个人名片</button>
             <button class="nav-item" type="button" data-route="pc-account">账号设置</button>
+            <button class="nav-item" type="button" data-route="account-admin">账号管理</button>
+          </div>
+          <!-- ── 旧版（折叠，按需访问） ── -->
+          <div class="header-sub-group" data-sub="legacy">
+            <span class="nav-legacy-label">旧版功能（未迁移至 v2）</span>
+            <button class="nav-item nav-item-legacy" type="button" data-route="roadmap">路径图</button>
+            <button class="nav-item nav-item-legacy" type="button" data-route="ai-pm">AI PM</button>
+            <button class="nav-item nav-item-legacy" type="button" data-route="planning">AI 排期</button>
+            <button class="nav-item nav-item-legacy" type="button" data-route="standup">异步站会</button>
+            <button class="nav-item nav-item-legacy" type="button" data-route="report">日报&amp;晚报</button>
+            <button class="nav-item nav-item-legacy" type="button" data-route="automation">自动提醒</button>
+            <button class="nav-item nav-item-legacy" type="button" data-route="attendance">考勤统计</button>
           </div>
         </div>
       </header>
@@ -1223,36 +1228,23 @@
       </aside>
       <nav class="mobile-app-nav" aria-label="移动端主导航">
         <button class="mobile-app-nav-item active" type="button" data-route="overview" aria-label="总览">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 11.5 12 4l9 7.5"/>
-            <path d="M5.5 10.5V20h13v-9.5"/>
-            <path d="M9.5 20v-5h5v5"/>
-          </svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-5h5v5"/></svg>
           <span>总览</span>
         </button>
         <button class="mobile-app-nav-item" type="button" data-route="assignment" aria-label="任务">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 6h13"/>
-            <path d="M8 12h13"/>
-            <path d="M8 18h13"/>
-            <path d="m3 6 .9.9L6 4.8"/>
-            <path d="m3 12 .9.9L6 10.8"/>
-            <path d="m3 18 .9.9L6 16.8"/>
-          </svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="m3 6 .9.9L6 4.8"/><path d="m3 12 .9.9L6 10.8"/><path d="m3 18 .9.9L6 16.8"/></svg>
           <span>任务</span>
         </button>
-        <button class="mobile-app-nav-item" type="button" data-route="reviews" aria-label="审阅">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13A2.5 2.5 0 0 1 17.5 21h-11A2.5 2.5 0 0 1 4 18.5z"/>
-            <path d="m8 12 2.2 2.2L16 8.8"/>
-          </svg>
-          <span>审阅</span>
+        <button class="mobile-app-nav-item" type="button" data-route="viewPulls" aria-label="PR">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg>
+          <span>PR</span>
+        </button>
+        <button class="mobile-app-nav-item" type="button" data-route="observatory" aria-label="观察台">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span>观察</span>
         </button>
         <button class="mobile-app-nav-item" type="button" data-route="pc-workspace" aria-label="我的">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20 21a8 8 0 0 0-16 0"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
           <span>我的</span>
         </button>
       </nav>
