@@ -9,7 +9,7 @@ import { openPullDrawer as _openPullDrawer, closePullDrawer as _closePullDrawer,
 import { startPrAcSse as _startPrAcSse, stopPrAcSse as _stopPrAcSse, refreshPrAcChecklist as _refreshPrAcChecklist } from './features/pr-pipeline/PrAcChecklist.js';
 import { renderTaskTable as _renderTaskTable } from './features/work-graph/renderTaskTable.js';
 import { renderTaskDetail as _renderTaskDetail } from './features/work-graph/renderTaskDetail.js';
-import { renderObservatory as _renderObservatory } from './features/observability/index.js';
+import { renderObservatory as _renderObservatory, loadAndRenderSpacePanel as _loadAndRenderSpacePanel } from './features/observability/index.js';
 
 const state = {
   tasks: [],
@@ -4661,41 +4661,8 @@ function refreshPrAcChecklist(prId, payload) { _refreshPrAcChecklist(prId, paylo
 }
 
 // ── V3: 健康度弹窗 SPACE 维度扩展 ────────────────────────────────
-async function loadAndRenderSpaceModal() {
-  const overlay = document.getElementById('spaceDetailOverlay') || document.getElementById('healthModal');
-  if (!overlay) return;
-  try {
-    const tenantId = 'default';
-    const data = await observabilityApi.getSpace(tenantId).catch(() => null);
-    if (!data) return;
-    const dims = data.dimensions || {};
-    const dimLabels = {
-      satisfaction:  'S — 满意度',
-      performance:   'P — 交付质量',
-      activity:      'A — 生产活动',
-      communication: 'C — 协作效率',
-      efficiency:    'E — 流动效率',
-    };
-    const dimRows = Object.entries(dimLabels).map(([key, label]) => {
-      const d = dims[key] || {};
-      const score = d.score ?? 0;
-      const bar = `<div style="display:inline-block;width:${Math.round(score * 0.6)}px;height:6px;background:#3b82f6;border-radius:3px;margin-left:4px;vertical-align:middle;"></div>`;
-      return `<tr><td style="padding:3px 8px 3px 0;color:#6b7280;">${label}</td><td><strong>${score}</strong>${bar}</td></tr>`;
-    }).join('');
-
-    const existing = overlay.querySelector('.space-dims-v2');
-    if (existing) existing.remove();
-    const section = document.createElement('div');
-    section.className = 'space-dims-v2';
-    section.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;';
-    section.innerHTML = `
-      <p style="font-size:0.82em;color:#6b7280;margin:0 0 8px;">SPACE 五维（v2 新增）</p>
-      <table style="font-size:0.83em;width:100%;">${dimRows}</table>
-      <p style="margin:8px 0 0;font-size:0.8em;color:#9ca3af;">
-        综合分：<strong>${data.score}</strong> ${data.grade || ''} · 窗口：${data.windowDays}天
-      </p>`;
-    overlay.appendChild(section);
-  } catch { /* graceful */ }
+function loadAndRenderSpaceModal() {
+  return _loadAndRenderSpacePanel({ observabilityApi });
 }
 
 // ── V4: 晚会作战包 Timeline 视图 ────────────────────────────────
