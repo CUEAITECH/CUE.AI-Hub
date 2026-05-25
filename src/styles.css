@@ -8859,3 +8859,295 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 .nav-item-legacy.active {
   color: var(--muted) !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   UI/UX Pro Max 美化 Pass — 2026-05-25
+   设计原则：活跃状态蓝色化 · 焦点环可见 · 微交互一致 · 卡片悬浮感知
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. 全局焦点环（WCAG AA 必要，键盘可访问） ── */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── 2. 主导航 Active → 蓝色强调 ── */
+.nav-item.active {
+  color: var(--blue) !important;
+  background: var(--accent-subtle) !important;
+  border-color: rgba(37, 99, 235, 0.18) !important;
+  font-weight: 600;
+}
+
+/* 主导航 primary active：加蓝色下划线指示器 */
+.nav-primary.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2.5px;
+  border-radius: 999px;
+  background: var(--blue);
+}
+.nav-primary {
+  position: relative;
+}
+
+/* Sub-nav active → 蓝色文字 + 左蓝线 */
+.header-sub .nav-item.active {
+  color: var(--blue) !important;
+  background: var(--accent-subtle) !important;
+  border-color: rgba(37, 99, 235, 0.12) !important;
+  padding-left: 14px;
+  border-left: 2px solid var(--blue) !important;
+}
+
+/* ── 3. 表单输入框焦点环 ── */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 0;
+  border-color: var(--blue);
+}
+
+/* ── 4. 按钮按压微动效（scale + 过渡） ── */
+.nav-item,
+.primary-action,
+.topbar-actions button,
+.panel-head button,
+.workspace-actions button,
+.mobile-app-nav-item {
+  transition: background 0.14s ease, color 0.14s ease,
+              border-color 0.14s ease, box-shadow 0.14s ease,
+              transform 0.1s ease;
+}
+
+.nav-item:active,
+.primary-action:active,
+.topbar-actions button:active,
+.workspace-actions button:active {
+  transform: scale(0.97);
+}
+
+/* ── 5. 卡片悬浮提升感 ── */
+.panel:hover,
+.metric-card:hover,
+.admin-user-card:hover {
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1), 0 1px 4px rgba(15, 23, 42, 0.06);
+  transition: box-shadow 0.2s ease;
+}
+
+/* ── 6. primary-action 使用蓝色主色（替代纯黑） ── */
+.primary-action {
+  background: var(--blue) !important;
+  border-color: var(--blue) !important;
+  color: #fff !important;
+}
+.primary-action:hover {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+}
+.primary-action:active {
+  background: #1e40af !important;
+  border-color: #1e40af !important;
+}
+
+/* ── 7. Disabled 状态统一处理 ── */
+button:disabled,
+input:disabled,
+select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── 8. 移动端底部导航 → 5 列布局 ── */
+@media (max-width: 767px) {
+  .mobile-app-nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 2px;
+    padding: 6px 6px;
+  }
+
+  .mobile-app-nav-item {
+    font-size: 9px;
+    border-radius: 10px;
+  }
+
+  .mobile-app-nav-item svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* ── 9. 旧版折叠区 — 视觉隔离 ── */
+.header-sub-group[data-sub="legacy"] {
+  padding-top: 8px;
+  border-top: 1px dashed rgba(15, 23, 42, 0.12);
+  margin-top: 4px;
+}
+
+.nav-legacy-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0 6px 6px;
+}
+
+.nav-legacy-label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* ── 10. Topbar 视觉提升 ── */
+.topbar {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07) !important;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04),
+              0 2px 8px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* ── 11. 卡片统一圆角升级 ── */
+.panel,
+.metric-card,
+.admin-user-card {
+  border-radius: 10px;
+}
+
+/* ── 12. 状态标签（status-pill）更新 ── */
+.status-pill {
+  letter-spacing: 0.01em;
+}
+
+/* ── 13. 按钮 hover 文字对比提升 ── */
+.nav-item:hover:not(.active) {
+  color: var(--text);
+  background: rgba(15, 23, 42, 0.05);
+}
+
+/* ── 14. 观察台 / 功能面板 header 分隔线 ── */
+.obs-panel-header {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+/* ── 15. 空状态视觉提示 ── */
+.empty-state-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 20px;
+  color: var(--dim);
+  font-size: 13px;
+  text-align: center;
+}
+
+.empty-state-hint svg {
+  opacity: 0.35;
+}
+
+/* ── 16. Toast / 状态反馈 aria-live 支持 ── */
+#toastContainer {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--text);
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.2);
+  animation: toast-in 0.2s ease forwards;
+  pointer-events: auto;
+}
+
+.toast-success { background: var(--green); }
+.toast-error   { background: var(--red);   }
+.toast-warning { background: var(--amber); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── 17. Skeleton 动画统一 ── */
+.sk-line,
+.sk-block,
+.obs-sk,
+.rec-sk {
+  animation: obs-shimmer 1.4s ease-in-out infinite;
+}
+
+/* ── 18. 审阅级别徽章颜色统一 ── */
+.level-pass    { color: var(--green);  background: var(--success-subtle); }
+.level-warning { color: var(--amber);  background: var(--warning-subtle); }
+.level-block   { color: var(--red);    background: var(--danger-subtle);  }
+.level-escalate{ color: #7c3aed;       background: rgba(124,58,237,0.09); }
+
+.level-pass, .level-warning, .level-block, .level-escalate {
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ── 旧版导航项：不用蓝色 active，保持灰色 ── */
+.nav-legacy-toggle.active,
+.nav-item-legacy.active {
+  color: var(--muted) !important;
+  background: rgba(15, 23, 42, 0.05) !important;
+  border-color: transparent !important;
+}
+
+/* ── primary-action 在 panel-head 内保留深色 ── */
+.panel-head button.primary-action {
+  background: #101010 !important;
+  border-color: #101010 !important;
+}
+.panel-head button.primary-action:hover {
+  background: #1a1a1a !important;
+  border-color: #1a1a1a !important;
+}
+
+/* ── 全局: 深色文字按钮不受 primary-action 蓝色影响 ── */
+.workspace-actions .primary-action,
+.panel-head .primary-action {
+  background: #101010 !important;
+  border-color: #101010 !important;
+}
+
+/* ── 视图过渡淡入 ── */
+.view.active {
+  animation: view-fade-in 0.18s ease forwards;
+}
+
+@keyframes view-fade-in {
+  from { opacity: 0.6; transform: translateY(4px); }
+  to   { opacity: 1;   transform: translateY(0);   }
+}
