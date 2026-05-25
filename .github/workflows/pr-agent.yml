@@ -19,8 +19,13 @@ jobs:
       - name: PR-Agent Review
         uses: Codium-ai/pr-agent@main
         env:
+          # PR-Agent/OpenAI-like API config. Double-underscore names are the current
+          # documented env form; OPENAI_KEY/API_BASE are kept for older action builds.
           OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # 使用标准 OpenAI API（gpt-5.4-mini 做 review，成本低）
+          OPENAI__KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_BASE: https://api.ikuncode.cc/v1
+          OPENAI__API_BASE: https://api.ikuncode.cc/v1
+          # 使用第三方 OpenAI-compatible API（gpt-5.4-mini 做 review，成本低）
           CONFIG.MODEL: gpt-5.4-mini
           CONFIG.AI_PROVIDER: openai
           github_action_config.auto_review: "true"

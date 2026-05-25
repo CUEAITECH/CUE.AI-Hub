@@ -31,6 +31,7 @@ import { replayUnprocessed } from './events/bus.js';
 import { initAdapters } from './adapters/index.js';
 import { handleV2 } from './v2/app.js';
 import { getFastifyApp } from './v2/fastifyApp.js';  // Part N.1 Fastify 层
+import { handleV2AppRequest, isV2AppPath } from './v2/appFacade.js';
 import logger from './logger.js';
 const { db: _v2db, kysely: _v2kysely } = initDb();
 await replayUnprocessed();            // 重启后回放未处理事件
@@ -390,6 +391,21 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   try {
+    // ── V2 App facade：主前端走 /v2/app/*，内部复用现有业务路由 ───────
+    if (isV2AppPath(url)) {
+      await handleV2AppRequest({
+        req,
+        res,
+        url,
+        requiresApiKey,
+        hasValidApiKey,
+        hasValidSession,
+        sendError,
+        handleApi,
+      });
+      return;
+    }
+
     // ── V2 路由：/v2/* 走 Fastify（Part N.1）───────────────────
     // Fastify /v2/health → 原生处理；其余 → handleV2 bridge
     if (url.pathname.startsWith('/v2/')) {

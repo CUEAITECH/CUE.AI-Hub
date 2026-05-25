@@ -127,9 +127,16 @@ function _hideLoader() {
   }
 }
 
+function toV2AppPath(path) {
+  return typeof path === 'string' && path.startsWith('/api/')
+    ? `/v2/app${path.slice('/api'.length)}`
+    : path;
+}
+
 async function api(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
   const headers = { 'content-type': 'application/json', ...(options.headers || {}) };
+  const requestPath = toV2AppPath(path);
   const sessionToken = sessionStorage.getItem('cueHubSessionToken') || '';
   if (sessionToken && !headers.Authorization && !headers['X-CUE-Session-Token']) {
     headers['X-CUE-Session-Token'] = sessionToken;
@@ -139,7 +146,7 @@ async function api(path, options = {}) {
   _showLoader(options.loadingText || (method !== 'GET' ? '处理中...' : '加载中...'));
   let response;
   try {
-    response = await fetch(path, { headers, ...options });
+    response = await fetch(requestPath, { headers, ...options });
   } finally {
     _hideLoader();
   }
