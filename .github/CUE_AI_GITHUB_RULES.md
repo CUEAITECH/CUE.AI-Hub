@@ -88,6 +88,8 @@ changes
 
 ## 4. PR 原则
 
+完整 PR 提交流程见 `docs/PR-WORKFLOW.md`。本节是所有仓库必须遵守的最低规则。
+
 每个 PR 必须回答：
 
 - 做了什么
@@ -96,13 +98,34 @@ changes
 - 如何验证
 - 是否存在风险或未完成事项
 
+开 PR 规则：
+
+- 普通功能、修复、文档、配置、重构都必须从工作分支开 PR。
+- 较大或不确定的改动先开 Draft PR，完成自查后转 Ready for Review。
+- PR 必须关联任务、issue 或阶段目标；接入 Hub 的项目优先使用 `task_xxx`。
+- PR 描述必须包含验收清单（AC checklist），供 Hub、PR-Agent 和人工审阅对齐。
+
 PR 合并前必须满足：
 
+- GitHub Actions 全部通过
+- `Cue.AI GitHub 规则检查` 通过，PR 描述包含任务、AC、测试说明、人工核查和风险说明
+- `PR-Agent Review` 通过，或负责人明确说明为什么本次允许豁免
+- 至少 1 名 reviewer approve
+- 高风险模块按规则增加 reviewer
+- 所有 review conversation 已解决
 - 没有明显无关改动
 - 没有密钥、token、密码、私有证书
 - AI Review 无阻断项，或负责人明确豁免
 - 高风险模块有测试说明或人工审阅说明
 - 大 PR 已说明为什么不能拆分
+
+默认使用 squash merge。合并后删除工作分支；hotfix 合入 `main` 后必须同步回当前开发或发布分支。
+
+PR-Agent 的地位：
+
+- PR-Agent 是自动审阅助手和 Hub 合规信号源，不替代人工 reviewer。
+- PR-Agent 的 Block / Escalate 默认阻断合并，除非负责人在 PR 中留痕豁免。
+- 人工 reviewer 必须核查 PR-Agent 评论、Actions 日志、测试说明、人工核查项和 Hub PR 列表状态。
 
 ## 5. AI Review 原则
 
