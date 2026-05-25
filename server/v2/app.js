@@ -24,6 +24,7 @@ import {
   auditLog,
   ensureGatewayTables,
 } from '../middleware/apiGateway.js';
+import { getSessionToken, verifySessionToken } from '../services/auth.js';
 import logger from '../logger.js';
 
 // ── 按 path prefix 延迟加载对应路由模块 ───────────────────────────
@@ -130,7 +131,7 @@ export async function handleV2(req, res, url, fastifyCtx = {}) {
     res.writeHead(204, {
       'access-control-allow-origin':  '*',
       'access-control-allow-methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-      'access-control-allow-headers': 'content-type, x-cue-api-key, x-api-key, authorization, x-tenant-id',
+      'access-control-allow-headers': 'content-type, x-cue-api-key, x-cue-session-token, x-api-key, authorization, x-tenant-id',
     });
     res.end();
     return true;
@@ -147,6 +148,8 @@ export async function handleV2(req, res, url, fastifyCtx = {}) {
 
   if (!V2_AUTH_EXEMPT.has(path)) {
     const rawKey = extractApiKey(req);
+    const session = verifySessionToken(getSessionToken(req));
+    const readOnlySession = session && (method === 'GET' || method === 'HEAD');
 
     if (rawKey?.startsWith('cue_')) {
       // V2 API Key — 完整 gateway 校验（rate limit + 多租户隔离 + 审计）
@@ -176,7 +179,7 @@ export async function handleV2(req, res, url, fastifyCtx = {}) {
           return _prevWH(code, merged, ...rest);
         };
       }
-    } else {
+    } else if (!readOnlySession) {
       // Legacy CUE_API_KEY（向下兼容 v1）
       const cueApiKey = process.env.CUE_API_KEY;
       if (cueApiKey) {
