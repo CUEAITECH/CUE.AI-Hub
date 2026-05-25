@@ -1,3 +1,10 @@
+import { authApi } from './api/authApi.js';
+import { projectsApi } from './api/projectsApi.js';
+import { appStateApi } from './api/appStateApi.js';
+import { pullsApi } from './api/pullsApi.js';
+import { eventsApi } from './api/eventsApi.js';
+import { observabilityApi } from './api/observabilityApi.js';
+
 const state = {
   tasks: [],
   members: [],
@@ -439,10 +446,7 @@ async function sendLoginEmailCode() {
   const email = document.querySelector('#loginUsername')?.value.trim() || '';
   if (!projectId) { toast('请选择项目'); return; }
   if (!email) { setText('#loginHint', '请先输入已绑定邮箱。'); return; }
-  const payload = await api('/api/auth/email-code', {
-    method: 'POST',
-    body: JSON.stringify({ email, projectId, purpose: 'login' })
-  });
+  const payload = await authApi.sendEmailCode({ email, projectId, purpose: 'login' });
   const suffix = payload.devCode ? ` 验证码：${payload.devCode}` : '';
   setText('#loginHint', `验证码已发送到邮箱，10 分钟内有效。${suffix}`);
   toast('邮箱验证码已发送');
@@ -470,16 +474,13 @@ async function sendBindEmailCode() {
     if (hint) hint.textContent = '请输入要绑定的邮箱';
     return;
   }
-  const payload = await api('/api/auth/email-code', {
-    method: 'POST',
-    body: JSON.stringify({ email, purpose: 'bind_email' })
-  });
+  const payload = await authApi.sendEmailCode({ email, purpose: 'bind_email' });
   if (hint) hint.textContent = `验证码已发送到邮箱，10 分钟内有效。${payload.devCode ? `验证码：${payload.devCode}` : ''}`;
   toast('邮箱验证码已发送');
 }
 
 async function loadLoginProjects() {
-  const payload = await api('/api/projects');
+  const payload = await projectsApi.listProjects();
   state.projects = payload.projects || [];
   syncCurrentProject(localStorage.getItem('cue_currentProjectId') || state.projects[0]?.id || '');
   renderProjectSwitcher();
@@ -493,12 +494,9 @@ async function login(event) {
   const emailCode = document.querySelector('#loginEmailCode')?.value.trim() || '';
   if (!projectId) { toast('请选择项目'); return; }
   if (loginMode === 'email' && !emailCode) { setText('#loginHint', '请输入邮箱验证码。'); return; }
-  const payload = await api('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(loginMode === 'email'
-        ? { username, emailCode, projectId }
-        : { username, password, projectId })
-  });
+  const payload = loginMode === 'email'
+    ? await authApi.loginEmailCode({ username, emailCode, projectId })
+    : await authApi.loginPassword({ username, password, projectId });
   sessionStorage.setItem('cueHubSessionToken', payload.token || '');
   sessionStorage.setItem('cueHubAuthenticated', 'true');
   syncSessionUser(payload.user || { name: username, role: 'developer' });
@@ -3321,7 +3319,7 @@ async function fetchAndRenderPulls() {
   if (stateFilter) params.set('state', stateFilter);
   if (author) params.set('author', author);
   try {
-    const data = await api(`/api/pulls?${params}`);
+    const data = await pullsApi.listPulls(Object.fromEntries(params));
     state.pulls = data.pulls || [];
     renderPullList();
   } catch (err) {
@@ -3435,10 +3433,7 @@ function buildPullDrawerHtml(pull) {
 
 async function submitPullDecision(pullId, decision) {
   try {
-    const data = await api(`/api/pulls/${encodeURIComponent(pullId)}/decision`, {
-      method: 'PATCH',
-      body: JSON.stringify({ humanDecision: decision })
-    });
+    const data = await pullsApi.submitDecision(pullId, decision);
     const idx = (state.pulls || []).findIndex((p) => p.id === pullId);
     if (idx !== -1) state.pulls[idx] = data.pull;
     renderPullList();
@@ -3479,7 +3474,7 @@ function renderAll() {
 async function loadState() {
   const storedProjectId = localStorage.getItem('cue_currentProjectId') || state.currentProjectId || '';
   await refreshSessionUserRole();
-  const payload = await api(storedProjectId ? `/api/state?projectId=${encodeURIComponent(storedProjectId)}` : '/api/state');
+  const payload = await appStateApi.loadProjectState(storedProjectId || undefined);
   state.tasks = payload.tasks || [];
   state.members = payload.members || [];
   state.reviews = payload.reviews || [];
@@ -3508,17 +3503,17 @@ async function loadState() {
   setText('#syncStatus', `${getApiScopeLabel()} 已连接`);
 
   // 并行加载站会、配置、计划调整建议（assignments 已在 /api/state 全量返回，不重复拉）
-  const projectQuery = getCurrentProjectId() ? `?projectId=${encodeURIComponent(getCurrentProjectId())}` : '';
+  const projectId = getCurrentProjectId();
   const attendanceDate = document.querySelector('#attendanceWeekDate')?.value || getTodayText();
   const [standupPayload, config, adjustPayload, eveningPayload, checklistPayload, scoringPayload, weeklyScoringPayload, weeklyAttendancePayload] = await Promise.all([
     api('/api/standups').catch(() => ({ standups: [] })),
-    api('/api/config').catch(() => ({})),
+    appStateApi.loadConfig().catch(() => ({})),
     api('/api/plan-adjustments').catch(() => ({ adjustments: [] })),
     api('/api/reports/evening').catch(() => ({ report: null })),
-    api(`/api/stage/checklist${projectQuery}`).catch(() => null),
-    api(`/api/scoring/daily${projectQuery}`).catch(() => ({ rows: [] })),
-    api(`/api/scoring/weekly${projectQuery}`).catch(() => ({ rows: [] })),
-    api(`/api/attendance/weekly${projectQuery}${projectQuery ? '&' : '?'}date=${encodeURIComponent(attendanceDate)}`).catch(() => ({ days: [], records: [], weekStart: '' }))
+    appStateApi.loadChecklist(projectId).catch(() => null),
+    appStateApi.loadDailyScoring(projectId).catch(() => ({ rows: [] })),
+    appStateApi.loadWeeklyScoring(projectId).catch(() => ({ rows: [] })),
+    appStateApi.loadWeeklyAttendance(projectId, attendanceDate).catch(() => ({ days: [], records: [], weekStart: '' }))
   ]);
 
   state.standups = standupPayload.standups || [];
@@ -4884,7 +4879,7 @@ function startPrAcSse(prId) {
   stopPrAcSse();
   _prSseTargetId = prId;
   try {
-    _prSseSource = new EventSource(`/v2/events/stream?type=pr.review.posted`);
+    _prSseSource = new EventSource(eventsApi.prReviewStreamUrl('pr.review.posted'));
     _prSseSource.onmessage = (evt) => {
       try {
         const payload = JSON.parse(evt.data);
@@ -4929,7 +4924,7 @@ async function loadAndRenderSpaceModal() {
   if (!overlay) return;
   try {
     const tenantId = 'default';
-    const data = await fetch('/v2/space', { headers: { 'X-Tenant-Id': tenantId } }).then(r => r.ok ? r.json() : null);
+    const data = await observabilityApi.getSpace(tenantId).catch(() => null);
     if (!data) return;
     const dims = data.dimensions || {};
     const dimLabels = {
@@ -4967,9 +4962,7 @@ async function renderEveningTimeline(dateStr) {
   if (!container) return;
   container.innerHTML = '<p style="color:#9ca3af;font-size:0.83em;">加载 timeline…</p>';
   try {
-    const data = await fetch(`/v2/events/grouped?hours=24`, {
-      headers: { 'X-Tenant-Id': 'default' },
-    }).then(r => r.ok ? r.json() : null);
+    const data = await eventsApi.getGroupedEvents({ hours: 24 }, 'default').catch(() => null);
     if (!data?.grouped) { container.innerHTML = '<p style="color:#9ca3af;">暂无数据</p>'; return; }
 
     const actors = Object.entries(data.grouped);
@@ -5021,13 +5014,13 @@ async function renderObservatory() {
   const eventsEl = document.getElementById('obsEventsContent');
   const syncEl = document.getElementById('obsSyncContent');
 
-  const tenantHeaders = { 'X-Tenant-Id': 'default' };
+  const tenantId = 'default';
 
   // LLM 账本
   if (llmEl) {
     llmEl.innerHTML = '<span class="obs-loading">加载中…</span>';
     try {
-      const d = await fetch('/v2/observability/llm', { headers: tenantHeaders }).then(r => r.json());
+      const d = await observabilityApi.getLlmStats(tenantId);
       const hr = d.recentFailRate != null ? `${(d.recentFailRate * 100).toFixed(1)}%` : '—';
       const byPurp = (d.byPurpose || []).map(p =>
         `<li>${escapeHtml(p.purpose || '?')}: ${p.calls}次</li>`).join('');
@@ -5053,7 +5046,7 @@ async function renderObservatory() {
     if (typeFilter) qp.set('type', typeFilter);
     if (srcFilter) qp.set('source', srcFilter);
     try {
-      const d = await fetch(`/v2/observability/events?${qp}`, { headers: tenantHeaders }).then(r => r.json());
+      const d = await observabilityApi.getEvents(Object.fromEntries(qp), tenantId);
       const rows = (d.events || []).map(e => {
         const t = new Date(e.createdAt).toLocaleTimeString('zh-CN', { hour12: false });
         return `<div class="obs-event-row">
@@ -5073,7 +5066,7 @@ async function renderObservatory() {
   if (syncEl) {
     syncEl.innerHTML = '<span class="obs-loading">加载中…</span>';
     try {
-      const d = await fetch('/v2/observability/sync-health', { headers: tenantHeaders }).then(r => r.json());
+      const d = await observabilityApi.getSyncHealth(tenantId);
       const pct = d.activeTasks > 0 ? Math.round(d.linkedTasks / d.activeTasks * 100) : 100;
       syncEl.innerHTML = `
         <div class="obs-stat-grid">
