@@ -6,6 +6,7 @@ import { eventsApi } from './api/eventsApi.js';
 import { observabilityApi } from './api/observabilityApi.js';
 import { renderPullList as _renderPullList } from './features/pr-pipeline/renderPullList.js';
 import { openPullDrawer as _openPullDrawer, closePullDrawer as _closePullDrawer, submitPullDecision as _submitPullDecision } from './features/pr-pipeline/PullDrawer.js';
+import { startPrAcSse as _startPrAcSse, stopPrAcSse as _stopPrAcSse, refreshPrAcChecklist as _refreshPrAcChecklist } from './features/pr-pipeline/PrAcChecklist.js';
 import { renderTaskTable as _renderTaskTable } from './features/work-graph/renderTaskTable.js';
 import { renderTaskDetail as _renderTaskDetail } from './features/work-graph/renderTaskDetail.js';
 import { renderObservatory as _renderObservatory } from './features/observability/index.js';
@@ -4648,51 +4649,15 @@ async function enrichTaskDetailWithExplanation(taskId) {
 }
 
 // ── V2: PR 详情面板实时 AC checklist（SSE 订阅）──────────────────
-let _prSseSource = null;
-let _prSseTargetId = null;
 
-function startPrAcSse(prId) {
-  if (_prSseSource && _prSseTargetId === prId) return; // already connected
-  stopPrAcSse();
-  _prSseTargetId = prId;
-  try {
-    _prSseSource = new EventSource(eventsApi.prReviewStreamUrl('pr.review.posted'));
-    _prSseSource.onmessage = (evt) => {
-      try {
-        const payload = JSON.parse(evt.data);
-        if (payload.payload?.prId === prId || payload.payload?.prNumber == prId) {
-          refreshPrAcChecklist(prId, payload.payload);
-        }
-      } catch { /* skip */ }
-    };
-    _prSseSource.onerror = () => { stopPrAcSse(); };
-  } catch { /* browser may not support EventSource */ }
-}
+const _acHelpers = () => ({
+  streamUrl: eventsApi.prReviewStreamUrl('pr.review.posted'),
+  escapeHtml,
+});
 
-function stopPrAcSse() {
-  if (_prSseSource) { _prSseSource.close(); _prSseSource = null; }
-  _prSseTargetId = null;
-}
-
-function refreshPrAcChecklist(prId, payload) {
-  const container = document.querySelector('#prAcChecklist');
-  if (!container) return;
-  const items = payload?.acItems || payload?.checklist || [];
-  if (!items.length) return;
-  container.innerHTML = `
-    <div class="ac-checklist" style="margin-top:8px;font-size:0.83em;">
-      <strong>验收对照（v2 实时）</strong>
-      <ul style="list-style:none;padding:0;margin:4px 0 0;">
-        ${items.map(item => `
-          <li style="padding:3px 0;">
-            ${item.status === 'pass' ? '✅' : item.status === 'warn' ? '⚠️' : '🔶'}
-            ${escapeHtml(item.text || item.criterion || '')}
-          </li>`).join('')}
-      </ul>
-      <p style="color:#9ca3af;margin:4px 0 0;font-size:0.9em;">
-        来源：${escapeHtml(payload?.source || 'hub')}（${new Date().toLocaleTimeString('zh-CN')}）
-      </p>
-    </div>`;
+function startPrAcSse(prId)  { _startPrAcSse(prId, _acHelpers()); }
+function stopPrAcSse()        { _stopPrAcSse(); }
+function refreshPrAcChecklist(prId, payload) { _refreshPrAcChecklist(prId, payload, _acHelpers());
 }
 
 // ── V3: 健康度弹窗 SPACE 维度扩展 ────────────────────────────────

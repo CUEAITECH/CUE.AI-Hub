@@ -26,6 +26,7 @@ console.log('frontend contract tests OK');
 for (const featureFile of [
   'src/features/pr-pipeline/renderPullList.js',
   'src/features/pr-pipeline/PullDrawer.js',
+  'src/features/pr-pipeline/PrAcChecklist.js',
 ]) {
   const src = readFileSync(new URL(`../${featureFile}`, import.meta.url), 'utf8');
   // Strip single-line comments before checking to avoid false positives from documentation
