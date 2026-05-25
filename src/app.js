@@ -7,6 +7,7 @@ import { observabilityApi } from './api/observabilityApi.js';
 import { renderPullList as _renderPullList } from './features/pr-pipeline/renderPullList.js';
 import { openPullDrawer as _openPullDrawer, closePullDrawer as _closePullDrawer, submitPullDecision as _submitPullDecision } from './features/pr-pipeline/PullDrawer.js';
 import { startPrAcSse as _startPrAcSse, stopPrAcSse as _stopPrAcSse, refreshPrAcChecklist as _refreshPrAcChecklist } from './features/pr-pipeline/PrAcChecklist.js';
+import { renderEveningTimeline as _renderEveningTimeline } from './features/command-center/index.js';
 import { renderTaskTable as _renderTaskTable } from './features/work-graph/renderTaskTable.js';
 import { renderTaskDetail as _renderTaskDetail } from './features/work-graph/renderTaskDetail.js';
 import { renderObservatory as _renderObservatory, loadAndRenderSpacePanel as _loadAndRenderSpacePanel } from './features/observability/index.js';
@@ -4666,53 +4667,8 @@ function loadAndRenderSpaceModal() {
 }
 
 // ── V4: 晚会作战包 Timeline 视图 ────────────────────────────────
-async function renderEveningTimeline(dateStr) {
-  const container = document.getElementById('eveningTimeline');
-  if (!container) return;
-  container.innerHTML = '<p style="color:#9ca3af;font-size:0.83em;">加载 timeline…</p>';
-  try {
-    const data = await eventsApi.getGroupedEvents({ hours: 24 }, 'default').catch(() => null);
-    if (!data?.grouped) { container.innerHTML = '<p style="color:#9ca3af;">暂无数据</p>'; return; }
-
-    const actors = Object.entries(data.grouped);
-    if (!actors.length) { container.innerHTML = '<p style="color:#9ca3af;">今日暂无事件</p>'; return; }
-
-    const TYPE_EMOJI = {
-      'task.claimed': '📋', 'task.progressed': '🔄', 'pr.opened': '🔀',
-      'pr.merged': '✅', 'pr.review.posted': '🔍', 'standup.submitted': '📢',
-      'agent.task.completed': '🤖',
-    };
-
-    const rows = actors.slice(0, 8).map(([actor, events]) => {
-      const dots = events.slice(-10).map(e => {
-        const t = new Date(e.createdAt);
-        const h = t.getHours() + t.getMinutes() / 60;
-        const pct = Math.round(h / 24 * 100);
-        const emoji = TYPE_EMOJI[e.type] || '•';
-        return `<span class="tl-dot" title="${e.type}\n${new Date(e.createdAt).toLocaleTimeString('zh-CN')}"
-          style="left:${pct}%;position:absolute;">${emoji}</span>`;
-      }).join('');
-      return `
-        <div class="tl-row" style="display:flex;align-items:center;margin-bottom:10px;font-size:0.83em;">
-          <span style="width:80px;flex-shrink:0;color:#374151;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-            title="${escapeHtml(actor)}">${escapeHtml(actor.slice(0, 8))}</span>
-          <div style="flex:1;position:relative;height:22px;background:#f3f4f6;border-radius:4px;overflow:visible;">
-            ${dots}
-          </div>
-        </div>`;
-    }).join('');
-
-    container.innerHTML = `
-      <div class="tl-header" style="display:flex;margin-bottom:4px;padding-left:80px;font-size:0.72em;color:#9ca3af;">
-        <span style="flex:0 0 25%">0h</span><span style="flex:0 0 25%">6h</span>
-        <span style="flex:0 0 25%">12h</span><span style="flex:0 0 25%">18h</span><span>24h</span>
-      </div>
-      ${rows}
-      <p style="font-size:0.75em;color:#9ca3af;margin:8px 0 0;">
-        共 ${data.totalEvents} 个事件 · ${actors.length} 个成员/系统</p>`;
-  } catch {
-    container.innerHTML = '<p style="color:#ef4444;font-size:0.83em;">Timeline 加载失败</p>';
-  }
+function renderEveningTimeline() {
+  return _renderEveningTimeline(state, { eventsApi, escapeHtml });
 }
 
 // ── V5: 管理观察台 ────────────────────────────────────────────────

@@ -66,3 +66,16 @@ for (const featureFile of [
   assert(!hasApiEndpoint, `${featureFile} must not hardcode /api/ endpoint paths`);
 }
 console.log('Observability contract tests OK');
+
+// Command Center: feature 模块不直接调用 fetch()，不硬编码 /api/ 端点路径
+for (const featureFile of [
+  'src/features/command-center/renderEveningTimeline.js',
+]) {
+  const src = readFileSync(new URL(`../${featureFile}`, import.meta.url), 'utf8');
+  const srcNoComments = src.replace(/\/\/[^\n]*/g, '');
+  const hasFetch = /\bfetch\s*\(/.test(srcNoComments);
+  const hasApiEndpoint = /['"`]\/api\//.test(srcNoComments);
+  assert(!hasFetch,       `${featureFile} must not call fetch() directly`);
+  assert(!hasApiEndpoint, `${featureFile} must not hardcode /api/ endpoint paths`);
+}
+console.log('Command Center contract tests OK');

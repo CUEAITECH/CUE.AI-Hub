@@ -8503,3 +8503,137 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   gap: 0.75rem;
   margin-bottom: 0.6rem;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   V4 晚会 Timeline (#eveningTimeline)
+   ══════════════════════════════════════════════════════════════════ */
+
+#eveningTimeline {
+  padding: 0.75rem;
+}
+
+.tl-chart {
+  font-size: 0.8rem;
+}
+
+/* Axis header */
+.tl-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.tl-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--dim);
+  font-size: 0.68rem;
+  padding: 0 2px;
+}
+
+/* Column widths — shared between header and rows */
+.tl-actor-col {
+  width: 3.5rem;
+  flex-shrink: 0;
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  padding-right: 0.5rem;
+}
+
+.tl-track-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Rows */
+.tl-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tl-row {
+  display: flex;
+  align-items: center;
+}
+
+/* Track bar */
+.tl-track {
+  position: relative;
+  height: 20px;
+  background: var(--panel-2);
+  border-radius: 5px;
+  overflow: visible;
+}
+
+/* Event dot */
+.tl-dot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--panel);
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  z-index: 1;
+}
+
+.tl-dot:hover,
+.tl-dot:focus {
+  transform: translate(-50%, -50%) scale(1.6);
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.12);
+  z-index: 2;
+  outline: none;
+}
+
+/* Footer */
+.tl-footer {
+  font-size: 0.72rem;
+  color: var(--dim);
+  margin: 0.5rem 0 0;
+}
+
+/* Empty / error */
+.tl-empty,
+.tl-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.tl-empty-text { font-size: 0.82rem; color: var(--dim); margin: 0; }
+.tl-error      { font-size: 0.8rem; color: var(--red); }
+
+/* Skeleton */
+@keyframes tl-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.tl-sk {
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--panel-2) 25%, var(--bg) 50%, var(--panel-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: tl-shimmer 1.4s ease-in-out infinite;
+}
+
+.tl-sk-label { width: 3rem; }
+.tl-sk-track { flex: 1; height: 20px; border-radius: 5px; }
+
+.tl-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
