@@ -3311,6 +3311,8 @@ function renderMeeting() {
 // ── PR 列表 & 抽屉 ────────────────────────────────────────────
 
 async function fetchAndRenderPulls() {
+  const container = document.getElementById('pullList');
+  if (container) container.innerHTML = '<div class="empty-hint">正在加载 PR 数据...</div>';
   const projectId = document.getElementById('pullProjectFilter')?.value || '';
   const stateFilter = document.getElementById('pullStateFilter')?.value || '';
   const author = document.getElementById('pullAuthorFilter')?.value || '';
@@ -3324,6 +3326,9 @@ async function fetchAndRenderPulls() {
     renderPullList();
   } catch (err) {
     console.error('[fetchAndRenderPulls]', err);
+    if (container) {
+      container.innerHTML = `<div class="empty-hint error">PR 加载失败：${escapeHtml(err.message || '未知错误')}</div>`;
+    }
   }
 }
 
@@ -3480,6 +3485,7 @@ async function loadState() {
   state.reviews = payload.reviews || [];
   state.alerts = payload.alerts || [];
   state.projects = payload.projects || [];
+  state.pulls = payload.pulls || [];
   syncCurrentProject(payload.currentProjectId || storedProjectId);
   state.deliverables = payload.deliverables || [];
   state.phases = payload.phases || [];

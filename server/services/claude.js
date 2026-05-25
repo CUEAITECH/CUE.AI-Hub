@@ -16,6 +16,7 @@
 //   不需要像 Anthropic 那样显式传 cache_control，删除即可
 
 import OpenAI from 'openai';
+import { createHash } from 'node:crypto';
 import logger from '../logger.js';
 
 // ── 模型配置（env 覆盖） ─────────────────────────────────────────
@@ -23,6 +24,75 @@ const DEFAULT_MODEL = process.env.OPENAI_MODEL      || 'gpt-5.5';
 const MINI_MODEL    = process.env.OPENAI_MINI_MODEL || 'gpt-5.4-mini';
 
 function getModel(override) { return override || DEFAULT_MODEL; }
+
+function estimateCostUsd(model, inputTokens = 0, outputTokens = 0) {
+  // Conservative default used by the observability dashboard until per-model pricing is centralized.
+  return (Number(inputTokens || 0) * 0.000003) + (Number(outputTokens || 0) * 0.000015);
+}
+
+async function recordLlmCall({
+  purpose = 'general',
+  model,
+  systemPrompt,
+  userPrompt,
+  response,
+  latencyMs,
+  refType = null,
+  refId = null,
+}) {
+  try {
+    const { dbWrite } = await import('../db/actor.js');
+    const usage = response?.usage || {};
+    const inputTokens = usage.prompt_tokens ?? usage.input_tokens ?? 0;
+    const outputTokens = usage.completion_tokens ?? usage.output_tokens ?? 0;
+    const cachedTokens = usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0;
+    const promptHash = createHash('sha256')
+      .update(`${systemPrompt || ''}\n---\n${userPrompt || ''}`)
+      .digest('hex');
+
+    await dbWrite('llm-call:record', (db) => {
+      const result = db.prepare(`
+        INSERT INTO llm_calls
+          (tenant_id, purpose, model, prompt_hash, cache_hit, input_tokens, output_tokens, cost_usd, latency_ms, ref_type, ref_id)
+        VALUES
+          (@tenantId, @purpose, @model, @promptHash, @cacheHit, @inputTokens, @outputTokens, @costUsd, @latencyMs, @refType, @refId)
+      `).run({
+        tenantId: 'default',
+        purpose,
+        model,
+        promptHash,
+        cacheHit: cachedTokens > 0 ? 1 : 0,
+        inputTokens,
+        outputTokens,
+        costUsd: estimateCostUsd(model, inputTokens, outputTokens),
+        latencyMs,
+        refType,
+        refId,
+      });
+      db.prepare(`
+        INSERT INTO events (tenant_id, type, payload_json, source, event_id, processed_at)
+        VALUES (@tenantId, @type, @payloadJson, @source, @eventId, CURRENT_TIMESTAMP)
+      `).run({
+        tenantId: 'default',
+        type: outputTokens > 0 ? 'llm.call.completed' : 'llm.call.failed',
+        payloadJson: JSON.stringify({
+          purpose,
+          model,
+          inputTokens,
+          outputTokens,
+          latencyMs,
+          refType,
+          refId,
+          llmCallId: result.lastInsertRowid,
+        }),
+        source: 'llm',
+        eventId: `llm:${result.lastInsertRowid}`,
+      });
+    });
+  } catch (err) {
+    logger.warn('[LLM] 账本写入失败:', err.message);
+  }
+}
 
 let _client = null;
 
@@ -69,12 +139,14 @@ export async function callClaude(systemPrompt, userPrompt, options = {}) {
   const client = getClient();
   if (!client) return null;
 
+  const startedAt = Date.now();
+  const model = getModel(options.model);
   try {
     const fetchOptions = options.signal ? { signal: options.signal } : undefined;
 
     const response = await client.chat.completions.create(
       {
-        model:      getModel(options.model),
+        model,
         max_tokens: options.maxTokens || 4096,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -90,9 +162,30 @@ export async function callClaude(systemPrompt, userPrompt, options = {}) {
       logger.warn(`[LLM] 输出在 max_tokens=${options.maxTokens || 4096} 处被截断（finish_reason=length），输出可能不完整`);
     }
 
+    await recordLlmCall({
+      purpose: options.purpose,
+      model,
+      systemPrompt,
+      userPrompt,
+      response,
+      latencyMs: Date.now() - startedAt,
+      refType: options.refType,
+      refId: options.refId,
+    });
+
     return response.choices[0]?.message?.content ?? null;
 
   } catch (err) {
+    await recordLlmCall({
+      purpose: options.purpose,
+      model,
+      systemPrompt,
+      userPrompt,
+      response: null,
+      latencyMs: Date.now() - startedAt,
+      refType: options.refType,
+      refId: options.refId,
+    });
     if (err instanceof OpenAI.AuthenticationError || err.status === 401) {
       logger.error('[LLM] API key 无效，将使用规则引擎');
     } else if (err instanceof OpenAI.RateLimitError || err.status === 429) {
