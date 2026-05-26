@@ -9,9 +9,96 @@
  * 4. writeProgressToGitHub — PUT API 写回目标仓库
  */
 
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkGfm from 'remark-gfm';   // GFM: task list [x], tables, strikethrough
+import { toString } from 'mdast-util-to-string';
 import { callClaude, parseJsonOutput } from './claude.js';
 import { createId, loadStore, updateStore } from '../store.js';
 import { defaultStageChecklist, reassignChecklistPhaseIds } from './stageChecklist.js';
+import logger from '../logger.js';
+
+/**
+ * Parse markdown text into an mdast AST using remark.
+ * @param {string} mdText
+ * @returns {import('mdast').Root}
+ */
+function parseMarkdownDoc(mdText) {
+  return unified().use(remarkParse).use(remarkGfm).parse(mdText);
+}
+
+/**
+ * Walk remark AST and extract headings + their content sections.
+ * @param {import('mdast').Root} tree
+ * @returns {{ heading: string, level: number, paragraphs: string[], checkItems: {text:string, done:boolean}[] }[]}
+ */
+function extractSections(tree) {
+  const sections = [];
+  let currentSection = null;
+
+  for (const node of tree.children) {
+    if (node.type === 'heading') {
+      currentSection = {
+        heading: toString(node),
+        level: node.depth,
+        checkItems: [],
+        paragraphs: [],
+      };
+      sections.push(currentSection);
+    } else if (node.type === 'list' && currentSection) {
+      for (const item of node.children) {
+        const text = toString(item).trim();
+        const isCheckbox = item.checked !== null && item.checked !== undefined;
+        if (isCheckbox) {
+          currentSection.checkItems.push({ text, done: item.checked === true });
+        } else {
+          currentSection.paragraphs.push(text);
+        }
+      }
+    } else if (node.type === 'paragraph' && currentSection) {
+      currentSection.paragraphs.push(toString(node));
+    }
+  }
+
+  return sections;
+}
+
+/**
+ * Convert extracted sections to a compact structured text for LLM consumption.
+ * This produces a cleaner, more structured representation than raw markdown.
+ * @param {string} mdText
+ * @param {number} [maxChars=3000]
+ * @returns {string}
+ */
+function buildStructuredDocContext(mdText, maxChars = 3000) {
+  let tree;
+  try {
+    tree = parseMarkdownDoc(mdText);
+  } catch {
+    // fallback to raw text slice if AST parsing fails
+    return mdText.slice(0, maxChars);
+  }
+
+  const sections = extractSections(tree);
+  if (!sections.length) return mdText.slice(0, maxChars);
+
+  const lines = [];
+  for (const section of sections) {
+    const indent = '  '.repeat(Math.max(0, section.level - 1));
+    lines.push(`${indent}${'#'.repeat(section.level)} ${section.heading}`);
+    for (const para of section.paragraphs) {
+      lines.push(`${indent}  ${para}`);
+    }
+    for (const item of section.checkItems) {
+      lines.push(`${indent}  [${item.done ? 'x' : ' '}] ${item.text}`);
+    }
+  }
+
+  const result = lines.join('\n');
+  // If structured output is longer than limit, truncate but prefer structured over raw
+  return result.length > maxChars ? result.slice(0, maxChars) : result;
+}
+
 
 const API_BASE = 'https://api.github.com';
 const PROGRESS_DOC_PATH = 'docs/阶段进度追踪.md';
@@ -129,16 +216,16 @@ export async function parseDocsForTasks(docs) {
 
   const teamContext = '【团队成员】田家铭（架构/后端/全栈）、胡佳涛（后端/API）、罗子宽（iOS/iPad/iPhone）、林世棋（Web/学生端）。owner 必须从中选，文档无明确负责人写"待认领"。\n\n';
   const userPrompt = teamContext + planDocs.map((d) =>
-    `=== 文档：${d.path} ===\n${d.content.slice(0, 3000)}`
+    `=== 文档：${d.path} ===\n${buildStructuredDocContext(d.content, 3000)}`
   ).join('\n\n');
 
   // 文档任务解析容易输出长 JSON 数组（40+ 任务、详细描述），把 max_tokens 拉到 8192 防止截断
   const raw = await callClaude(PARSE_SYSTEM_PROMPT, userPrompt, { maxTokens: 8192 });
-  if (!raw) { console.error('[DocsManager] callClaude 返回 null，API key 缺失或调用失败'); return []; }
+  if (!raw) { logger.error('[DocsManager] callClaude 返回 null，API key 缺失或调用失败'); return []; }
 
   const parsed = extractJsonArray(raw);
   if (!parsed) {
-    console.error('[DocsManager] LLM 输出解析失败，原始内容前 500 字:', raw.slice(0, 500));
+    logger.error('[DocsManager] LLM 输出解析失败，原始内容前 500 字:', raw.slice(0, 500));
     return [];
   }
   return Array.isArray(parsed) ? parsed : [];
@@ -181,15 +268,15 @@ export function extractJsonArray(raw) {
           if (repaired) {
             try {
               const result = JSON.parse(repaired);
-              console.warn('[DocsManager] JSON 经过自动修复后解析成功（建议改进 LLM prompt）');
+              logger.warn('[DocsManager] JSON 经过自动修复后解析成功（建议改进 LLM prompt）');
               return result;
             } catch { /* 继续报错 */ }
           }
-          console.error('[DocsManager] JSON.parse 失败:', e.message);
+          logger.error('[DocsManager] JSON.parse 失败:', e.message);
           const m = e.message.match(/position\s+(\d+)/);
           if (m) {
             const pos = Number(m[1]);
-            console.error('[DocsManager] 错误位置上下文:', JSON.stringify(jsonStr.slice(Math.max(0, pos - 80), pos + 80)));
+            logger.error('[DocsManager] 错误位置上下文:', JSON.stringify(jsonStr.slice(Math.max(0, pos - 80), pos + 80)));
           }
           return null;
         }
@@ -665,7 +752,7 @@ export async function writeProgressToGitHub(owner, repo, markdown) {
     throw new Error(`写入文档失败 ${res.status}: ${err.slice(0, 200)}`);
   }
 
-  console.log(`[DocsManager] 写回成功: ${owner}/${repo}/${PROGRESS_DOC_PATH}`);
+  logger.info(`[DocsManager] 写回成功: ${owner}/${repo}/${PROGRESS_DOC_PATH}`);
   return true;
 }
 

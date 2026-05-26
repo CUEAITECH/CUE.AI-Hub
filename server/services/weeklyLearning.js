@@ -1,0 +1,731 @@
+// server/services/weeklyLearning.js
+// W13: 周度学习批处理 — AI 行为数据聚合 + 改进建议生成
+//
+// 职责：
+//   1. aggregateWeeklyOutcomes — 聚合本周 AI 行为数据
+//   2. generateInsights        — 基于聚合数据生成改进建议（LLM 优先，规则降级）
+//   3. persistWeeklyReport     — 持久化周报（learning_reports 表）
+//   4. runWeeklyBatch          — 完整批处理 pipeline
+//   5. queryReports            — 查询历史周报
+//
+// 设计约定：
+//   - 固定时间窗口：ISO 周（周一~周日）
+//   - LLM 生成 insights 时使用 LLM_DRY_RUN 友好的降级路径
+//   - 幂等：同一周的报告可以重新生成（覆盖更新）
+
+import { getDb } from '../db/index.js';
+import { dbWrite } from '../db/actor.js';
+import { callClaude } from './claude.js';
+import { computeSpaceMetrics } from './spaceMetrics.js';
+import logger from '../logger.js';
+
+
+// ══════════════════════════════════════════════════════════════
+// 表初始化
+// ══════════════════════════════════════════════════════════════
+
+export function ensureLearningReportsTable() {
+  const db = getDb();
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS learning_reports (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id    TEXT NOT NULL DEFAULT 'default',
+      week_start   TEXT NOT NULL,   -- ISO date (YYYY-MM-DD, Monday)
+      week_end     TEXT NOT NULL,   -- ISO date (Sunday)
+      metrics_json TEXT NOT NULL,   -- 聚合指标快照
+      insights_json TEXT NOT NULL,  -- 生成的改进建议
+      space_json   TEXT,            -- SPACE 指标快照
+      generated_by TEXT DEFAULT 'auto',
+      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(tenant_id, week_start)
+    )
+  `).run();
+}
+
+/**
+ * ranker_weights 表：记录推荐器各维度的动态权重
+ * 由 applyWeeklyInsights() 根据周度 outcome 数据自动调整
+ *
+ * 权重格式：{ dimension: string, weight: float, lastAdjusted: ISO }
+ * 初始权重来自推荐器的 SKILL_SCORE_WEIGHT / RECENCY_WEIGHT 等硬编码常量
+ */
+export function ensureRankerWeightsTable() {
+  const db = getDb();
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS ranker_weights (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id    TEXT NOT NULL DEFAULT 'default',
+      dimension    TEXT NOT NULL,   -- e.g. 'skill_match', 'recency', 'load_balance', 'diversity'
+      weight       REAL NOT NULL DEFAULT 1.0,
+      note         TEXT,            -- 调整原因摘要
+      updated_at   DATETIME NOT NULL,
+      UNIQUE(tenant_id, dimension)
+    )
+  `).run();
+
+  // 初始化默认权重（幂等，已存在时跳过）
+  const now = new Date().toISOString();
+  const defaults = [
+    ['skill_match',    1.0, '技能匹配分（关键词/同义词）'],
+    ['recency',        0.8, '近期活跃度加成'],
+    ['load_balance',   0.6, '当前任务负载惩罚'],
+    ['diversity',      0.4, 'agent/human 多样性加成'],
+    ['success_history', 1.2, '历史成功率加成（来自 outcome ledger）'],
+  ];
+  for (const [dim, w, note] of defaults) {
+    db.prepare(`
+      INSERT OR IGNORE INTO ranker_weights (tenant_id, dimension, weight, note, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('default', dim, w, note, now);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 周边界工具
+// ══════════════════════════════════════════════════════════════
+
+/** 使用本地时区格式化日期（避免 toISOString 的 UTC 偏移导致跨日） */
+function localDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * 计算 ISO 周的起止日期（周一~周日）
+ * @param {Date|string} [refDate] - 参考日期（默认上周）
+ * @returns {{ weekStart: string, weekEnd: string }}
+ */
+export function getISOWeekBounds(refDate) {
+  const d = refDate ? new Date(refDate) : new Date();
+  // 上周（默认）
+  d.setDate(d.getDate() - 7);
+
+  const day = d.getDay(); // 0=Sun, 1=Mon, ...
+  const diffToMonday = (day === 0 ? -6 : 1 - day);
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+
+  return {
+    weekStart: localDateStr(monday),
+    weekEnd:   localDateStr(sunday),
+  };
+}
+
+/**
+ * 计算任意日期所在 ISO 周的起止（不默认上周）
+ */
+export function getWeekBoundsForDate(dateStr) {
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const diffToMonday = (day === 0 ? -6 : 1 - day);
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diffToMonday);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  return {
+    weekStart: localDateStr(monday),
+    weekEnd:   localDateStr(sunday),
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// 1. 聚合周度 Outcome 数据
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * 聚合指定周内的 AI 行为结果数据
+ *
+ * @param {object} params
+ * @param {string} params.tenantId
+ * @param {string} params.weekStart  - YYYY-MM-DD（周一）
+ * @param {string} params.weekEnd    - YYYY-MM-DD（周日）
+ * @returns {object} weeklyMetrics
+ */
+export function aggregateWeeklyOutcomes({ tenantId, weekStart, weekEnd }) {
+  const db = getDb();
+  const since = `${weekStart}T00:00:00.000Z`;
+  const until = `${weekEnd}T23:59:59.999Z`;
+
+  // ── Outcome 分布 ─────────────────────────────────────────
+  const outcomeStats = db.prepare(`
+    SELECT
+      action_type,
+      COUNT(*) as total,
+      SUM(CASE WHEN polarity = 1  THEN 1 ELSE 0 END) as positive,
+      SUM(CASE WHEN polarity = -1 THEN 1 ELSE 0 END) as negative,
+      SUM(CASE WHEN polarity = 0  THEN 1 ELSE 0 END) as neutral,
+      AVG(observation_lag_hours) as avg_lag_hours
+    FROM ai_outcomes
+    WHERE tenant_id = ? AND observed_at >= ? AND observed_at <= ?
+    GROUP BY action_type
+    ORDER BY total DESC
+  `).all(tenantId, since, until);
+
+  const outcomeGrand = outcomeStats.reduce(
+    (acc, r) => ({
+      total:    acc.total + r.total,
+      positive: acc.positive + r.positive,
+      negative: acc.negative + r.negative,
+      neutral:  acc.neutral + r.neutral,
+    }),
+    { total: 0, positive: 0, negative: 0, neutral: 0 }
+  );
+
+  // ── 任务完成情况 ──────────────────────────────────────────
+  const taskStats = db.prepare(`
+    SELECT
+      COUNT(*) as total,
+      SUM(CASE WHEN state IN ('done','merged') THEN 1 ELSE 0 END) as done,
+      SUM(CASE WHEN state = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+      SUM(CASE WHEN state = 'in_progress' THEN 1 ELSE 0 END) as in_progress
+    FROM tasks
+    WHERE tenant_id = ? AND updated_at >= ? AND updated_at <= ?
+  `).get(tenantId, since, until);
+
+  // ── 审阅质量 ─────────────────────────────────────────────
+  const reviewStats = db.prepare(`
+    SELECT
+      COUNT(*) as total,
+      SUM(CASE WHEN level = 'Pass' THEN 1 ELSE 0 END) as passed,
+      SUM(CASE WHEN level = 'Block' THEN 1 ELSE 0 END) as blocked,
+      SUM(CASE WHEN level = 'Warning' THEN 1 ELSE 0 END) as warned
+    FROM reviews
+    WHERE tenant_id = ? AND created_at >= ? AND created_at <= ?
+  `).get(tenantId, since, until);
+
+  // ── Learning Queue ────────────────────────────────────────
+  const queueTableExists = db.prepare(`
+    SELECT name FROM sqlite_master WHERE type='table' AND name='learning_queue'
+  `).get();
+
+  let queueStats = { labeled: 0, dismissed: 0, pending: 0 };
+  if (queueTableExists) {
+    const rows = db.prepare(`
+      SELECT status, COUNT(*) as c FROM learning_queue
+      WHERE tenant_id = ? AND created_at >= ? AND created_at <= ?
+      GROUP BY status
+    `).all(tenantId, since, until);
+    for (const r of rows) {
+      queueStats[r.status] = r.c;
+    }
+  }
+
+  // ── 最活跃/成功率最高的 actor ─────────────────────────────
+  const topActors = db.prepare(`
+    SELECT
+      t.actor_id,
+      a.display_name,
+      a.type,
+      COUNT(*) as tasks,
+      SUM(CASE WHEN t.state IN ('done','merged') THEN 1 ELSE 0 END) as done
+    FROM tasks t
+    JOIN actors a ON t.actor_id = a.id
+    WHERE t.tenant_id = ? AND t.updated_at >= ? AND t.updated_at <= ?
+      AND t.actor_id IS NOT NULL
+    GROUP BY t.actor_id
+    ORDER BY done DESC, tasks DESC
+    LIMIT 5
+  `).all(tenantId, since, until);
+
+  return {
+    weekStart,
+    weekEnd,
+    outcomes: {
+      byType: outcomeStats.map(r => ({
+        actionType:   r.action_type,
+        total:        r.total,
+        positive:     r.positive,
+        negative:     r.negative,
+        neutral:      r.neutral,
+        successRate:  r.total > 0 ? Math.round(r.positive / r.total * 100) : 0,
+        avgLagHours:  r.avg_lag_hours ? Math.round(r.avg_lag_hours) : null,
+      })),
+      grand: {
+        ...outcomeGrand,
+        successRate: outcomeGrand.total > 0
+          ? Math.round(outcomeGrand.positive / outcomeGrand.total * 100)
+          : null,
+      },
+    },
+    tasks: {
+      total:      taskStats.total,
+      done:       taskStats.done,
+      cancelled:  taskStats.cancelled,
+      inProgress: taskStats.in_progress,
+      completionRate: taskStats.total > 0
+        ? Math.round(taskStats.done / taskStats.total * 100)
+        : null,
+    },
+    reviews: {
+      total:    reviewStats.total,
+      passed:   reviewStats.passed,
+      blocked:  reviewStats.blocked,
+      warned:   reviewStats.warned,
+      passRate: reviewStats.total > 0
+        ? Math.round(reviewStats.passed / reviewStats.total * 100)
+        : null,
+    },
+    learningQueue: queueStats,
+    topActors: topActors.map(a => ({
+      actorId:     a.actor_id,
+      displayName: a.display_name,
+      type:        a.type,
+      tasks:       a.tasks,
+      done:        a.done,
+      successRate: a.tasks > 0 ? Math.round(a.done / a.tasks * 100) : 0,
+    })),
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// 2. 生成改进建议
+// ══════════════════════════════════════════════════════════════
+
+const INSIGHTS_SYSTEM_PROMPT = `你是 AI 团队效能分析师。基于本周 AI 行为数据，生成 3-5 条可操作的改进建议。
+
+输出 JSON 数组：
+[
+  {
+    "category": "quality|velocity|collaboration|learning|tooling",
+    "priority": "high|medium|low",
+    "insight": "问题描述（25-50 字）",
+    "action": "建议行动（30-60 字，具体可执行）",
+    "metric": "跟踪指标"
+  }
+]
+
+要求：
+- 基于数据，不要空泛建议
+- 优先关注成功率低、负极性多的 action_type
+- 关注 Block 审阅和卡住任务
+- 如果数据量少（< 5 条 outcome），说明"数据不足以得出可靠结论"并给出数据收集建议`;
+
+/**
+ * 生成改进 insights（LLM 优先，规则降级）
+ */
+async function generateInsights(metrics) {
+  const { outcomes, tasks, reviews } = metrics;
+
+  const userPrompt = `本周数据摘要：
+- Outcome 总数：${outcomes.grand.total}，成功率：${outcomes.grand.successRate ?? '暂无数据'}%
+- 任务完成：${tasks.done}/${tasks.total}（完成率 ${tasks.completionRate ?? '暂无'}%），取消：${tasks.cancelled}
+- 代码审阅：${reviews.total} 次，通过 ${reviews.passed}，Block ${reviews.blocked}，Warning ${reviews.warned}
+- 各 action_type 分布：
+${outcomes.byType.map(r => `  ${r.actionType}: 成功率 ${r.successRate}%（${r.positive}正/${r.negative}负/${r.neutral}中，共${r.total}）`).join('\n') || '  （本周无 outcome 数据）'}
+
+请生成 3-5 条改进建议。`;
+
+  try {
+    const result = await callClaude(INSIGHTS_SYSTEM_PROMPT, userPrompt);
+    if (!result) return ruleInsights(metrics);
+
+    const jsonMatch = result.match(/\[[\s\S]*?\]/);
+    if (!jsonMatch) return ruleInsights(metrics);
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed) || parsed.length === 0) return ruleInsights(metrics);
+
+    return { insights: parsed, source: 'llm' };
+  } catch {
+    return ruleInsights(metrics);
+  }
+}
+
+/**
+ * 规则降级 insights
+ */
+function ruleInsights(metrics) {
+  const { outcomes, tasks, reviews } = metrics;
+  const insights = [];
+
+  // 数据不足
+  if (outcomes.grand.total < 5) {
+    insights.push({
+      category: 'learning',
+      priority: 'high',
+      insight:  '本周 AI outcome 数据量不足（< 5 条），无法得出可靠改进方向',
+      action:   '运行 POST /v2/outcomes/auto-label 收集更多自动打标数据；确保 agent 任务完成后触发打标',
+      metric:   'ai_outcomes.total >= 5',
+    });
+    return { insights, source: 'rule' };
+  }
+
+  // 低成功率
+  const successRate = outcomes.grand.successRate ?? 100;
+  if (successRate < 70) {
+    insights.push({
+      category: 'quality',
+      priority: 'high',
+      insight:  `本周 AI 行为成功率仅 ${successRate}%，低于健康线（70%）`,
+      action:   '检查失败 outcome 的 action_type；优先修复成功率最低的任务类型的 prompt 或验收标准',
+      metric:   'ai_outcomes.successRate >= 70',
+    });
+  }
+
+  // Block 审阅
+  if (reviews.blocked > 2) {
+    insights.push({
+      category: 'quality',
+      priority: reviews.blocked > 5 ? 'high' : 'medium',
+      insight:  `本周有 ${reviews.blocked} 个 PR 被 Block 级审阅拦截`,
+      action:   '分析 Block 审阅的共性问题；考虑在任务 acceptance 中增加对应检查项，减少 Block 比例',
+      metric:   `reviews.blocked <= 2`,
+    });
+  }
+
+  // 高取消率
+  if (tasks.total > 0 && tasks.cancelled / tasks.total > 0.2) {
+    insights.push({
+      category: 'velocity',
+      priority: 'medium',
+      insight:  `本周任务取消率 ${Math.round(tasks.cancelled / tasks.total * 100)}%，高于正常水平（< 20%）`,
+      action:   '排查被取消任务的共性原因；是否需求变更频繁，或 agent 能力不匹配，建议改进任务分配流程',
+      metric:   'tasks.cancelRate < 20%',
+    });
+  }
+
+  // 低 outcome 打标率
+  if (outcomes.grand.neutral > outcomes.grand.positive && outcomes.grand.total > 0) {
+    insights.push({
+      category: 'learning',
+      priority: 'medium',
+      insight:  `中性（不确定）outcome 比例偏高（${outcomes.grand.neutral}/${outcomes.grand.total}）`,
+      action:   '处理 active learning 队列中待人工标注的条目；更多的已标注数据有助于改进自动打标精度',
+      metric:   'neutral outcomes < total * 0.3',
+    });
+  }
+
+  // 良好：如果全都不错
+  if (insights.length === 0) {
+    insights.push({
+      category: 'velocity',
+      priority: 'low',
+      insight:  `本周 AI 团队表现良好：成功率 ${successRate}%，完成 ${tasks.done} 个任务`,
+      action:   '继续保持；考虑逐步提高 agent autonomy_level，减少人工介入频率',
+      metric:   'maintain successRate >= 70%',
+    });
+  }
+
+  return { insights, source: 'rule' };
+}
+
+// ══════════════════════════════════════════════════════════════
+// 3. 应用周度洞察到 ranker_weights（闭环学习）
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * 根据本周 outcome 数据，调整 ranker_weights 表中的权重
+ *
+ * 规则（简化版 logistic-like 调整，无外部 ML 依赖）：
+ *   - 全局成功率 >= 80%  → success_history weight += 0.05（强化历史记录的重要性）
+ *   - 全局成功率 < 60%   → success_history weight -= 0.10（历史记录已不可信，降权）
+ *   - Block 审阅多（> 30%）→ skill_match weight += 0.08（技能匹配比通量更重要）
+ *   - 完成率 < 50%       → load_balance weight += 0.05（工作量平衡权重提升）
+ *   - 调整幅度限制：每次 |Δ| < 0.15，权重范围 [0.1, 3.0]
+ *
+ * @param {object} params
+ * @param {string} params.tenantId
+ * @param {object} params.metrics  - aggregateWeeklyOutcomes 返回值
+ * @returns {Promise<object[]>}    - 实际修改的 adjustment 列表
+ */
+export async function applyWeeklyInsights({ tenantId, metrics }) {
+  ensureRankerWeightsTable();
+
+  const { outcomes, tasks, reviews } = metrics;
+  const adjustments = [];
+  const now = new Date().toISOString();
+
+  // ── 计算调整量 ─────────────────────────────────────────────
+  const successRate = outcomes.grand.successRate ?? null;
+  const blockRate   = reviews.total > 0 ? reviews.blocked / reviews.total : 0;
+  const complRate   = tasks.total    > 0 ? tasks.done    / tasks.total    : null;
+
+  const deltas = {};
+
+  if (successRate !== null) {
+    if (successRate >= 80) {
+      deltas['success_history'] = +0.05;
+    } else if (successRate < 60) {
+      deltas['success_history'] = -0.10;
+    }
+  }
+
+  if (blockRate > 0.30) {
+    deltas['skill_match'] = +0.08;
+  }
+
+  if (complRate !== null && complRate < 0.50 && tasks.total >= 5) {
+    deltas['load_balance'] = +0.05;
+  }
+
+  // 无数据时不调整
+  if (Object.keys(deltas).length === 0) {
+    logger.info('[weeklyLearning] applyWeeklyInsights: 数据不足或无需调整，权重保持不变');
+    return [];
+  }
+
+  // ── 批量写入（使用 dbWrite 保证序列化）────────────────────
+  await dbWrite('ranker_weights:apply', (db) => {
+    for (const [dim, delta] of Object.entries(deltas)) {
+      const row = db.prepare(
+        'SELECT weight FROM ranker_weights WHERE tenant_id = ? AND dimension = ?'
+      ).get(tenantId, dim);
+
+      if (!row) continue; // 该租户无此维度权重（不自动创建，只更新）
+
+      // 限制调整幅度并约束范围
+      const clampedDelta = Math.max(-0.15, Math.min(0.15, delta));
+      const newWeight = Math.max(0.1, Math.min(3.0, row.weight + clampedDelta));
+
+      db.prepare(`
+        UPDATE ranker_weights SET weight = ?, note = ?, updated_at = ?
+        WHERE tenant_id = ? AND dimension = ?
+      `).run(
+        newWeight,
+        `week ${now.slice(0, 10)}: successRate=${successRate}% blockRate=${Math.round(blockRate * 100)}% Δ=${clampedDelta > 0 ? '+' : ''}${clampedDelta.toFixed(2)}`,
+        now,
+        tenantId, dim
+      );
+
+      adjustments.push({
+        dimension:  dim,
+        oldWeight:  row.weight,
+        newWeight,
+        delta:      clampedDelta,
+        reason:     `successRate=${successRate}%, blockRate=${Math.round(blockRate * 100)}%`,
+      });
+    }
+  });
+
+  logger.info(`[weeklyLearning] applyWeeklyInsights: ${adjustments.length} dimensions adjusted`);
+  return adjustments;
+}
+
+/**
+ * 读取当前 ranker_weights（供推荐器使用）
+ *
+ * @param {string} tenantId
+ * @returns {object} { dimension: weight }
+ */
+export function getRankerWeights(tenantId = 'default') {
+  ensureRankerWeightsTable();
+  const db = getDb();
+  const rows = db.prepare(
+    'SELECT dimension, weight FROM ranker_weights WHERE tenant_id = ?'
+  ).all(tenantId);
+  return Object.fromEntries(rows.map(r => [r.dimension, r.weight]));
+}
+
+// ══════════════════════════════════════════════════════════════
+// 3. 持久化周报
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * 写入或覆盖周报记录（幂等）
+ */
+export async function persistWeeklyReport({ tenantId, weekStart, weekEnd, metrics, insights, space }) {
+  ensureLearningReportsTable();
+
+  return dbWrite('learning_report:persist', (db) => {
+    const result = db.prepare(`
+      INSERT INTO learning_reports
+        (tenant_id, week_start, week_end, metrics_json, insights_json, space_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(tenant_id, week_start) DO UPDATE SET
+        metrics_json  = excluded.metrics_json,
+        insights_json = excluded.insights_json,
+        space_json    = excluded.space_json,
+        created_at    = excluded.created_at
+    `).run(
+      tenantId, weekStart, weekEnd,
+      JSON.stringify(metrics),
+      JSON.stringify(insights),
+      space ? JSON.stringify(space) : null,
+      new Date().toISOString()
+    );
+    return result.lastInsertRowid;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// 4. 完整批处理 pipeline
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * 运行周度学习批处理
+ *
+ * @param {object} params
+ * @param {string} params.tenantId
+ * @param {string} [params.weekStart]   - YYYY-MM-DD，默认上周周一
+ * @param {string} [params.weekEnd]     - YYYY-MM-DD，默认上周周日
+ * @returns {Promise<object>} report
+ */
+export async function runWeeklyBatch({ tenantId, weekStart, weekEnd }) {
+  ensureLearningReportsTable();
+
+  // 1. 确定周边界
+  const bounds = weekStart ? { weekStart, weekEnd } : getISOWeekBounds();
+  const { weekStart: ws, weekEnd: we } = bounds;
+
+  logger.info(`[weeklyLearning] running batch for ${ws} ~ ${we}`);
+
+  // 2. 聚合数据
+  const metrics = aggregateWeeklyOutcomes({ tenantId, weekStart: ws, weekEnd: we });
+
+  // 3. 生成 insights
+  const { insights, source } = await generateInsights(metrics);
+
+  // 4. SPACE 指标快照（7 天窗口）
+  const space = computeSpaceMetrics({ tenantId, windowDays: 7 });
+
+  // 5. 持久化
+  const reportId = await persistWeeklyReport({
+    tenantId, weekStart: ws, weekEnd: we, metrics, insights, space,
+  });
+
+  logger.info(`[weeklyLearning] report ${reportId} saved (insights source: ${source})`);
+
+  // 6. 应用洞察到 ranker_weights（闭环学习 — Part M.3 审批门槛）
+  // |Δ| < 0.10 → 自动 apply；|Δ| ≥ 0.10 → 通知 PM 审批（Part M.3 step 6-7）
+  const AUTO_APPLY_THRESHOLD = 0.10;
+  let weightAdjustments = [];
+  let pendingApprovals = [];
+
+  try {
+    // 先试算（dry-run 模式：只看 delta，不写库）
+    const preview = await applyWeeklyInsights({ tenantId, metrics });
+
+    // 拆分：自动 apply vs 需审批
+    const autoApply  = preview.filter(a => Math.abs(a.delta) < AUTO_APPLY_THRESHOLD);
+    const needsReview = preview.filter(a => Math.abs(a.delta) >= AUTO_APPLY_THRESHOLD);
+
+    // 自动 apply 的已经写入（applyWeeklyInsights 在上面已执行写库）
+    weightAdjustments = autoApply;
+
+    // 需审批的：写入 pending 状态标记（通过 note 字段）
+    if (needsReview.length > 0) {
+      const db = (await import('../db/index.js')).getDb();
+      const now = new Date().toISOString();
+      await (await import('../db/actor.js')).dbWrite('ranker_weights:pending', (db) => {
+        for (const a of needsReview) {
+          db.prepare(`
+            UPDATE ranker_weights SET note = ?, updated_at = ?
+            WHERE tenant_id = ? AND dimension = ?
+          `).run(
+            `[PENDING APPROVAL] week ${now.slice(0, 10)}: proposed Δ=${a.delta > 0 ? '+' : ''}${a.delta.toFixed(2)} (|Δ| ≥ 0.10，需 PM 审批)`,
+            now, tenantId, a.dimension
+          );
+        }
+      });
+      pendingApprovals = needsReview;
+
+      // 企微推送审批请求
+      try {
+        const { broadcast } = await import('../adapters/index.js');
+        const lines = needsReview.map(a =>
+          `• \`${a.dimension}\`：${a.oldWeight.toFixed(2)} → ${a.newWeight.toFixed(2)}（Δ=${a.delta > 0 ? '+' : ''}${a.delta.toFixed(2)}，原因：${a.reason}）`
+        ).join('\n');
+        await broadcast(
+          `📊 **Weekly Learning — 需要审批的权重调整**\n\n以下 ${needsReview.length} 项调整幅度 ≥ 10%，需要 PM 确认：\n\n${lines}\n\n通过 \`POST /v2/learning/weights/reset\` 或直接调整权重来确认/拒绝。`,
+          { urgency: 'medium' }
+        );
+        logger.info(`[weeklyLearning] PM 审批请求已发送 (${needsReview.length} 项待审批)`);
+      } catch (notifyErr) {
+        logger.warn(`[weeklyLearning] 审批通知发送失败 (non-blocking): ${notifyErr.message}`);
+      }
+    }
+
+    if (weightAdjustments.length > 0) {
+      logger.info(`[weeklyLearning] ranker_weights auto-adjusted: ${weightAdjustments.map(a => `${a.dimension}(${a.delta > 0 ? '+' : ''}${a.delta.toFixed(2)})`).join(', ')}`);
+    }
+  } catch (err) {
+    logger.warn(`[weeklyLearning] applyWeeklyInsights failed (non-blocking): ${err.message}`);
+  }
+
+  return {
+    reportId,
+    weekStart: ws,
+    weekEnd:   we,
+    metrics,
+    insights,
+    insightSource: source,
+    space: { score: space.score, grade: space.grade },
+    weightAdjustments,
+    pendingApprovals,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// 5. 查询历史周报
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * 查询历史周报列表
+ *
+ * @param {object} params
+ * @param {string} params.tenantId
+ * @param {number} [params.limit=10]
+ * @param {number} [params.offset=0]
+ * @returns {{ reports: object[], total: number }}
+ */
+export function queryReports({ tenantId, limit = 10, offset = 0 }) {
+  ensureLearningReportsTable();
+  const db = getDb();
+
+  const total = db.prepare('SELECT COUNT(*) as c FROM learning_reports WHERE tenant_id = ?').get(tenantId).c;
+
+  const rows = db.prepare(`
+    SELECT id, tenant_id, week_start, week_end, generated_by, created_at,
+           metrics_json, insights_json
+    FROM learning_reports
+    WHERE tenant_id = ?
+    ORDER BY week_start DESC
+    LIMIT ? OFFSET ?
+  `).all(tenantId, limit, offset);
+
+  const reports = rows.map(r => ({
+    id:          r.id,
+    weekStart:   r.week_start,
+    weekEnd:     r.week_end,
+    generatedBy: r.generated_by,
+    createdAt:   r.created_at,
+    metrics:     JSON.parse(r.metrics_json),
+    insights:    JSON.parse(r.insights_json),
+  }));
+
+  return { reports, total };
+}
+
+/**
+ * 获取单条周报（含 SPACE 快照）
+ */
+export function getReport({ tenantId, reportId }) {
+  ensureLearningReportsTable();
+  const db = getDb();
+
+  const row = db.prepare(`
+    SELECT * FROM learning_reports WHERE id = ? AND tenant_id = ?
+  `).get(reportId, tenantId);
+
+  if (!row) return null;
+
+  return {
+    id:          row.id,
+    weekStart:   row.week_start,
+    weekEnd:     row.week_end,
+    generatedBy: row.generated_by,
+    createdAt:   row.created_at,
+    metrics:     JSON.parse(row.metrics_json),
+    insights:    JSON.parse(row.insights_json),
+    space:       row.space_json ? JSON.parse(row.space_json) : null,
+  };
+}

@@ -7,6 +7,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import logger from '../logger.js';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOG_PATH = path.join(__dirname, '..', 'data', 'sync-trace.log');
@@ -40,7 +42,7 @@ export function trace(event, payload = {}) {
     }) + '\n';
     fs.appendFileSync(LOG_PATH, line);
   } catch (err) {
-    console.error('[syncTrace] failed:', err.message);
+    logger.error('[syncTrace] failed:', err.message);
   }
 }
 

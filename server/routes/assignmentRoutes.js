@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 export function createAssignmentRoutes({
   loadStore,
   updateStore,
@@ -20,7 +21,7 @@ export function createAssignmentRoutes({
         }
         return draft;
       }))
-      .catch((err) => console.error(`[${label}]`, err.message));
+      .catch((err) => logger.error(`[${label}]`, err.message));
   }
 
   return async function assignmentRoutes(req, res, url) {

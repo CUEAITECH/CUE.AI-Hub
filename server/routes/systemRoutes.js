@@ -609,7 +609,7 @@ export function createSystemRoutes({
         githubEnabled: Boolean(process.env.GITHUB_TOKEN),
         apiKeyRequiredForWrites: Boolean(cueApiKey),
         wecomEnabled: isWeComAvailable(),
-        llmEnabled: Boolean(process.env.ANTHROPIC_API_KEY),
+        llmEnabled: Boolean(process.env.OPENAI_API_KEY),
         meetingHour,
         hubUrl,
         wecomBotName

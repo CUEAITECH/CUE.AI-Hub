@@ -1,3 +1,19 @@
+import { authApi } from './api/authApi.js';
+import { projectsApi } from './api/projectsApi.js';
+import { appStateApi } from './api/appStateApi.js';
+import { pullsApi } from './api/pullsApi.js';
+import { eventsApi } from './api/eventsApi.js';
+import { observabilityApi } from './api/observabilityApi.js';
+import { renderPullList as _renderPullList } from './features/pr-pipeline/renderPullList.js';
+import { openPullDrawer as _openPullDrawer, closePullDrawer as _closePullDrawer, submitPullDecision as _submitPullDecision } from './features/pr-pipeline/PullDrawer.js';
+import { startPrAcSse as _startPrAcSse, stopPrAcSse as _stopPrAcSse, refreshPrAcChecklist as _refreshPrAcChecklist } from './features/pr-pipeline/PrAcChecklist.js';
+import { renderEveningTimeline as _renderEveningTimeline } from './features/command-center/index.js';
+import { renderTaskTable as _renderTaskTable } from './features/work-graph/renderTaskTable.js';
+import { renderTaskDetail as _renderTaskDetail } from './features/work-graph/renderTaskDetail.js';
+import { enrichTaskDetailWithExplanation as _enrichTaskDetailWithExplanation } from './features/work-graph/renderTaskRecommendation.js';
+import { tasksApi } from './api/tasksApi.js';
+import { renderObservatory as _renderObservatory, loadAndRenderSpacePanel as _loadAndRenderSpacePanel } from './features/observability/index.js';
+
 const state = {
   tasks: [],
   members: [],
@@ -127,9 +143,16 @@ function _hideLoader() {
   }
 }
 
+function toV2AppPath(path) {
+  return typeof path === 'string' && path.startsWith('/api/')
+    ? `/v2/app${path.slice('/api'.length)}`
+    : path;
+}
+
 async function api(path, options = {}) {
   const method = String(options.method || 'GET').toUpperCase();
   const headers = { 'content-type': 'application/json', ...(options.headers || {}) };
+  const requestPath = toV2AppPath(path);
   const sessionToken = sessionStorage.getItem('cueHubSessionToken') || '';
   if (sessionToken && !headers.Authorization && !headers['X-CUE-Session-Token']) {
     headers['X-CUE-Session-Token'] = sessionToken;
@@ -139,7 +162,7 @@ async function api(path, options = {}) {
   _showLoader(options.loadingText || (method !== 'GET' ? '处理中...' : '加载中...'));
   let response;
   try {
-    response = await fetch(path, { headers, ...options });
+    response = await fetch(requestPath, { headers, ...options });
   } finally {
     _hideLoader();
   }
@@ -432,10 +455,7 @@ async function sendLoginEmailCode() {
   const email = document.querySelector('#loginUsername')?.value.trim() || '';
   if (!projectId) { toast('请选择项目'); return; }
   if (!email) { setText('#loginHint', '请先输入已绑定邮箱。'); return; }
-  const payload = await api('/api/auth/email-code', {
-    method: 'POST',
-    body: JSON.stringify({ email, projectId, purpose: 'login' })
-  });
+  const payload = await authApi.sendEmailCode({ email, projectId, purpose: 'login' });
   const suffix = payload.devCode ? ` 验证码：${payload.devCode}` : '';
   setText('#loginHint', `验证码已发送到邮箱，10 分钟内有效。${suffix}`);
   toast('邮箱验证码已发送');
@@ -463,16 +483,13 @@ async function sendBindEmailCode() {
     if (hint) hint.textContent = '请输入要绑定的邮箱';
     return;
   }
-  const payload = await api('/api/auth/email-code', {
-    method: 'POST',
-    body: JSON.stringify({ email, purpose: 'bind_email' })
-  });
+  const payload = await authApi.sendEmailCode({ email, purpose: 'bind_email' });
   if (hint) hint.textContent = `验证码已发送到邮箱，10 分钟内有效。${payload.devCode ? `验证码：${payload.devCode}` : ''}`;
   toast('邮箱验证码已发送');
 }
 
 async function loadLoginProjects() {
-  const payload = await api('/api/projects');
+  const payload = await projectsApi.listProjects();
   state.projects = payload.projects || [];
   syncCurrentProject(localStorage.getItem('cue_currentProjectId') || state.projects[0]?.id || '');
   renderProjectSwitcher();
@@ -486,12 +503,9 @@ async function login(event) {
   const emailCode = document.querySelector('#loginEmailCode')?.value.trim() || '';
   if (!projectId) { toast('请选择项目'); return; }
   if (loginMode === 'email' && !emailCode) { setText('#loginHint', '请输入邮箱验证码。'); return; }
-  const payload = await api('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(loginMode === 'email'
-        ? { username, emailCode, projectId }
-        : { username, password, projectId })
-  });
+  const payload = loginMode === 'email'
+    ? await authApi.loginEmailCode({ username, emailCode, projectId })
+    : await authApi.loginPassword({ username, password, projectId });
   sessionStorage.setItem('cueHubSessionToken', payload.token || '');
   sessionStorage.setItem('cueHubAuthenticated', 'true');
   syncSessionUser(payload.user || { name: username, role: 'developer' });
@@ -1235,6 +1249,8 @@ function openHealthModal() {
     }).join('')}
   `;
   document.querySelector('#healthModalBackdrop').style.display = 'flex';
+  // V3: 异步注入 SPACE 维度扩展
+  loadAndRenderSpaceModal().catch(() => {});
 }
 
 function closeHealthModal() {
@@ -1542,50 +1558,11 @@ function renderRoadmap() {
 }
 
 function renderTasks() {
-  const table = document.querySelector('#taskTable');
-  if (!state.tasks.length) {
-    table.innerHTML = '<div class="empty-state">暂无任务。可以从 AI 排期生成任务，或手动新增。</div>';
-    return;
-  }
-
-  const overviewTasks = [...state.tasks]
-    .sort((a, b) => {
-      const riskWeight = { 高: 3, 中: 2, 低: 1 };
-      return (riskWeight[b.risk] || 0) - (riskWeight[a.risk] || 0)
-        || new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
-    })
-    .slice(0, 5);
-
-  table.innerHTML = `
-    ${overviewTasks.map((task) => {
-      const claimants = getTaskAssignments(task.id);
-      const isDone = task.status === '已完成';
-      return `
-        <div class="task-row overview-task-row">
-          <div class="overview-task-main">
-            <strong>${escapeHtml(task.title)}</strong>
-          </div>
-          <div class="overview-task-meta">
-            <span>${claimants.length ? escapeHtml(claimants.map((item) => item.owner).join('、')) : '未领'}</span>
-            <span class="risk-badge risk-${escapeHtml(task.risk)}">${escapeHtml(task.risk)}</span>
-            <span>${escapeHtml(task.due || '未设置')}</span>
-          </div>
-          <div class="task-row-actions">
-            ${!isDone ? `<button class="claim-inline-btn" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">领取</button>` : ''}
-          </div>
-        </div>
-      `;
-    }).join('')}
-    ${state.tasks.length > 5 ? '<button class="text-link-btn" type="button" data-route="assignment">查看全部任务领取</button>' : ''}
-  `;
-
-  table.querySelectorAll('.claim-inline-btn').forEach((btn) => {
-    btn.addEventListener('click', () =>
-      claimTask(btn.dataset.taskId, btn.dataset.taskTitle).catch((e) => toast(e.message))
-    );
-  });
-  table.querySelectorAll('[data-route]').forEach((btn) => {
-    btn.addEventListener('click', () => setRoute(btn.dataset.route));
+  _renderTaskTable(state, {
+    escapeHtml,
+    getTaskAssignments,
+    onClaimTask: (taskId, taskTitle) => claimTask(taskId, taskTitle).catch((e) => toast(e.message)),
+    onSetRoute: setRoute,
   });
 }
 
@@ -1743,15 +1720,28 @@ function renderReviews() {
     const complianceBadge = c
       ? `<span class="review-compliance-badge" title="${escapeHtml(c.taskTitle || '')}">验收 ✅${(c.done||[]).length} ❌${(c.notDone||[]).length} ⚠️${(c.needsHumanCheck||[]).length}</span>`
       : '';
+    // 分数/完成度：PR审阅用 completionRate，旧 commit 审阅用 score，都没有则隐藏
+    const scorePart = review.completionRate !== null && review.completionRate !== undefined
+      ? `<b>${review.completionRate}%</b>`
+      : (review.score !== undefined && review.score !== null && review.score > 0)
+        ? `<b>${Number(review.score)}</b>`
+        : '';
+    // 来源类型标注
+    const sourceTag = review.pullId || review.id?.startsWith('rev_pr_')
+      ? `<span style="font-size:10px;color:var(--accent);font-weight:600">PR</span>`
+      : `<span style="font-size:10px;color:var(--text-dim)">commit</span>`;
     return `
     <div class="review-item review-${escapeHtml(String(review.level).toLowerCase())}">
       <div>
-        <strong>${escapeHtml(review.title)}</strong>
-        <span>${escapeHtml(review.repo)} · ${escapeHtml(review.owner)} · ${escapeHtml((review.findings || []).join('；'))}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${sourceTag}
+          <strong>${escapeHtml(review.title)}</strong>
+        </div>
+        <span>${escapeHtml(review.owner)} · ${escapeHtml((review.findings || []).slice(0,1).join(''))}</span>
         ${complianceBadge}
         ${review.suggestion ? `<p class="review-suggestion">${escapeHtml(review.suggestion)}</p>` : ''}
       </div>
-      <b>${Number(review.score) || 0}</b>
+      ${scorePart}
       <em>${escapeHtml(getReviewLevelLabel(review.level))}</em>
     </div>`;
   }).join('');
@@ -1768,20 +1758,37 @@ function renderReviewQueue(queue) {
     container.innerHTML = '<div class="empty-state">暂无需要人工确认的审阅项 ✅</div>';
     return;
   }
-  const decisionLabel = { acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免' };
+
+  const getDecisionLabel = (humanDecision) => {
+    if (!humanDecision) return null;
+    if (typeof humanDecision === 'string') {
+      return { acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免' }[humanDecision] || humanDecision;
+    }
+    return { approved: '✅ 已 LGTM', requested_changes: '💬 已打回', waiting: '⏱️ 待更多 commit' }[humanDecision.status] || humanDecision.status;
+  };
+
+  const getCompletionBadge = (rate) => {
+    if (rate === null || rate === undefined) return '';
+    if (rate >= 90) return `<span class="completion-badge completion-high">${rate}% ✅ 可合并</span>`;
+    return `<span class="completion-badge completion-mid">${rate}% 待审阅</span>`;
+  };
+
   container.innerHTML = queue.map((review) => {
     const levelClass = `review-${String(review.level || '').toLowerCase()}`;
-    const decided = review.humanDecision;
+    const decisionLabel = getDecisionLabel(review.humanDecision);
     const isSelected = review.id === _selectedReviewId;
+    const taskTitle = review.linkedTask?.title || review.compliance?.taskTitle || '';
     return `
     <div class="review-queue-item ${levelClass}${isSelected ? ' selected' : ''}" data-review-id="${escapeHtml(review.id)}" data-action="open-review-detail">
       <div class="review-queue-info">
         <strong>${escapeHtml(review.title)}</strong>
-        <span>${escapeHtml(review.owner || '未知')} · ${escapeHtml(getReviewLevelLabel(review.level))} · 分数 ${Number(review.score) || 0}</span>
+        ${taskTitle ? `<span class="review-task-link">🔗 ${escapeHtml(taskTitle.slice(0, 35))}</span>` : ''}
+        <span>${escapeHtml(review.owner || '未知')} · ${escapeHtml(getReviewLevelLabel(review.level))}</span>
       </div>
       <div class="review-queue-actions">
-        ${decided
-          ? `<span class="review-decided">${escapeHtml(decisionLabel[decided] || decided)}</span>`
+        ${getCompletionBadge(review.completionRate)}
+        ${decisionLabel
+          ? `<span class="review-decided">${escapeHtml(decisionLabel)}</span>`
           : `<span class="review-level-badge level-${String(review.level||'').toLowerCase()}">${escapeHtml(getReviewLevelLabel(review.level))}</span>`}
       </div>
     </div>`;
@@ -1851,7 +1858,16 @@ async function openReviewDetail(reviewId) {
     <div class="review-detail-body">
       <div class="review-detail-meta">
         <span class="review-level-badge level-${levelLower}">${escapeHtml(getReviewLevelLabel(review.level))}</span>
-        <span class="review-meta-chip">分数 ${Number(review.score) || 0}/100</span>
+        ${review.completionRate !== null && review.completionRate !== undefined
+          ? `<span class="review-meta-chip">完成度 ${review.completionRate}%</span>`
+          : review.score !== undefined && review.score !== null
+            ? `<span class="review-meta-chip">分数 ${Number(review.score)}/100</span>`
+            : ''}
+        ${review.analysisSource === 'rule-engine'
+          ? '<span class="review-meta-chip" style="color:var(--warning,#f59e0b)" title="LLM 调用失败，已降级为关键词扫描，结果仅供参考">⚠️ 关键词扫描</span>'
+          : review.analysisSource === 'llm'
+            ? '<span class="review-meta-chip" style="color:var(--success,#22c55e)">✦ AI 深度分析</span>'
+            : ''}
         <span class="review-meta-chip">作者：${escapeHtml(review.owner || review.actor || '未知')}</span>
         ${review.shortSha ? `<span class="review-meta-chip">${escapeHtml(review.shortSha)}</span>` : ''}
         ${review.commitUrl ? `<span class="review-meta-chip"><a href="${escapeHtml(review.commitUrl)}" target="_blank">查看 GitHub ↗</a></span>` : ''}
@@ -1872,9 +1888,31 @@ async function openReviewDetail(reviewId) {
       <div>
         <div class="review-section-label">AI 发现的问题</div>
         <div class="review-findings">
-          ${(review.findings || ['无明显问题']).map((f) => `<div class="review-finding-item">${escapeHtml(f)}</div>`).join('')}
+          ${review.findings?.length
+            ? review.findings.map((f) => `<div class="review-finding-item">${escapeHtml(f)}</div>`).join('')
+            : review.issues?.length
+              ? review.issues.map((i) => {
+                  const sev = i.severity === 'critical' ? '🔴 严重' : i.severity === 'security' ? '🔴 安全' : i.severity === 'major' ? '🟡 重要' : '🔵 提示';
+                  return `<div class="review-finding-item" style="border-left-color:${i.severity==='critical'||i.severity==='security'?'var(--red,#f87171)':i.severity==='major'?'var(--yellow,#fbbf24)':'var(--accent)'}">${sev}：${escapeHtml(i.header || i.description || '')}</div>`;
+                }).join('')
+              : '<div class="review-finding-item" style="border-left-color:var(--success,#22c55e)">无明显问题 ✅</div>'}
         </div>
       </div>
+
+      ${review.completionRate !== null && review.completionRate !== undefined ? `
+      <div>
+        <div class="review-section-label">完成度评估</div>
+        <div class="completion-bar-wrap">
+          <div class="completion-bar" style="width:${Math.min(review.completionRate,100)}%;background:${review.completionRate>=90?'var(--success)':review.completionRate>=50?'var(--accent)':'var(--warning)'}"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:4px">${review.completionRate}% 完成</div>
+        ${review.compliance ? `
+        <div style="margin-top:8px;font-size:12px">
+          ${(review.compliance.done||[]).length ? `<div style="color:var(--success)">✅ 已完成：${review.compliance.done.map(escapeHtml).join('、')}</div>` : ''}
+          ${(review.compliance.notDone||[]).length ? `<div style="color:var(--warning)">⬜ 未完成：${review.compliance.notDone.map(escapeHtml).join('、')}</div>` : ''}
+          ${(review.compliance.needsHumanCheck||[]).length ? `<div style="color:var(--accent)">⚠️ 需人工确认：${review.compliance.needsHumanCheck.map(escapeHtml).join('、')}</div>` : ''}
+        </div>` : ''}
+      </div>` : ''}
 
       ${review.suggestion ? `
       <div>
@@ -1893,7 +1931,16 @@ async function openReviewDetail(reviewId) {
 
       ${decided ? `
       <div class="review-decision-area">
-        <div style="font-size:13px;color:var(--text-dim)">已处理：${{ acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免（通过）' }[decided] || decided}</div>
+        ${(() => {
+          if (typeof decided === 'object' && decided !== null) {
+            const statusLabel = { approved: '✅ 已 LGTM', requested_changes: '💬 已打回修改', waiting: '⏱️ 等待更多 commit' };
+            return `<div style="font-size:13px;color:var(--text-dim)">${statusLabel[decided.status] || decided.status}</div>
+              ${decided.reviewer ? `<div style="font-size:12px;color:var(--text-dim)">审阅人：${escapeHtml(decided.reviewer)}</div>` : ''}
+              ${decided.reason ? `<div style="font-size:12px;color:var(--text-dim)">理由：${escapeHtml(decided.reason)}</div>` : ''}
+              ${decided.overrideBlock && decided.overrideReason ? `<div style="font-size:12px;color:var(--warning)">⚠️ Override Block：${escapeHtml(decided.overrideReason)}</div>` : ''}`;
+          }
+          return `<div style="font-size:13px;color:var(--text-dim)">已处理：${{ acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免（通过）' }[decided] || decided}</div>`;
+        })()}
         ${review.humanNote ? `<div style="font-size:12px;color:var(--text-dim)">备注：${escapeHtml(review.humanNote)}</div>` : ''}
         ${review.resolvedTaskId ? `<div style="font-size:12px;color:var(--accent)">已建任务：${escapeHtml(review.resolvedTaskId)}</div>` : ''}
       </div>` : `
@@ -1917,9 +1964,24 @@ async function openReviewDetail(reviewId) {
       </div>
 
       <div class="review-decision-area" id="reviewDecisionArea">
+        <div class="review-section-label">人工审阅决策</div>
         <div class="review-decision-row">
-          <button class="btn-sm btn-resolve-pass" onclick="resolveReview('${escapeHtml(reviewId)}','pass')">✓ 通过</button>
-          <button class="btn-sm btn-resolve-fix" onclick="resolveReview('${escapeHtml(reviewId)}','needs-fix')">↩ 打回 ${escapeHtml(review.owner || review.actor || '负责人')}</button>
+          <button class="btn-sm btn-lgtm" onclick="submitHumanDecision('${escapeHtml(reviewId)}','LGTM')">✅ LGTM</button>
+          <button class="btn-sm btn-request-changes" onclick="submitHumanDecision('${escapeHtml(reviewId)}','request_changes')">💬 Request Changes</button>
+          <button class="btn-sm btn-waiting" onclick="submitHumanDecision('${escapeHtml(reviewId)}','waiting')">⏱️ Waiting</button>
+        </div>
+        ${(review.blocks || []).length ? `
+        <div class="override-block-area" id="overrideBlockArea">
+          <label style="font-size:13px;color:var(--warning);display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="overrideBlockCheck" onchange="document.getElementById('overrideReasonArea').style.display=this.checked?'block':'none'">
+            ⚠️ Override Block（${review.blocks.length} 项安全风险）
+          </label>
+          <div id="overrideReasonArea" style="display:none;margin-top:8px">
+            <textarea id="overrideReasonText" class="review-note-input" placeholder="必填：说明为什么可以豁免这些 Block 项（记录在案，晚会报表可查）" rows="2" style="width:100%;resize:vertical"></textarea>
+          </div>
+        </div>` : ''}
+        <div style="margin-top:8px">
+          <textarea id="reviewDecisionNote" class="review-note-input" placeholder="决策理由（可选，留空也可以提交）" rows="2" style="width:100%;resize:vertical"></textarea>
         </div>
       </div>`}
     </div>`;
@@ -1930,6 +1992,86 @@ async function openReviewDetail(reviewId) {
     const sc = document.querySelector('#solutionsContainer');
     if (sc) sc.dataset.solutions = JSON.stringify(cachedSols);
   }
+}
+
+/**
+ * 提交人工审阅决策（新格式：LGTM / request_changes / waiting）
+ * 支持 Override Block（附理由，记入晚会报表）
+ */
+async function submitHumanDecision(reviewId, decision) {
+  const reasonEl = document.getElementById('reviewDecisionNote');
+  const overrideCheck = document.getElementById('overrideBlockCheck');
+  const overrideReasonEl = document.getElementById('overrideReasonText');
+
+  const overrideBlock = Boolean(overrideCheck?.checked);
+  const overrideReason = overrideReasonEl?.value?.trim() || '';
+
+  if (overrideBlock && !overrideReason) {
+    toast('⚠️ Override Block 时，必须填写豁免理由');
+    overrideReasonEl?.focus();
+    return;
+  }
+
+  const payload = {
+    decision,
+    reason: reasonEl?.value?.trim() || '',
+    overrideBlock,
+    overrideReason
+  };
+
+  try {
+    const result = await api(`/api/reviews/${encodeURIComponent(reviewId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+
+    // 更新缓存，避免重新打开时读到旧状态
+    if (_reviewDetailCache[reviewId]) {
+      _reviewDetailCache[reviewId].review = result.review;
+    }
+
+    const decisionMsg = { LGTM: '✅ LGTM 提交成功', request_changes: '💬 已打回，等待作者修改', waiting: '⏱️ 已标记等待，PR 留在队列' };
+    toast(decisionMsg[decision] || '决策已提交');
+
+    // 决策后关闭面板，刷新队列
+    await loadReviewQueue();
+    if (decision !== 'waiting') {
+      _selectedReviewId = null;
+      const panel = document.querySelector('#reviewDetailContent');
+      if (panel) panel.innerHTML = '<div class="empty-state">请从左侧选择审阅项</div>';
+    } else {
+      // Waiting：重新打开面板，显示已标记状态
+      delete _reviewDetailCache[reviewId];
+      openReviewDetail(reviewId);
+    }
+  } catch (err) {
+    toast(err.message || '提交决策失败，请重试');
+  }
+}
+
+/**
+ * 任务负责人触发 PR 合并
+ * 合并成功后：pull 状态变 merged + task 状态变已完成 + 企微推送
+ */
+async function mergePRFromTask(pullId, taskId) {
+  const result = await api(`/api/pulls/${encodeURIComponent(pullId)}/merge`, {
+    method: 'POST',
+    body: JSON.stringify({ actor: state.me?.name || '' })
+  });
+  if (!result.merged) throw new Error('合并返回结果异常');
+
+  toast(`✅ PR 已合并，任务${result.task ? '已标记为完成' : '状态已更新'}`);
+
+  // 刷新本地 state
+  const prIdx = (state.pulls || []).findIndex((p) => p.id === pullId);
+  if (prIdx !== -1) state.pulls[prIdx] = { ...state.pulls[prIdx], state: 'merged' };
+  if (result.task) {
+    const taskIdx = (state.tasks || []).findIndex((t) => t.id === result.task.id);
+    if (taskIdx !== -1) state.tasks[taskIdx] = { ...state.tasks[taskIdx], ...result.task };
+  }
+
+  // 刷新 task 详情面板
+  renderCurrentView();
 }
 
 let _selectedSolution = null;
@@ -2252,113 +2394,18 @@ function renderComplianceCard(task) {
 }
 
 function renderTaskDetail() {
-  const title = document.querySelector('#taskDetailTitle');
-  const subtitle = document.querySelector('#taskDetailSubtitle');
-  const content = document.querySelector('#taskDetailContent');
-  if (!content) return;
-
-  const task = state.tasks.find((item) => item.id === selectedTaskId) || null;
-  if (!task) {
-    if (title) title.textContent = '选择一个任务';
-    if (subtitle) subtitle.textContent = '从任务看板或分工领取进入，查看任务细则、完成证据、验收指标和 AI 下一步操作。';
-    content.innerHTML = '<div class="empty-state">还没有选择任务。</div>';
-    return;
-  }
-
-  const evidence = getTaskEvidence(task);
-  const deliverable = getDeliverableForTask(task);
-  const latestAssignment = evidence.assignments[0] || null;
-  const brief = latestAssignment?.brief || null;
-  const hasAssignment = Boolean(latestAssignment);
-  const assignmentDone = latestAssignment?.status === '已完成' || task.status === '已完成';
-  const briefAge = latestAssignment ? Date.now() - new Date(latestAssignment.createdAt || 0).getTime() : 0;
-  const progress = Number(task.progress) || 0;
-  const progressSource = task.progressSource || (task.completionSource ? 'manual' : 'auto');
-  const progressSourceLabel = progressSource === 'manual' ? '人工确认' : '自动进度';
-  if (title) title.textContent = task.title;
-  if (subtitle) {
-    subtitle.textContent = `${task.owner || '未指定'} · ${task.status || '未知状态'} · 风险 ${task.risk || '未设置'} · 截止 ${task.due || task.dueDate || '未设置'}`;
-  }
-
-  content.innerHTML = `
-    <article class="task-detail-card task-detail-overview">
-      <span>任务状态 · ${progressSourceLabel}</span>
-      <div class="task-detail-status">
-        <strong>${progress}%</strong>
-        <div class="progress"><i style="width:${progress}%"></i></div>
-      </div>
-      <p>${escapeHtml(task.description || task.signal || '暂无任务描述。')}</p>
-      <dl>
-        <div><dt>负责人</dt><dd>${escapeHtml(task.owner || '未指定')}</dd></div>
-        ${task.deliverableId ? `<div><dt>所属交付项</dt><dd>${escapeHtml(deliverable?.title || task.deliverableId)}</dd></div>` : ''}
-        <div><dt>来源</dt><dd>${escapeHtml(task.sourceDoc || task.repo || '任务看板')}</dd></div>
-        <div><dt>验收</dt><dd>${escapeHtml(getTaskAcceptance(task))}</dd></div>
-      </dl>
-      ${deliverable?.docSuggestComplete ? `<div class="task-doc-suggest">
-        <strong>文档侧建议完成</strong>
-        <span>目标仓库进度文档已将所属交付项标记为完成。请先在这里确认任务完成，再由负责人确认交付项。</span>
-      </div>` : ''}
-      <div class="task-detail-actions">
-        ${latestAssignment && latestAssignment.status !== '已完成'
-          ? `<button class="task-confirm-done-btn" data-assignment-id="${escapeHtml(latestAssignment.id)}">确认任务完成</button>`
-          : task.status !== '已完成'
-            ? '<button class="task-confirm-done-btn" data-task-only="true">确认任务完成</button>'
-            : '<span class="task-done-mark">任务已完成</span>'}
-      </div>
-    </article>
-
-    ${renderComplianceCard(task)}
-
-    <article class="task-detail-card task-detail-main">
-      <span>结构化任务规则</span>
-      ${renderBriefBlock(brief, hasAssignment, assignmentDone, latestAssignment?.id, briefAge)}
-    </article>
-
-    ${(() => {
-      const sug = task.aiProgressSuggestion;
-      if (!sug) return '';
-      const updatedAt = sug.updatedAt ? new Date(sug.updatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
-      const aiProgress = Math.max(0, Math.min(100, Number(sug.progress) || 0));
-      const systemProgress = Math.max(0, Math.min(100, Number(sug.appliedProgress ?? task.progress) || 0));
-      const isManualProgress = progressSource === 'manual';
-      const progressLabel = isManualProgress && aiProgress !== systemProgress
-        ? `AI复核 ${aiProgress}% / 人工确认 ${systemProgress}%`
-        : `${systemProgress}%`;
-      return `<article class="task-detail-card task-ai-progress-card">
-      <span>${isManualProgress ? 'AI 进度复核' : '自动进度判断'} · ${progressLabel} <small>${updatedAt}</small></span>
-      ${isManualProgress && aiProgress !== systemProgress ? '<p class="ai-progress-note">人工确认进度不会被 AI 自动调低；AI 估算仅作为复核参考。</p>' : ''}
-      ${sug.reason ? `<p class="ai-progress-reason"><strong>判断依据：</strong>${escapeHtml(sug.reason)}</p>` : ''}
-      ${sug.hint ? `<p class="ai-progress-hint"><strong>提高进度需补充：</strong>${escapeHtml(sug.hint)}</p>` : ''}
-      ${sug.suggestComplete ? '<p class="ai-progress-suggest">AI 建议标记为已完成，请在分工领取中确认。</p>' : ''}
-    </article>`;
-    })()}
-
-    <article class="task-detail-card">
-      <span>完成证据</span>
-      <div class="evidence-list">
-        <strong>认领记录 ${evidence.assignments.length}</strong>
-        ${evidence.assignments.length ? evidence.assignments.map((item) => `<p>${escapeHtml(item.owner)} · ${escapeHtml(item.status || '进行中')} · ${escapeHtml(item.note || '无说明')}</p>`).join('') : '<p>暂无认领记录。</p>'}
-        <strong>Commit ${evidence.commits.length}</strong>
-        ${evidence.commits.length ? evidence.commits.map((item) => `<p>${escapeHtml(item.author || item.owner || '未知')} · ${escapeHtml(item.message || item.title || item.id)}</p>`).join('') : '<p>暂无关联提交。</p>'}
-        <strong>AI Review ${evidence.reviews.length}</strong>
-        ${evidence.reviews.length ? evidence.reviews.map((item) => `<p>${escapeHtml(getReviewLevelLabel(item.level))} · ${escapeHtml(item.title)}</p>`).join('') : '<p>暂无关联审阅。</p>'}
-      </div>
-    </article>
-  `;
-
-  content.querySelectorAll('.task-confirm-done-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (btn.dataset.assignmentId) {
-        markAssignmentDone(btn.dataset.assignmentId).catch((e) => toast(e.message));
-      } else {
-        markTaskDone(task.id).catch((e) => toast(e.message));
-      }
-    });
-  });
-  content.querySelectorAll('[data-action="brief-retry"]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      regenerateBrief(btn.dataset.assignmentId).catch((e) => toast(e.message));
-    });
+  _renderTaskDetail(state, {
+    selectedTaskId,
+    escapeHtml,
+    getTaskEvidence,
+    getDeliverableForTask,
+    getTaskAcceptance,
+    renderComplianceCard,
+    renderBriefBlock,
+    getReviewLevelLabel,
+    onMarkAssignmentDone: (id) => markAssignmentDone(id).catch((e) => toast(e.message)),
+    onMarkTaskDone: (id) => markTaskDone(id).catch((e) => toast(e.message)),
+    onRegenerateBrief: (id) => regenerateBrief(id).catch((e) => toast(e.message)),
   });
 }
 
@@ -3304,6 +3351,8 @@ function renderMeeting() {
 // ── PR 列表 & 抽屉 ────────────────────────────────────────────
 
 async function fetchAndRenderPulls() {
+  const container = document.getElementById('pullList');
+  if (container) container.innerHTML = '<div class="empty-hint">正在加载 PR 数据...</div>';
   const projectId = document.getElementById('pullProjectFilter')?.value || '';
   const stateFilter = document.getElementById('pullStateFilter')?.value || '';
   const author = document.getElementById('pullAuthorFilter')?.value || '';
@@ -3312,203 +3361,31 @@ async function fetchAndRenderPulls() {
   if (stateFilter) params.set('state', stateFilter);
   if (author) params.set('author', author);
   try {
-    const data = await api(`/api/pulls?${params}`);
+    const data = await pullsApi.listPulls(Object.fromEntries(params));
     state.pulls = data.pulls || [];
     renderPullList();
   } catch (err) {
     console.error('[fetchAndRenderPulls]', err);
+    if (container) {
+      container.innerHTML = `<div class="empty-hint error">PR 加载失败：${escapeHtml(err.message || '未知错误')}</div>`;
+    }
   }
 }
 
 function renderPullList() {
-  const container = document.getElementById('pullList');
-  if (!container) return;
-  const pulls = state.pulls || [];
-  if (!pulls.length) {
-    container.innerHTML = '<div class="pull-empty-state"><b>暂无 PR 信号</b><span>同步 GitHub 项目后，这里会展示待合并、已合并和已关闭的 PR 审阅流。</span></div>';
-    return;
-  }
-  container.innerHTML = pulls.map((pr) => {
-    const stateLabel = { open: '待合并', merged: '已合并', closed: '已关闭' }[pr.state] || pr.state;
-    const compliance = pr.hubReview?.compliance || pr.prAgentReview?.compliance;
-    const doneCount = (compliance?.done || []).length;
-    const notDoneCount = (compliance?.notDone || []).length;
-    const humanCount = (compliance?.needsHumanCheck || []).length;
-    const complianceBadge = compliance
-      ? `<span class="pull-compliance-badge"><b>${doneCount}</b> 已验收 <b>${notDoneCount}</b> 缺口 <b>${humanCount}</b> 待确认</span>`
-      : '<span class="pull-compliance-badge muted">等待验收对照</span>';
-    const reviewLevel = pr.hubReview?.level || pr.prAgentReview?.level || '';
-    const reviewBadge = reviewLevel
-      ? `<span class="pull-review-badge level-${String(reviewLevel).toLowerCase()}">${escapeHtml(reviewLevel)}</span>`
-      : '<span class="pull-review-badge neutral">未审阅</span>';
-    const dateStr = pr.mergedAt
-      ? `合并于 ${pr.mergedAt.slice(0, 10)}`
-      : `更新于 ${(pr.updatedAt || '').slice(0, 10)}`;
-    const branchText = `${pr.headBranch || 'head'} → ${pr.baseBranch || 'base'}`;
-    return `
-      <div class="pull-card" onclick="openPullDrawer('${escapeHtml(pr.id)}')">
-        <div class="pull-card-header">
-          <div class="pull-title-stack">
-            <div class="pull-kicker">
-              <span class="pull-number">#${pr.number}</span>
-              <span class="pull-branch">${escapeHtml(branchText)}</span>
-            </div>
-            <span class="pull-title">${escapeHtml(pr.title)}</span>
-          </div>
-          <div class="pull-card-status">
-            <span class="pull-state-badge ${pr.state}">${stateLabel}</span>
-            ${reviewBadge}
-          </div>
-        </div>
-        <div class="pull-card-meta">
-          <span class="pull-author">${escapeHtml(pr.author || '未知')}</span>
-          <span>${escapeHtml(dateStr)}</span>
-          ${complianceBadge}
-        </div>
-      </div>
-    `;
-  }).join('');
+  _renderPullList(state, { escapeHtml });
 }
 
 function openPullDrawer(pullId) {
-  const pull = (state.pulls || []).find((p) => p.id === pullId);
-  if (!pull) return;
-  const drawer = document.getElementById('pullDrawer');
-  const backdrop = document.getElementById('pullDrawerBackdrop');
-  const title = document.getElementById('pullDrawerTitle');
-  const body = document.getElementById('pullDrawerBody');
-  if (!drawer || !body) return;
-
-  title.textContent = `PR #${pull.number}`;
-  body.innerHTML = buildPullDrawerHtml(pull);
-  drawer.classList.remove('hidden');
-  backdrop.classList.remove('hidden');
+  _openPullDrawer(pullId, state, { escapeHtml, startPrAcSse });
 }
 
 function closePullDrawer() {
-  document.getElementById('pullDrawer')?.classList.add('hidden');
-  document.getElementById('pullDrawerBackdrop')?.classList.add('hidden');
-}
-
-function buildPullDrawerHtml(pull) {
-  const stateLabel = { open: '待合并', merged: '已合并', closed: '已关闭' }[pull.state] || pull.state;
-  const linkedTasks = (pull.linkedTaskIds || [])
-    .map((id) => {
-      const task = (state.tasks || []).find((t) => t.id === id);
-      return task ? `<a href="#" class="pr-linked-task" onclick="openTaskDetail('${id}'); return false;">${escapeHtml(task.title)}</a>` : `<span class="pr-linked-task">${escapeHtml(id)}</span>`;
-    }).join('') || '<span class="pr-linked-task muted">暂无关联任务</span>';
-  const reviewLevel = pull.hubReview?.level || pull.prAgentReview?.level || '未审阅';
-  const reviewSource = pull.hubReview?.level ? 'Hub Review' : pull.prAgentReview?.level ? 'PR-Agent' : 'Review';
-  const commits = pull.commits || [];
-  const files = pull.files || [];
-  const statItems = [
-    { label: '提交', value: commits.length },
-    { label: '文件', value: pull.changedFiles ?? files.length },
-    { label: '新增', value: pull.additions || 0 },
-    { label: '删除', value: pull.deletions || 0 }
-  ];
-  const statsHtml = `
-    <div class="pr-stats-grid">
-      ${statItems.map((item) => `<div><span>${item.label}</span><b>${item.value}</b></div>`).join('')}
-    </div>
-  `;
-  const commitsHtml = commits.length ? `
-    <div class="pr-detail-section">
-      <div class="pr-detail-section-head"><span>提交记录</span><small>${commits.length} 条</small></div>
-      <ul class="pr-detail-list">
-        ${commits.slice(0, 8).map((commit) => `
-          <li>
-            <b>${escapeHtml((commit.sha || '').slice(0, 7) || 'commit')}</b>
-            <span>${escapeHtml(commit.title || commit.message || '无提交说明')}</span>
-          </li>
-        `).join('')}
-      </ul>
-    </div>
-  ` : '';
-  const filesHtml = files.length ? `
-    <div class="pr-detail-section">
-      <div class="pr-detail-section-head"><span>变更文件</span><small>${files.length} 个</small></div>
-      <ul class="pr-detail-list">
-        ${files.slice(0, 12).map((file) => `
-          <li>
-            <b>${escapeHtml(file.status || 'modified')}</b>
-            <span>${escapeHtml(file.filename || '')}</span>
-            <em>+${Number(file.additions || 0)} / -${Number(file.deletions || 0)}</em>
-          </li>
-        `).join('')}
-      </ul>
-    </div>
-  ` : '';
-
-  const complianceHtml = (sourceLabel, compliance) => {
-    if (!compliance) return '';
-    const done = compliance.done || [];
-    const notDone = compliance.notDone || [];
-    const needsHumanCheck = compliance.needsHumanCheck || [];
-    if (!done.length && !notDone.length && !needsHumanCheck.length) return '';
-    const listItems = (arr) => arr.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
-    return `
-      <div class="pr-compliance-section">
-        <div class="pr-compliance-header"><span>${sourceLabel} 验收对照</span><small>${done.length + notDone.length + needsHumanCheck.length} 项</small></div>
-        <div class="pr-compliance-grid">
-          ${done.length ? `<div class="pr-compliance-bucket bucket-done"><h4>已完成 · ${done.length}</h4><ul>${listItems(done)}</ul></div>` : ''}
-          ${notDone.length ? `<div class="pr-compliance-bucket bucket-notdone"><h4>仍有缺口 · ${notDone.length}</h4><ul>${listItems(notDone)}</ul></div>` : ''}
-          ${needsHumanCheck.length ? `<div class="pr-compliance-bucket bucket-human"><h4>人工确认 · ${needsHumanCheck.length}</h4><ul>${listItems(needsHumanCheck)}</ul></div>` : ''}
-        </div>
-      </div>
-    `;
-  };
-
-  return `
-    <div class="pr-drawer-hero">
-      <div>
-        <span class="pull-number">#${pull.number}</span>
-        <h3>${escapeHtml(pull.title || '未命名 PR')}</h3>
-      </div>
-      <span class="pull-state-badge ${pull.state}">${stateLabel}</span>
-    </div>
-    <div class="pr-branch-flow">
-      <span>${escapeHtml(pull.headBranch || 'head')}</span>
-      <b>→</b>
-      <span>${escapeHtml(pull.baseBranch || 'base')}</span>
-    </div>
-    <div class="pr-summary-grid">
-      <div><span>作者</span><b>${escapeHtml(pull.author || '未知')}</b></div>
-      <div><span>${reviewSource}</span><b>${escapeHtml(reviewLevel)}</b></div>
-      <div><span>合并时间</span><b>${pull.mergedAt ? pull.mergedAt.slice(0, 16).replace('T', ' ') : '尚未合并'}</b></div>
-    </div>
-    <div class="pr-linked-section">
-      <span>关联任务</span>
-      <div>${linkedTasks}</div>
-    </div>
-    ${statsHtml}
-    ${commitsHtml}
-    ${filesHtml}
-
-    ${complianceHtml('Hub Review', pull.hubReview?.compliance)}
-    ${complianceHtml('PR-Agent', pull.prAgentReview?.compliance)}
-
-    <div class="pr-decision-row">
-      <button class="btn-pass" onclick="submitPullDecision('${pull.id}', 'Pass')">标记 Pass</button>
-      <button class="btn-escalate" onclick="submitPullDecision('${pull.id}', 'Escalate')">升级 Escalate</button>
-    </div>
-    ${pull.humanDecision ? `<div class="pr-human-decision">已决策：${escapeHtml(pull.humanDecision)} · ${(pull.humanAt||'').slice(0,10)}</div>` : ''}
-  `;
+  _closePullDrawer({ stopPrAcSse });
 }
 
 async function submitPullDecision(pullId, decision) {
-  try {
-    const data = await api(`/api/pulls/${encodeURIComponent(pullId)}/decision`, {
-      method: 'PATCH',
-      body: JSON.stringify({ humanDecision: decision })
-    });
-    const idx = (state.pulls || []).findIndex((p) => p.id === pullId);
-    if (idx !== -1) state.pulls[idx] = data.pull;
-    renderPullList();
-    closePullDrawer();
-  } catch (err) {
-    alert('决策提交失败：' + err.message);
-  }
+  await _submitPullDecision(pullId, decision, state, { renderPullList, closePullDrawer });
 }
 
 function renderAll() {
@@ -3542,12 +3419,13 @@ function renderAll() {
 async function loadState() {
   const storedProjectId = localStorage.getItem('cue_currentProjectId') || state.currentProjectId || '';
   await refreshSessionUserRole();
-  const payload = await api(storedProjectId ? `/api/state?projectId=${encodeURIComponent(storedProjectId)}` : '/api/state');
+  const payload = await appStateApi.loadProjectState(storedProjectId || undefined);
   state.tasks = payload.tasks || [];
   state.members = payload.members || [];
   state.reviews = payload.reviews || [];
   state.alerts = payload.alerts || [];
   state.projects = payload.projects || [];
+  state.pulls = payload.pulls || [];
   syncCurrentProject(payload.currentProjectId || storedProjectId);
   state.deliverables = payload.deliverables || [];
   state.phases = payload.phases || [];
@@ -3571,17 +3449,17 @@ async function loadState() {
   setText('#syncStatus', `${getApiScopeLabel()} 已连接`);
 
   // 并行加载站会、配置、计划调整建议（assignments 已在 /api/state 全量返回，不重复拉）
-  const projectQuery = getCurrentProjectId() ? `?projectId=${encodeURIComponent(getCurrentProjectId())}` : '';
+  const projectId = getCurrentProjectId();
   const attendanceDate = document.querySelector('#attendanceWeekDate')?.value || getTodayText();
   const [standupPayload, config, adjustPayload, eveningPayload, checklistPayload, scoringPayload, weeklyScoringPayload, weeklyAttendancePayload] = await Promise.all([
     api('/api/standups').catch(() => ({ standups: [] })),
-    api('/api/config').catch(() => ({})),
+    appStateApi.loadConfig().catch(() => ({})),
     api('/api/plan-adjustments').catch(() => ({ adjustments: [] })),
     api('/api/reports/evening').catch(() => ({ report: null })),
-    api(`/api/stage/checklist${projectQuery}`).catch(() => null),
-    api(`/api/scoring/daily${projectQuery}`).catch(() => ({ rows: [] })),
-    api(`/api/scoring/weekly${projectQuery}`).catch(() => ({ rows: [] })),
-    api(`/api/attendance/weekly${projectQuery}${projectQuery ? '&' : '?'}date=${encodeURIComponent(attendanceDate)}`).catch(() => ({ days: [], records: [], weekStart: '' }))
+    appStateApi.loadChecklist(projectId).catch(() => null),
+    appStateApi.loadDailyScoring(projectId).catch(() => ({ rows: [] })),
+    appStateApi.loadWeeklyScoring(projectId).catch(() => ({ rows: [] })),
+    appStateApi.loadWeeklyAttendance(projectId, attendanceDate).catch(() => ({ days: [], records: [], weekStart: '' }))
   ]);
 
   state.standups = standupPayload.standups || [];
@@ -4176,24 +4054,28 @@ function setRoute(route) {
     view.classList.toggle('active', view.id === route);
   });
   const parentByRoute = {
-    overview: 'overview',
-    roadmap: 'command',
-    'ai-pm': 'command',
-    meeting: 'command',
-    attendance: 'command',
-    'account-admin': 'command',
-    'risk-detail': 'overview',
-    planning: 'execution',
-    reviews: 'execution',
-    standup: 'execution',
-    assignment: 'execution',
-    'task-detail': 'execution',
-    report: 'output',
-    automation: 'output',
-    'pc-workspace': 'personal',
-    'pc-profile': 'personal',
-    'pc-account': 'personal',
-    pulls: 'pulls'
+    // ── v2 核心路由 ───────────────────────────────────────────
+    overview:        'overview',
+    'risk-detail':   'overview',
+    assignment:      'delivery',
+    'task-detail':   'delivery',
+    viewPulls:       'delivery',
+    pulls:           'delivery',
+    reviews:         'delivery',
+    observatory:     'insight',
+    meeting:         'insight',
+    'pc-workspace':  'personal',
+    'pc-profile':    'personal',
+    'pc-account':    'personal',
+    'account-admin': 'personal',
+    // ── 旧版路由（路由仍可用，导航归入 legacy） ─────────────
+    roadmap:         'legacy',
+    'ai-pm':         'legacy',
+    planning:        'legacy',
+    standup:         'legacy',
+    report:          'legacy',
+    automation:      'legacy',
+    attendance:      'legacy',
   };
   const activeParent = parentByRoute[route] || route;
   document.querySelectorAll('.nav-item').forEach((item) => {
@@ -4203,18 +4085,23 @@ function setRoute(route) {
     item.classList.toggle('active', isRouteActive || isParentActive);
   });
   const mobileRouteMap = {
-    overview: 'overview',
-    'risk-detail': 'overview',
-    roadmap: 'overview',
-    attendance: 'overview',
-    assignment: 'assignment',
-    'task-detail': 'assignment',
-    standup: 'assignment',
-    reviews: 'reviews',
-    planning: 'reviews',
-    'pc-workspace': 'pc-workspace',
-    'pc-profile': 'pc-workspace',
-    'pc-account': 'pc-workspace'
+    // 移动端底部导航：总览 / 任务 / PR / 观察 / 我的
+    overview:        'overview',
+    'risk-detail':   'overview',
+    assignment:      'assignment',
+    'task-detail':   'assignment',
+    viewPulls:       'viewPulls',
+    pulls:           'viewPulls',
+    reviews:         'assignment',  // 归入任务组
+    observatory:     'observatory',
+    meeting:         'observatory', // 归入洞察组
+    'pc-workspace':  'pc-workspace',
+    'pc-profile':    'pc-workspace',
+    'pc-account':    'pc-workspace',
+    'account-admin': 'pc-workspace',
+    // 旧版路由：不高亮任何移动端 tab
+    roadmap: '', planning: '', standup: '', report: '',
+    automation: '', attendance: '', 'ai-pm': '',
   };
   const mobileRoute = mobileRouteMap[route] || route;
   document.querySelectorAll('.mobile-app-nav-item').forEach((item) => {
@@ -4222,8 +4109,11 @@ function setRoute(route) {
     item.classList.toggle('active', isActive);
     item.setAttribute('aria-current', isActive ? 'page' : 'false');
   });
-  if (route === 'pulls') {
+  if (route === 'pulls' || route === 'viewPulls') {
     fetchAndRenderPulls().catch((err) => toast(err.message));
+  }
+  if (route === 'reviews') {
+    loadReviewQueue().catch((err) => toast(err.message));
   }
   if (route === 'account-admin') {
     renderAccountAdmin().catch((error) => toast(error.message));
@@ -4237,6 +4127,10 @@ function setRoute(route) {
   if (route === 'pc-account') {
     openAccountSettings().catch((e) => toast(e.message));
   }
+  // V5: 观察台
+  if (route === 'observatory') {
+    renderObservatory().catch((e) => toast(`观察台加载失败: ${e.message}`));
+  }
 }
 
 let _briefPollTimer = null;
@@ -4246,6 +4140,8 @@ function openTaskDetail(taskId) {
   renderTaskDetail();
   setRoute('task-detail');
   scheduleBriefPoll();
+  // V1: 异步加载推荐理由（不阻塞主流程）
+  enrichTaskDetailWithExplanation(taskId).catch(() => {});
 }
 
 function scheduleBriefPoll() {
@@ -4674,6 +4570,26 @@ function bindEvents() {
     pushEveningReportManual().catch((e) => toast(e.message));
   });
 
+  // 任务详情：合并 PR 按钮（事件委托，按钮动态生成）
+  document.addEventListener('click', async (event) => {
+    const mergeBtn = event.target.closest('[data-action="merge-pr"]');
+    if (mergeBtn && !mergeBtn.disabled) {
+      const pullId = mergeBtn.dataset.pullId;
+      const taskId = mergeBtn.dataset.taskId;
+      if (!pullId) return;
+      mergeBtn.disabled = true;
+      const origText = mergeBtn.textContent;
+      mergeBtn.textContent = '合并中...';
+      try {
+        await mergePRFromTask(pullId, taskId);
+      } catch (e) {
+        mergeBtn.disabled = false;
+        mergeBtn.textContent = origText;
+        toast(`合并失败：${e.message || e}`);
+      }
+    }
+  });
+
   // 健康度 modal
   document.querySelector('.dashboard-health').addEventListener('click', openHealthModal);
   document.querySelector('[data-action="close-health-modal"]').addEventListener('click', closeHealthModal);
@@ -4870,10 +4786,65 @@ window.loadReviewSolutions = loadReviewSolutions;
 window.resolveReview = resolveReview;
 window.selectSolution = selectSolution;
 window.openReviewDetail = openReviewDetail;
+window.submitHumanDecision = submitHumanDecision;
 window.openPullDrawer = openPullDrawer;
 window.closePullDrawer = closePullDrawer;
 window.submitPullDecision = submitPullDecision;
 window.openTaskDetail = openTaskDetail;
+// V4/V5 补丁（Part L）
+window.renderEveningTimeline = renderEveningTimeline;
+window.renderObservatory = renderObservatory;
+window.loadAndRenderSpaceModal = loadAndRenderSpaceModal;
+
+// ════════════════════════════════════════════════════════════════
+// V1-V5 前端补丁（Part L 最小增量补丁，≤800 行）
+// ════════════════════════════════════════════════════════════════
+
+// ── V1: 任务卡片"推荐理由"区块 ─────────────────────────────────
+function enrichTaskDetailWithExplanation(taskId) {
+  return _enrichTaskDetailWithExplanation(taskId, { tasksApi, escapeHtml });
+}
+
+// ── V2: PR 详情面板实时 AC checklist（SSE 订阅）──────────────────
+
+const _acHelpers = () => ({
+  streamUrl: eventsApi.prReviewStreamUrl('pr.review.posted'),
+  escapeHtml,
+});
+
+function startPrAcSse(prId)  { _startPrAcSse(prId, _acHelpers()); }
+function stopPrAcSse()        { _stopPrAcSse(); }
+function refreshPrAcChecklist(prId, payload) { _refreshPrAcChecklist(prId, payload, _acHelpers());
+}
+
+// ── V3: 健康度弹窗 SPACE 维度扩展 ────────────────────────────────
+function loadAndRenderSpaceModal() {
+  return _loadAndRenderSpacePanel({ observabilityApi });
+}
+
+// ── V4: 晚会作战包 Timeline 视图 ────────────────────────────────
+function renderEveningTimeline() {
+  return _renderEveningTimeline(state, { eventsApi, escapeHtml });
+}
+
+// ── V5: 管理观察台 ────────────────────────────────────────────────
+state.observatory = { llm: null, events: [], syncHealth: null };
+
+function renderObservatory() {
+  return _renderObservatory(state, { observabilityApi, escapeHtml });
+}
+
+// 注册观察台路由
+document.addEventListener('DOMContentLoaded', () => {
+  const refreshBtn = document.getElementById('observatoryRefreshBtn');
+  if (refreshBtn) refreshBtn.addEventListener('click', () => renderObservatory().catch((e) => toast(`观察台刷新失败: ${e.message}`)));
+
+  // 事件过滤器触发重刷
+  ['obsEventTypeFilter', 'obsEventSourceFilter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => renderObservatory().catch(() => {}));
+  });
+});
 
 async function initApp() {
   setAuthVisible(state.isAuthenticated);

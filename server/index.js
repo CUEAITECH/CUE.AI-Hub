@@ -22,6 +22,29 @@ import { dirname } from 'node:path';
     }
   } catch { /* .env 文件不存在时静默跳过 */ }
 }
+// ── V2 地基初始化（在任何路由注册之前）──────────────────────
+import { initDb } from './db/index.js';
+import './state/reducer.js';                // 注册 reducer 订阅者（状态机）
+import './events/outcomeHandlers.js';       // 注册 Outcome Ledger 事件订阅（W9 闭合）
+import './events/eveningReportHandler.js';  // 晚会作战包 EventBus 迁移（ENABLE_V2_EVENING=true 时生效）
+import { replayUnprocessed } from './events/bus.js';
+import { initAdapters } from './adapters/index.js';
+import { handleV2 } from './v2/app.js';
+import { getFastifyApp } from './v2/fastifyApp.js';  // Part N.1 Fastify 层
+import { handleV2AppRequest, isV2AppPath } from './v2/appFacade.js';
+import logger from './logger.js';
+const { db: _v2db, kysely: _v2kysely } = initDb();
+await replayUnprocessed();            // 重启后回放未处理事件
+initAdapters();                       // 通信平台适配器
+// sqlite-vec 向量索引（P2 真 RAG）— 异步初始化，失败时优雅降级
+import { initVectorStore, rebuildMemoryIndex } from './services/vectorStore.js';
+const { supported: _vecSupported } = await initVectorStore(_v2db);
+if (_vecSupported) rebuildMemoryIndex(_v2db); // 补全旧数据向量（首次启动）
+// Part N.1: 初始化 Fastify v2 层（/v2/health 走 Fastify，其余桥接 handleV2）
+const _fastifyApp = await getFastifyApp();
+logger.info(`[V2] DB + EventBus + reducers + outcome-handlers + adapters + vector-store(${_vecSupported ? 'ON' : 'OFF'}) + Fastify initialized`);
+// ── END V2 初始化 ───────────────────────────────────────────
+
 import { createId, loadStore, saveStore, updateStore } from './store.js';
 import { setCorsHeaders, sendJson, sendError, readBody, normalizeTask, isCompanyWorkday } from './utils.js';
 import {
@@ -37,7 +60,7 @@ import { reviewChange } from './services/reviewer.js';
 import { buildMetrics, scanRisks } from './services/riskEngine.js';
 import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhook.js';
 import { scanLocalGitProject } from './services/localGit.js';
-import { scanGitHubProject, hasGitHubConfig, fetchCommitDetail } from './services/githubApi.js';
+import { scanGitHubProject, hasGitHubConfig, fetchCommitDetail, mergePR, getBranchProtection, parseRepo } from './services/githubApi.js';
 import { syncGitHubProjectIntoStore, githubSyncErrorHint } from './services/githubSync.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
 import {
@@ -97,6 +120,7 @@ import {
   LLMUnavailableError
 } from './services/dailyTaskSuggester.js';
 import { startScheduler, runStartupPhaseCorrection } from './scheduler.js';
+import { startCron } from './cron/index.js';
 import { createPullRoutes } from './routes/pullRoutes.js';
 import { handlePrAgentSink, upsertPullFromWebhook } from './services/pullPipeline.js';
 
@@ -304,7 +328,13 @@ const routeModules = [
     updateStore,
     readBody,
     sendJson,
-    sendError
+    sendError,
+    mergePR,
+    getBranchProtection,
+    parseRepo,
+    sendWeComMarkdown,
+    isWeComAvailable,
+    hubUrl
   }),
   createWebhookRoutes({
     createId,
@@ -367,22 +397,37 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   try {
+    // ── V2 App facade：主前端走 /v2/app/*，内部复用现有业务路由 ───────
+    if (isV2AppPath(url)) {
+      await handleV2AppRequest({
+        req,
+        res,
+        url,
+        requiresApiKey,
+        hasValidApiKey,
+        hasValidSession,
+        sendError,
+        handleApi,
+      });
+      return;
+    }
+
+    // ── V2 路由：/v2/* 走 Fastify（Part N.1）───────────────────
+    // Fastify /v2/health → 原生处理；其余 → handleV2 bridge
+    if (url.pathname.startsWith('/v2/')) {
+      _fastifyApp.routing(req, res);
+      return;
+    }
+
+    // ── [experiment/v2-standalone] v1 /api/* 已禁用 ──────────────
     if (url.pathname.startsWith('/api/')) {
-      // 处理 CORS 预检请求
       if (req.method === 'OPTIONS') {
         setCorsHeaders(res);
         res.writeHead(204);
         res.end();
         return;
       }
-
-      if (requiresApiKey(req, url) && !hasValidApiKey(req) && !hasValidSession(req)) {
-        sendError(res, 401, 'invalid api key', '写入或触发动作的 API 需要请求头 X-CUE-API-Key。');
-        return;
-      }
-
-      const handled = await handleApi(req, res, url);
-      if (!handled) sendError(res, 404, 'api route not found');
+      sendError(res, 404, 'v1 API disabled — use /v2/*');
       return;
     }
 
@@ -417,6 +462,17 @@ startScheduler({
   attendanceBotName
 });
 
+// ── node-cron 定时调度（替代 scheduler.js setInterval，P2 迁移进行中）──────
+// 当前：仅启用每日 db.json 快照（23:55 CST）
+// 晚会和 GitHub 同步仍由 scheduler.js setInterval 负责，避免双重触发
+// 完全迁移需要为 evening.report.due / doc.scan.requested 事件添加 v2 reducer 处理
+startCron({
+  meetingHour,
+  githubSyncIntervalMinutes: 0,   // 禁用 cron 侧的 GitHub 同步（scheduler.js 已有）
+  isCompanyWorkday,
+  todayText,
+});
+
 setTimeout(() => runStartupPhaseCorrection({
   loadStore,
   updateStore,
@@ -426,9 +482,15 @@ setTimeout(() => runStartupPhaseCorrection({
   reassignChecklistPhaseIds
 }), 3000);
 
+// ── 启动时全量同步 JSON store → SQLite（让 v2 接口读到真实业务数据）──
+import { syncJsonToSqlite } from './services/jsonToSqliteSync.js';
+loadStore().then(store => syncJsonToSqlite(store)).catch(err =>
+  logger.warn('[startup] JSON→SQLite 初始同步失败:', err.message)
+);
+
 server.listen(port, host, () => {
   const prepHour = meetingHour === 0 ? 23 : meetingHour - 1;
-  console.log(`
+  logger.info(`
 ╔═══════════════════════════════════════════════╗
 ║         CUE Project Hub 启动成功              ║
 ╚═══════════════════════════════════════════════╝
@@ -436,7 +498,7 @@ server.listen(port, host, () => {
   Hub：${hubUrl}
 
   环境变量状态：
-    ANTHROPIC_API_KEY  ${process.env.ANTHROPIC_API_KEY ? '✅ 已配置（LLM 功能启用）' : '❌ 未配置（降级规则引擎）'}
+    OPENAI_API_KEY     ${process.env.OPENAI_API_KEY ? '✅ 已配置（LLM 功能启用）' : '❌ 未配置（降级规则引擎）'}
     GITHUB_TOKEN       ${process.env.GITHUB_TOKEN ? '✅ 已配置（GitHub API 同步）' : '❌ 未配置（限速 60次/小时）'}
     WECOM_WEBHOOK_URL  ${process.env.WECOM_WEBHOOK_URL ? '✅ 已配置（企微推送启用）' : '❌ 未配置（推送不可用）'}
     WECOM_BOT_NAME     @${wecomBotName}（项目中枢/查询机器人）

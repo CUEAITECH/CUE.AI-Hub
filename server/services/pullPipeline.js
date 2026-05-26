@@ -7,12 +7,14 @@
  *   - webhookRoutes.js（GitHub PR webhook / PR-Agent sink）
  */
 
-import { fetchProjectPRs, fetchPRDetail, parseRepo } from './githubApi.js';
+import { fetchProjectPRs, fetchPRDetail, fetchPRDiff, fetchPRFiles, parseRepo } from './githubApi.js';
 import { parsePrAgentReview } from './prAgentParser.js';
 import { reviewChange } from './reviewer.js';
 import { bindActivityToExplicitRefs } from './bindingEngine.js';
 import { createId } from '../store.js';
 import { trace } from './syncTrace.js';
+import logger from '../logger.js';
+
 
 /**
  * 从 PR body 和 title 解析关联任务 ID
@@ -75,7 +77,7 @@ function normalizePullEntry(prData, projectId, linkedTaskIds = []) {
  *
  * LLM_DRY_RUN=true 时不调真 API，返回 stub 结果（用于排查调用频次问题，不烧钱）
  */
-async function buildHubReview(prDetail, linkedTaskIds, store) {
+async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
   if (process.env.LLM_DRY_RUN === 'true') {
     trace('llm-dryrun-stub', { prNumber: prDetail.number });
     return {
@@ -93,23 +95,60 @@ async function buildHubReview(prDetail, linkedTaskIds, store) {
     : null;
 
   try {
+    // 获取真实 PR diff 和文件列表（若有 GitHub 配置）
+    let diff = prDetail.body || '';
+    let files = [];
+    let diffVersion = 'body'; // 标记 diff 来源，用于判断是否需要重新分析
+
+    if (owner && repo && prDetail.number) {
+      try {
+        [diff, files] = await Promise.all([
+          fetchPRDiff(owner, repo, prDetail.number),
+          fetchPRFiles(owner, repo, prDetail.number)
+        ]);
+        diffVersion = 'real';
+      } catch (err) {
+        logger.warn(`[pullPipeline] 获取 PR diff 失败，降级使用 PR body: ${err.message}`);
+      }
+    }
+
     const result = await reviewChange({
       repo: `${prDetail.number}`,
       title: prDetail.title,
       owner: prDetail.author,
-      diff: prDetail.body || '',
-      files: (prDetail.files || []).map((file) => file.filename).filter(Boolean),
+      diff,
+      files,
       task: linkedTask || null
     });
 
+    // 计算完成度：done / (done + notDone) * 100
+    const compliance = result.compliance || null;
+    let completionRate = null;
+    if (compliance) {
+      const done = Array.isArray(compliance.done) ? compliance.done.length : 0;
+      const notDone = Array.isArray(compliance.notDone) ? compliance.notDone.length : 0;
+      const total = done + notDone;
+      completionRate = total > 0 ? Math.round((done / total) * 100) : null;
+    }
+
+    // 提取 Block 级问题（用于 override 流程）
+    const blocks = (result.issues || [])
+      .filter((i) => i.severity === 'critical' || i.severity === 'security')
+      .map((i) => ({ issue: i.header || i.description || '', severity: i.severity, isOverridden: false }));
+
     return {
       level: result.level || 'Pass',
-      compliance: linkedTask && result.compliance ? { taskId: linkedTask.id, ...result.compliance } : null,
+      compliance: linkedTask && compliance ? { taskId: linkedTask.id, ...compliance } : null,
       issues: result.issues || [],
+      suggestion: result.suggestion || '',
+      completionRate,
+      blocks,
+      diffVersion,
+      analysisSource: result._source || 'unknown',
       createdAt: new Date().toISOString()
     };
   } catch (err) {
-    console.error('[pullPipeline] hubReview failed:', err.message);
+    logger.error('[pullPipeline] hubReview failed:', err.message);
     return null;
   }
 }
@@ -118,8 +157,14 @@ async function buildHubReview(prDetail, linkedTaskIds, store) {
  * 同步单个 PR 进 store
  * - 若已存在（按 pull id）则更新；否则新增
  * - 返回 { isNew: boolean, pull: object }
+ * @param {object} prDetail - PR 详情
+ * @param {string} projectId - 项目 ID
+ * @param {function} updateStore - 更新 store 的回调
+ * @param {object} store - 当前 store 快照
+ * @param {string} owner - GitHub owner（可选，用于获取真实 diff）
+ * @param {string} repo - GitHub repo（可选，用于获取真实 diff）
  */
-export async function upsertPullIntoStore(prDetail, projectId, updateStore, store) {
+export async function upsertPullIntoStore(prDetail, projectId, updateStore, store, owner, repo) {
   const linkedTaskIds = extractLinkedTaskIds(prDetail.title, prDetail.body, store);
   const pullId = `pull_${prDetail.number}_${projectId}`;
   const existing = (store.pulls || []).find((p) => p.id === pullId);
@@ -128,8 +173,10 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
   // 这样能完整复现"原始触发次数"（buildHubReview 内部会走 stub 不烧钱）
   const dryRun = process.env.LLM_DRY_RUN === 'true';
 
-  // 跳过 LLM：已有 review 且 PR 状态/更新时间未变
+  // 跳过 LLM：已有 review 且 PR 状态/更新时间未变，且已经用真实 diff 分析过
+  // diffVersion !== 'real' 的旧缓存（用 PR body 或伪字符串分析）会被强制重建
   const unchanged = !dryRun && existing?.hubReview &&
+    existing.hubReview.diffVersion === 'real' &&
     existing.state === prDetail.state &&
     existing.updatedAt >= (prDetail.updatedAt || '');
   if (unchanged) {
@@ -143,7 +190,7 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
       newState: prDetail.state
     });
   }
-  const hubReview = unchanged ? existing.hubReview : await buildHubReview(prDetail, linkedTaskIds, store);
+  const hubReview = unchanged ? existing.hubReview : await buildHubReview(prDetail, linkedTaskIds, store, owner, repo);
   const prAgentReview = parsePrAgentReview(prDetail);
 
   const pullEntry = {
@@ -179,6 +226,44 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
       draft.pulls[idx] = pullEntry;
     }
     draft.pulls = draft.pulls.slice(0, 500);
+
+    // 镜像 hubReview → store.reviews（供审阅队列 + 人工决策接口使用）
+    // 使用稳定 ID rev_pr_<pullId>，让 PATCH /api/reviews/:id 能定位到同一条记录
+    if (hubReview) {
+      const reviewId = `rev_pr_${pullId}`;
+      if (!Array.isArray(draft.reviews)) draft.reviews = [];
+      const revIdx = draft.reviews.findIndex((r) => r.id === reviewId);
+      const existing = revIdx >= 0 ? draft.reviews[revIdx] : null;
+      const reviewEntry = {
+        id: reviewId,
+        pullId,
+        title: prDetail.title || '',
+        owner: prDetail.author || '',
+        repo: `${owner}/${repo}`,
+        prNumber: prDetail.number,
+        level: hubReview.level || 'Pass',
+        completionRate: hubReview.completionRate !== undefined ? hubReview.completionRate : null,
+        blocks: hubReview.blocks || [],
+        compliance: hubReview.compliance || null,
+        issues: hubReview.issues || [],
+        suggestion: hubReview.suggestion || '',
+        analysisSource: hubReview.analysisSource || null,
+        diffVersion: hubReview.diffVersion || null,
+        // 保留已有的人工决策（不被新一轮 AI review 覆盖）
+        humanDecision: existing?.humanDecision || null,
+        humanNote: existing?.humanNote || '',
+        humanAt: existing?.humanAt || null,
+        createdAt: existing?.createdAt || hubReview.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      if (revIdx === -1) {
+        draft.reviews.unshift(reviewEntry);
+      } else {
+        draft.reviews[revIdx] = reviewEntry;
+      }
+      draft.reviews = draft.reviews.slice(0, 200);
+    }
+
     return draft;
   });
 
@@ -207,7 +292,7 @@ export async function syncProjectPRs(project, store, updateStore, options = {}) 
   try {
     prs = await fetchProjectPRs(owner, repo, { state: 'all', since: sinceDate, per_page: 30 });
   } catch (err) {
-    console.error(`[pullPipeline] fetchProjectPRs failed for ${owner}/${repo}:`, err.message);
+    logger.error(`[pullPipeline] fetchProjectPRs failed for ${owner}/${repo}:`, err.message);
     return { added: 0, updated: 0, pulls: [] };
   }
 
@@ -219,12 +304,12 @@ export async function syncProjectPRs(project, store, updateStore, options = {}) 
     try {
       // 拉取完整详情（含 review comments，用于 prAgentParser）
       const prDetail = await fetchPRDetail(owner, repo, pr.number);
-      const { isNew, pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store);
+      const { isNew, pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store, owner, repo);
       if (isNew) added++;
       else updated++;
       results.push(pull);
     } catch (err) {
-      console.error(`[pullPipeline] failed on PR #${pr.number}:`, err.message);
+      logger.error(`[pullPipeline] failed on PR #${pr.number}:`, err.message);
     }
   }
 
@@ -260,17 +345,17 @@ export async function upsertPullFromWebhook(repoFull, prNumber, action) {
     return full.toLowerCase() === repoFull.toLowerCase();
   });
   if (!project) {
-    console.warn(`[pullPipeline] PR webhook: no project for repo ${repoFull}`);
+    logger.warn(`[pullPipeline] PR webhook: no project for repo ${repoFull}`);
     return null;
   }
 
   try {
     const prDetail = await fetchPRDetail(owner, repoName, prNumber);
-    const { pull } = await upsertPullIntoStore(prDetail, project.id, update, store);
-    console.log(`[pullPipeline] PR #${prNumber} (${action}) upserted via webhook`);
+    const { pull } = await upsertPullIntoStore(prDetail, project.id, update, store, owner, repoName);
+    logger.info(`[pullPipeline] PR #${prNumber} (${action}) upserted via webhook`);
     return pull;
   } catch (err) {
-    console.error(`[pullPipeline] upsertPullFromWebhook failed:`, err.message);
+    logger.error(`[pullPipeline] upsertPullFromWebhook failed:`, err.message);
     return null;
   }
 }
@@ -290,17 +375,17 @@ export async function handlePrAgentSink(payload, store, updateStore) {
   });
 
   if (!project) {
-    console.warn(`[pullPipeline] PR-Agent sink: no project found for repo ${repo}`);
+    logger.warn(`[pullPipeline] PR-Agent sink: no project found for repo ${repo}`);
     return null;
   }
 
   try {
     const prDetail = await fetchPRDetail(owner, repoName, pr_number);
-    const { pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store);
-    console.log(`[pullPipeline] PR #${pr_number} upserted (project: ${project.id})`);
+    const { pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store, owner, repoName);
+    logger.info(`[pullPipeline] PR #${pr_number} upserted (project: ${project.id})`);
     return pull;
   } catch (err) {
-    console.error(`[pullPipeline] handlePrAgentSink failed:`, err.message);
+    logger.error(`[pullPipeline] handlePrAgentSink failed:`, err.message);
     return null;
   }
 }

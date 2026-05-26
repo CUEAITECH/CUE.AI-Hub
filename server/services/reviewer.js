@@ -1,4 +1,6 @@
 import { callClaude, parseJsonOutput, isAvailable } from './claude.js';
+import logger from '../logger.js';
+
 
 const MAX_DIFF_LEN = 4000;
 const VALID_LEVELS = ['Pass', 'Warning', 'Block', 'Escalate'];
@@ -145,6 +147,7 @@ function reviewChangeWithRules({ title = '', repo = '', owner = '', diff = '', f
     suggestion: '',
     compliance: null,
     issues,
+    _source: 'rule-engine',
     createdAt: new Date().toISOString()
   };
 }
@@ -205,10 +208,11 @@ ${truncatedDiff}`.trim();
         suggestion: String(result.suggestion || ''),
         compliance,
         issues,
+        _source: 'llm',
         createdAt: new Date().toISOString()
       };
     }
-    console.warn('[Reviewer] LLM 输出解析失败或缺少必填字段，降级到规则引擎');
+    logger.warn('[Reviewer] LLM 输出解析失败或缺少必填字段，降级到规则引擎');
   }
   return reviewChangeWithRules({ title, repo, owner, diff, files });
 }

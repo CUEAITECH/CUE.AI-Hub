@@ -1,0 +1,4687 @@
+{
+  "tasks": [
+    {
+      "id": "task_git_webhook",
+      "title": "GitHub commit / push 抓取",
+      "owner": "胡佳涛",
+      "status": "进行中",
+      "due": "2026-05-03",
+      "risk": "低",
+      "progress": 72,
+      "signal": "今日 3 次 commit，PR 已创建",
+      "acceptance": "能够接收 push、pull_request、review 事件并写入活动日志。",
+      "createdAt": "2026-05-01T09:00:00.000Z",
+      "updatedAt": "2026-05-01T10:20:00.000Z",
+      "linkedRefs": [
+        "CUEAITECH/Cue.AI#12"
+      ],
+      "deliverableId": null,
+      "projectId": "cue_ai_classroom"
+    },
+    {
+      "id": "task_ai_review",
+      "title": "AI Review 规则与阻断等级",
+      "owner": "罗子宽",
+      "status": "待拆分",
+      "due": "2026-05-04",
+      "risk": "中",
+      "progress": 28,
+      "signal": "缺少测试覆盖规则，需要补验收标准",
+      "acceptance": "PR diff 可输出通过、提醒、阻断、升级四级结论。",
+      "createdAt": "2026-05-01T09:00:00.000Z",
+      "updatedAt": "2026-05-01T09:30:00.000Z",
+      "linkedRefs": [],
+      "deliverableId": null,
+      "projectId": "cue_ai_classroom"
+    },
+    {
+      "id": "task_standup",
+      "title": "异步站会与请假登记",
+      "owner": "林世棋",
+      "status": "高风险",
+      "due": "2026-05-01",
+      "risk": "高",
+      "progress": 12,
+      "signal": "晚会对账：昨日领取任务无提交支撑，需拆分、转派或标记阻塞",
+      "acceptance": "每天自动收集昨日完成、今日计划、阻塞项和请假交接。",
+      "createdAt": "2026-04-30T09:00:00.000Z",
+      "updatedAt": "2026-05-03T04:32:01.455Z",
+      "linkedRefs": [],
+      "deliverableId": null,
+      "projectId": "cue_ai_classroom"
+    },
+    {
+      "id": "task_auto_planning",
+      "title": "阶段目标自动派单",
+      "owner": "田家铭",
+      "status": "待确认",
+      "due": "2026-05-05",
+      "risk": "中",
+      "progress": 44,
+      "signal": "已生成 7 个候选任务，等待负责人确认",
+      "acceptance": "输入阶段目标后生成任务、负责人建议、验收标准和依赖关系。",
+      "createdAt": "2026-05-01T09:00:00.000Z",
+      "updatedAt": "2026-05-01T10:00:00.000Z",
+      "linkedRefs": [],
+      "deliverableId": null,
+      "projectId": "cue_ai_classroom"
+    }
+  ],
+  "members": [
+    {
+      "id": "member_lsq",
+      "name": "林世棋",
+      "role": "项目推进",
+      "load": 86,
+      "response": "6.2h",
+      "risk": "高",
+      "focus": "排期、验收、资源协调"
+    },
+    {
+      "id": "member_hjt",
+      "name": "胡佳涛",
+      "role": "技术架构",
+      "load": 74,
+      "response": "1.4h",
+      "risk": "中",
+      "focus": "后端架构、AI 链路"
+    },
+    {
+      "id": "member_lzk",
+      "name": "罗子宽",
+      "role": "工程实现",
+      "load": 68,
+      "response": "2.1h",
+      "risk": "中",
+      "focus": "前端联调、性能优化"
+    },
+    {
+      "id": "member_tjm",
+      "name": "田家铭",
+      "role": "产品负责人",
+      "load": 61,
+      "response": "1.8h",
+      "risk": "低",
+      "focus": "目标确认、客户验证"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "review_2401702692478c828acaa4fac025ebd1534c7411",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_2401702692478c828acaa4fac025ebd1534c7411",
+      "sha": "2401702692478c828acaa4fac025ebd1534c7411",
+      "shortSha": "2401702",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/2401702692478c828acaa4fac025ebd1534c7411",
+      "actor": "Dirtor",
+      "files": [
+        "frontend/iOS-iPad/CueAI.Teacher/CueAI.Teacher/Info.plist"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(ipad): add audio + voip background modes to CueAI.Teacher Info.plist",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.693Z"
+    },
+    {
+      "id": "review_31102049cd40d4d4631f2dddf343b4663b71fd7c",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_31102049cd40d4d4631f2dddf343b4663b71fd7c",
+      "sha": "31102049cd40d4d4631f2dddf343b4663b71fd7c",
+      "shortSha": "3110204",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/31102049cd40d4d4631f2dddf343b4663b71fd7c",
+      "actor": "Dirtor",
+      "files": [
+        "frontend/web/src/App.jsx",
+        "frontend/web/src/api/classroomApi.js",
+        "frontend/web/src/api/trtcJoinApi.js",
+        "frontend/web/src/hooks/useTRTC.js",
+        "frontend/web/src/pages/Join/StudentJoinPage.jsx",
+        "frontend/web/src/styles/app.css"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(web): add StudentJoinPage with useTRTC hook for student room join",
+      "owner": "田家铭",
+      "score": 62,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "单次变更偏大，建议确认是否可以拆分。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.694Z"
+    },
+    {
+      "id": "review_f9ea7251222b9a0bc13a1e9b415e6b47d16af182",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f9ea7251222b9a0bc13a1e9b415e6b47d16af182",
+      "sha": "f9ea7251222b9a0bc13a1e9b415e6b47d16af182",
+      "shortSha": "f9ea725",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/f9ea7251222b9a0bc13a1e9b415e6b47d16af182",
+      "actor": "Dirtor",
+      "files": [
+        "backend/app.js",
+        "backend/middleware/errorHandler.js",
+        "backend/repositories/courseTemplateRepository.js",
+        "backend/repositories/mongoRepository.js",
+        "backend/repositories/sessionRepository.js",
+        "backend/routes/healthRoutes.js",
+        "backend/routes/index.js",
+        "backend/routes/sessionRoutes.js",
+        "backend/routes/trtcRoutes.js",
+        "backend/server.js",
+        "backend/services/audioService.js",
+        "backend/services/classroomService.js",
+        "backend/services/sessionEventService.js",
+        "backend/services/trtcAsrCallbackService.js",
+        "backend/services/userSigService.js",
+        "backend/services/websocketService.js",
+        "backend/utils/asyncHandler.js",
+        "backend/utils/env.js",
+        "backend/utils/errors.js",
+        "backend/utils/logger.js",
+        "backend/utils/text.js",
+        "backend/utils/upload.js",
+        "docs/backend-server-modularization-inventory.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(backend): modularize server.js into layered architecture",
+      "owner": "田家铭",
+      "score": 70,
+      "level": "Warning",
+      "findings": [
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "单次变更偏大，建议确认是否可以拆分。",
+        "变更超过 40 行但没有明显测试文件或测试说明。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.695Z"
+    },
+    {
+      "id": "review_f23a99159a7d4cc276d9f3d3751aba5b1b4e2262",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f23a99159a7d4cc276d9f3d3751aba5b1b4e2262",
+      "sha": "f23a99159a7d4cc276d9f3d3751aba5b1b4e2262",
+      "shortSha": "f23a991",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/f23a99159a7d4cc276d9f3d3751aba5b1b4e2262",
+      "actor": "Dirtor",
+      "files": [
+        "frontend/iOS-iPad/OmniNexusTeacherInput/OmniNexusTeacherInput/Assets.xcassets/AppIcon.appiconset/cue-app-icon-1024.png",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/Assets.xcassets/AppIcon.appiconset/Contents.json"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge feat/iphone-end-classroom into main",
+      "owner": "田家铭",
+      "score": 84,
+      "level": "Warning",
+      "findings": [
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.695Z"
+    },
+    {
+      "id": "review_62447265706b2ba70e9234489225de492cc0895f",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_62447265706b2ba70e9234489225de492cc0895f",
+      "sha": "62447265706b2ba70e9234489225de492cc0895f",
+      "shortSha": "6244726",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/62447265706b2ba70e9234489225de492cc0895f",
+      "actor": "Dirtor",
+      "files": [
+        "docs/pr-assets/task_movlob90_v9aflz/01-login.png",
+        "docs/pr-assets/task_movlob90_v9aflz/02-classroom-list.png",
+        "docs/pr-assets/task_movlob90_v9aflz/03-output-view.png",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/AuthService.swift",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/ClassroomListView.swift",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/ContentView.swift",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/CueAI_StudentApp.swift",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/SessionListService.swift"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge feat/iphone-login-classroom-entry-田家铭 into main",
+      "owner": "田家铭",
+      "score": 54,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "单次变更偏大，建议确认是否可以拆分。",
+        "变更超过 40 行但没有明显测试文件或测试说明。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_da62bfa66ba3eac7406a504eab2d5e403350b662",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_da62bfa66ba3eac7406a504eab2d5e403350b662",
+      "sha": "da62bfa66ba3eac7406a504eab2d5e403350b662",
+      "shortSha": "da62bfa",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/da62bfa66ba3eac7406a504eab2d5e403350b662",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge feat/trtc-active-class-view-田家铭 into main",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_4b7c5e08565821781a61f192349d5530fb638967",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_4b7c5e08565821781a61f192349d5530fb638967",
+      "sha": "4b7c5e08565821781a61f192349d5530fb638967",
+      "shortSha": "4b7c5e0",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/4b7c5e08565821781a61f192349d5530fb638967",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #57 from CUEAITECH/refactor/backend-modularize-task_mowpyew7_p90t0k",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_0cb98121b15f2d7abdb726cecccd9c807e9b356d",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_0cb98121b15f2d7abdb726cecccd9c807e9b356d",
+      "sha": "0cb98121b15f2d7abdb726cecccd9c807e9b356d",
+      "shortSha": "0cb9812",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/0cb98121b15f2d7abdb726cecccd9c807e9b356d",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #68 from CUEAITECH/chore/trtc-env-setup",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_30289416df7f6e5ae132e74299e4d161876634c7",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_30289416df7f6e5ae132e74299e4d161876634c7",
+      "sha": "30289416df7f6e5ae132e74299e4d161876634c7",
+      "shortSha": "3028941",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/30289416df7f6e5ae132e74299e4d161876634c7",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(ipad): restore left-large/right-small meeting layout; fix tab bar width; fix session prefix",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_fe27c64d9f5bea35c86af9ffb1a1691117f07979",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_fe27c64d9f5bea35c86af9ffb1a1691117f07979",
+      "sha": "fe27c64d9f5bea35c86af9ffb1a1691117f07979",
+      "shortSha": "fe27c64",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/fe27c64d9f5bea35c86af9ffb1a1691117f07979",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(ipad): explicit self.remoteUsers in closure",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_ee25116969249b09a34473562d3a6148c0f5e4d0",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_ee25116969249b09a34473562d3a6148c0f5e4d0",
+      "sha": "ee25116969249b09a34473562d3a6148c0f5e4d0",
+      "shortSha": "ee25116",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/ee25116969249b09a34473562d3a6148c0f5e4d0",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(ipad): show live remote participants in meeting stage",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_b19fd9686a8bb30996081fee8ac6a25150322af2",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_b19fd9686a8bb30996081fee8ac6a25150322af2",
+      "sha": "b19fd9686a8bb30996081fee8ac6a25150322af2",
+      "shortSha": "b19fd96",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/b19fd9686a8bb30996081fee8ac6a25150322af2",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(ipad): mic volume indicator — glow ring on teacher tile when speaking",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_f027671015749c2b4596d77b02b1d2355d85118e",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f027671015749c2b4596d77b02b1d2355d85118e",
+      "sha": "f027671015749c2b4596d77b02b1d2355d85118e",
+      "shortSha": "f027671",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/f027671015749c2b4596d77b02b1d2355d85118e",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(ipad): pass roomId param in usersig request — server requires it",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_a46d9fbff406b30186f4821d4ef39eb6da165755",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_a46d9fbff406b30186f4821d4ef39eb6da165755",
+      "sha": "a46d9fbff406b30186f4821d4ef39eb6da165755",
+      "shortSha": "a46d9fb",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/a46d9fbff406b30186f4821d4ef39eb6da165755",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(ipad): implement onError delegate; add flow prints; switch to voiceChatRoom scene",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_c207a18abc9ef557f97fc47a8a0440ec51e5daaa",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_c207a18abc9ef557f97fc47a8a0440ec51e5daaa",
+      "sha": "c207a18abc9ef557f97fc47a8a0440ec51e5daaa",
+      "shortSha": "c207a18",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/c207a18abc9ef557f97fc47a8a0440ec51e5daaa",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_82a67c946012202ae9acdedbccdd4e2dd0044afc",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_82a67c946012202ae9acdedbccdd4e2dd0044afc",
+      "sha": "82a67c946012202ae9acdedbccdd4e2dd0044afc",
+      "shortSha": "82a67c9",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/82a67c946012202ae9acdedbccdd4e2dd0044afc",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(ipad): support strRoomId for session-string room IDs; show TRTC error in meeting tab",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_572ce0852f32a1a6eab32a356e8ec1e99988896d",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_572ce0852f32a1a6eab32a356e8ec1e99988896d",
+      "sha": "572ce0852f32a1a6eab32a356e8ec1e99988896d",
+      "shortSha": "572ce08",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/572ce0852f32a1a6eab32a356e8ec1e99988896d",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "refactor(ios): rename apps to CueAI Teacher and Student task_mp87kstg_j9jm4f",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_bd3c2acaa6f92d085707e67398369b85fa65be46",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_bd3c2acaa6f92d085707e67398369b85fa65be46",
+      "sha": "bd3c2acaa6f92d085707e67398369b85fa65be46",
+      "shortSha": "bd3c2ac",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/bd3c2acaa6f92d085707e67398369b85fa65be46",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(ipad): add meeting-style active class shell task_mp87kstg_j9jm4f",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-20T02:22:09.696Z"
+    },
+    {
+      "id": "review_8270aabc27b236837ba6520eb80d98ae71192239",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_8270aabc27b236837ba6520eb80d98ae71192239",
+      "sha": "8270aabc27b236837ba6520eb80d98ae71192239",
+      "shortSha": "8270aab",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/8270aabc27b236837ba6520eb80d98ae71192239",
+      "actor": "hjttu",
+      "files": [
+        "backend/server.js",
+        "backend/server.test.js",
+        "frontend/web/src/App.jsx",
+        "frontend/web/src/components/MeetingRoom.jsx",
+        "frontend/web/src/styles/app.css"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #69 from CUEAITECH/feat/task_mp256s4v_n5jjkd-sse-sop-display",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-19T09:06:13.009Z"
+    },
+    {
+      "id": "review_307bb7b0b0e43ec94f43d87c9a7b45fd55627cc2",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_307bb7b0b0e43ec94f43d87c9a7b45fd55627cc2",
+      "sha": "307bb7b0b0e43ec94f43d87c9a7b45fd55627cc2",
+      "shortSha": "307bb7b",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/307bb7b0b0e43ec94f43d87c9a7b45fd55627cc2",
+      "actor": "hjttu",
+      "files": [
+        "backend/server.js",
+        "backend/server.test.js",
+        "frontend/web/src/App.jsx",
+        "frontend/web/src/components/MeetingRoom.jsx",
+        "frontend/web/src/styles/app.css"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(classroom): [task_mp256s4v_n5jjkd] show ASR-driven SOP node updates via SSE",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-19T09:06:13.010Z"
+    },
+    {
+      "id": "review_8e6b047aea209db1dc107047efad4f87bfc66fe3",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_8e6b047aea209db1dc107047efad4f87bfc66fe3",
+      "sha": "8e6b047aea209db1dc107047efad4f87bfc66fe3",
+      "shortSha": "8e6b047",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/8e6b047aea209db1dc107047efad4f87bfc66fe3",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: add CLAUDE.md with architecture, commands, and dev skill guide",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-19T09:06:13.010Z"
+    },
+    {
+      "id": "review_57b743be3a57e7f1a902e2bbe82a406e6c88e69a",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_57b743be3a57e7f1a902e2bbe82a406e6c88e69a",
+      "sha": "57b743be3a57e7f1a902e2bbe82a406e6c88e69a",
+      "shortSha": "57b743b",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/57b743be3a57e7f1a902e2bbe82a406e6c88e69a",
+      "actor": "hjttu",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix: validate usersig room binding",
+      "owner": "胡佳涛",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-19T09:06:13.010Z"
+    },
+    {
+      "id": "review_83a0cc6411fe4551ca39b5ed80abb163364fb9c0",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_83a0cc6411fe4551ca39b5ed80abb163364fb9c0",
+      "sha": "83a0cc6411fe4551ca39b5ed80abb163364fb9c0",
+      "shortSha": "83a0cc6",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/83a0cc6411fe4551ca39b5ed80abb163364fb9c0",
+      "actor": "hjttu",
+      "files": [
+        "README.md",
+        "artifacts/task_mp256s4w_157usd/classroom-main.png",
+        "artifacts/task_mp256s4w_157usd/device-selection.png",
+        "artifacts/task_mp256s4w_157usd/prompt-invalid-room.png",
+        "artifacts/task_mp256s4w_157usd/search-zero.png",
+        "backend/models/session.js",
+        "backend/readme.md",
+        "backend/server.js",
+        "backend/server.test.js",
+        "docs/双设备 MVP 范围文档 1.0.md",
+        "docs/当前开发计划.md",
+        "docs/技术选型文档1.0.md",
+        "docs/第一周四人分工计划.md",
+        "docs/第二阶段开发计划-TRTC.md",
+        "docs/阶段进度追踪.md",
+        "frontend/iOS-iPad/OmniNexusTeacherInput/OmniNexusTeacherInput/ContentView.swift",
+        "frontend/web/src/App.jsx",
+        "frontend/web/src/api/trtcJoinApi.js",
+        "frontend/web/src/components/Homepage.jsx",
+        "frontend/web/src/components/JoinScreen.jsx",
+        "frontend/web/src/components/MeetingRoom.jsx",
+        "frontend/web/src/types/classroom.ts",
+        "frontend/web/src/types/classroomRuntime.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #66 from CUEAITECH/feat/classroom-concept-unification",
+      "owner": "胡佳涛",
+      "score": 84,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.369Z"
+    },
+    {
+      "id": "review_90015eff82a4f7995e35b757614b995e146cb283",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_90015eff82a4f7995e35b757614b995e146cb283",
+      "sha": "90015eff82a4f7995e35b757614b995e146cb283",
+      "shortSha": "90015ef",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/90015eff82a4f7995e35b757614b995e146cb283",
+      "actor": "hjttu",
+      "files": [
+        "README.md",
+        "docs/双设备 MVP 范围文档 1.0.md",
+        "docs/当前开发计划.md",
+        "docs/技术选型文档1.0.md",
+        "docs/第一周四人分工计划.md",
+        "docs/第二阶段开发计划-TRTC.md",
+        "docs/阶段进度追踪.md",
+        "frontend/web/src/App.jsx",
+        "frontend/web/src/api/trtcJoinApi.js",
+        "frontend/web/src/components/Homepage.jsx",
+        "frontend/web/src/types/classroom.ts",
+        "frontend/web/src/types/classroomRuntime.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(classroom): 统一课堂参与端概念，移除输入端/输出端表述 [task_mp256s4w_073460]",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.369Z"
+    },
+    {
+      "id": "review_2336dd21c3d55edd48b66399ecb1ae70052f9ce4",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_2336dd21c3d55edd48b66399ecb1ae70052f9ce4",
+      "sha": "2336dd21c3d55edd48b66399ecb1ae70052f9ce4",
+      "shortSha": "2336dd2",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/2336dd21c3d55edd48b66399ecb1ae70052f9ce4",
+      "actor": "Dirtor",
+      "files": [
+        "frontend/web/src/components/StudentTrtcRoom.jsx"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(student-web): task_mp256s4w_5wtaj5 接入 trtc-sdk-v5 完成进房与麦克风开启",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.369Z"
+    },
+    {
+      "id": "review_9d6266a8220f003194484c1de7f63b57c1f5a2a2",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_9d6266a8220f003194484c1de7f63b57c1f5a2a2",
+      "sha": "9d6266a8220f003194484c1de7f63b57c1f5a2a2",
+      "shortSha": "9d6266a",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/9d6266a8220f003194484c1de7f63b57c1f5a2a2",
+      "actor": "hjttu",
+      "files": [
+        "backend/server.js",
+        "backend/server.test.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge remote-tracking branch 'cue/main' into feat/classroom-concept-unification",
+      "owner": "胡佳涛",
+      "score": 74,
+      "level": "Warning",
+      "findings": [
+        "包含调试语句，合并前应清理或确认用途。",
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "单次变更偏大，建议确认是否可以拆分。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.369Z"
+    },
+    {
+      "id": "review_eeadf0ed565cbe4bc7a059bda7c0de5a5dcbb14f",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_eeadf0ed565cbe4bc7a059bda7c0de5a5dcbb14f",
+      "sha": "eeadf0ed565cbe4bc7a059bda7c0de5a5dcbb14f",
+      "shortSha": "eeadf0e",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/eeadf0ed565cbe4bc7a059bda7c0de5a5dcbb14f",
+      "actor": "Dirtor",
+      "files": [
+        "frontend/web/src/components/StudentTrtcRoom.jsx"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(student-web): task_mp256s4w_5wtaj5 接入 trtc-sdk-v5 完成进房与麦克风开启",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.369Z"
+    },
+    {
+      "id": "review_f1db650a9bed84a5a54944cb5f0715466bb3df2d",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f1db650a9bed84a5a54944cb5f0715466bb3df2d",
+      "sha": "f1db650a9bed84a5a54944cb5f0715466bb3df2d",
+      "shortSha": "f1db650",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/f1db650a9bed84a5a54944cb5f0715466bb3df2d",
+      "actor": "Dirtor",
+      "files": [
+        "backend/server.js",
+        "backend/server.test.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #64 from CUEAITECH/claude/keen-edison-e00532",
+      "owner": "田家铭",
+      "score": 80,
+      "level": "Warning",
+      "findings": [
+        "包含调试语句，合并前应清理或确认用途。",
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "单次变更偏大，建议确认是否可以拆分。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.370Z"
+    },
+    {
+      "id": "review_46c834eb97d578dc13f36ca4487299eeac2015cf",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_46c834eb97d578dc13f36ca4487299eeac2015cf",
+      "sha": "46c834eb97d578dc13f36ca4487299eeac2015cf",
+      "shortSha": "46c834e",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/46c834eb97d578dc13f36ca4487299eeac2015cf",
+      "actor": "Dirtor",
+      "files": [
+        "backend/server.js",
+        "backend/server.test.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(backend): session GC — auto-end idle sessions and evict ended ones",
+      "owner": "田家铭",
+      "score": 74,
+      "level": "Warning",
+      "findings": [
+        "包含调试语句，合并前应清理或确认用途。",
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "单次变更偏大，建议确认是否可以拆分。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.371Z"
+    },
+    {
+      "id": "review_bca4f36c0628be23988428ef67d4aee306568d2f",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_bca4f36c0628be23988428ef67d4aee306568d2f",
+      "sha": "bca4f36c0628be23988428ef67d4aee306568d2f",
+      "shortSha": "bca4f36",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/bca4f36c0628be23988428ef67d4aee306568d2f",
+      "actor": "hjttu",
+      "files": [
+        "frontend/web/src/App.jsx",
+        "frontend/web/src/appState.js",
+        "frontend/web/src/appState.test.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge remote-tracking branch 'cue/main' into feat/task_mowpyew7_w3myk8-core-apis",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.371Z"
+    },
+    {
+      "id": "review_2e1f4e593b825b09440fc7c1fc1259be55c21dbf",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_2e1f4e593b825b09440fc7c1fc1259be55c21dbf",
+      "sha": "2e1f4e593b825b09440fc7c1fc1259be55c21dbf",
+      "shortSha": "2e1f4e5",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/2e1f4e593b825b09440fc7c1fc1259be55c21dbf",
+      "actor": "hjttu",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(ui): [task_mp256s4w_157usd] 统一课堂参与端文案，移除输入端/输出端表述。",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.371Z"
+    },
+    {
+      "id": "review_21f465c94be04bfbddf013a59e47d3ec2c57bc61",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_21f465c94be04bfbddf013a59e47d3ec2c57bc61",
+      "sha": "21f465c94be04bfbddf013a59e47d3ec2c57bc61",
+      "shortSha": "21f465c",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/21f465c94be04bfbddf013a59e47d3ec2c57bc61",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #63 from CUEAITECH/feat/session-management",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.371Z"
+    },
+    {
+      "id": "review_f4cf7014ff0e127def882e8c0b0ff8f572eb365d",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f4cf7014ff0e127def882e8c0b0ff8f572eb365d",
+      "sha": "f4cf7014ff0e127def882e8c0b0ff8f572eb365d",
+      "shortSha": "f4cf701",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/f4cf7014ff0e127def882e8c0b0ff8f572eb365d",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(web): disable automatic reconnect on student join",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.371Z"
+    },
+    {
+      "id": "review_ce8b839232f1d0f088667543689412a8ff324513",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_ce8b839232f1d0f088667543689412a8ff324513",
+      "sha": "ce8b839232f1d0f088667543689412a8ff324513",
+      "shortSha": "ce8b839",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/ce8b839232f1d0f088667543689412a8ff324513",
+      "actor": "hjttu",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge remote-tracking branch 'cue/main' into feat/task_mowpyew7_w3myk8-core-apis",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.371Z"
+    },
+    {
+      "id": "review_243dae350bff4754a7f602ea023831bf7ccca2b7",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_243dae350bff4754a7f602ea023831bf7ccca2b7",
+      "sha": "243dae350bff4754a7f602ea023831bf7ccca2b7",
+      "shortSha": "243dae3",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/243dae350bff4754a7f602ea023831bf7ccca2b7",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #62 from CUEAITECH/feat/session-management",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.371Z"
+    },
+    {
+      "id": "review_d1d938cc1999563fa29df0c828b3632950e9c645",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_d1d938cc1999563fa29df0c828b3632950e9c645",
+      "sha": "d1d938cc1999563fa29df0c828b3632950e9c645",
+      "shortSha": "d1d938c",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/d1d938cc1999563fa29df0c828b3632950e9c645",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(web): keep /join in student classroom mode",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.371Z"
+    },
+    {
+      "id": "review_378817aea7c437e51b9f9591bd852bcf3168e980",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_378817aea7c437e51b9f9591bd852bcf3168e980",
+      "sha": "378817aea7c437e51b9f9591bd852bcf3168e980",
+      "shortSha": "378817a",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/378817aea7c437e51b9f9591bd852bcf3168e980",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(web): 学生 Web 端 TRTC 进房页开发",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-17T18:32:31.371Z"
+    },
+    {
+      "id": "review_6ff5c3a5efb0a95ac7083239f68f9148ebfe6863",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_6ff5c3a5efb0a95ac7083239f68f9148ebfe6863",
+      "sha": "6ff5c3a5efb0a95ac7083239f68f9148ebfe6863",
+      "shortSha": "6ff5c3a",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/6ff5c3a5efb0a95ac7083239f68f9148ebfe6863",
+      "actor": "Dirtor",
+      "files": [
+        "backend/compat/registerCompatShims.js",
+        "backend/models/session.js",
+        "backend/server.js",
+        "backend/server.test.js",
+        "backend/src/session/session.controller.js",
+        "backend/src/session/session.model.js",
+        "backend/src/session/session.routes.js",
+        "backend/src/session/session.service.js",
+        "docs/session-lifecycle-api.md",
+        "migrations/20260512_create_session_table.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #60 from CUEAITECH/feat/session-management",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "单次变更偏大，建议确认是否可以拆分。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-13T03:13:53.942Z"
+    },
+    {
+      "id": "review_c629b76e3db3a366648d630a231b3759981873ab",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_c629b76e3db3a366648d630a231b3759981873ab",
+      "sha": "c629b76e3db3a366648d630a231b3759981873ab",
+      "shortSha": "c629b76",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/c629b76e3db3a366648d630a231b3759981873ab",
+      "actor": "Dirtor",
+      "files": [
+        "backend/compat/registerCompatShims.js",
+        "backend/models/session.js",
+        "backend/server.js",
+        "backend/server.test.js",
+        "backend/src/session/session.controller.js",
+        "backend/src/session/session.model.js",
+        "backend/src/session/session.routes.js",
+        "backend/src/session/session.service.js",
+        "docs/session-lifecycle-api.md",
+        "migrations/20260512_create_session_table.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(session): add lifecycle management task_mp1mms8p_t4jrlf",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "单次变更偏大，建议确认是否可以拆分。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-13T03:13:53.942Z"
+    },
+    {
+      "id": "review_d401878e379aea19e7a53eff3b266ea27e6ad5aa",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_d401878e379aea19e7a53eff3b266ea27e6ad5aa",
+      "sha": "d401878e379aea19e7a53eff3b266ea27e6ad5aa",
+      "shortSha": "d401878",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/d401878e379aea19e7a53eff3b266ea27e6ad5aa",
+      "actor": "Dirtor",
+      "files": [
+        "package.json"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(railway): pin npm package manager version [task_mp21nid6_lfowf9]",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-13T03:13:53.943Z"
+    },
+    {
+      "id": "review_ee96ce3631a9dd890fee015f552ab3796062cee5",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_ee96ce3631a9dd890fee015f552ab3796062cee5",
+      "sha": "ee96ce3631a9dd890fee015f552ab3796062cee5",
+      "shortSha": "ee96ce3",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/ee96ce3631a9dd890fee015f552ab3796062cee5",
+      "actor": "Dirtor",
+      "files": [
+        "package.json"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(railway): declare node runtime for build [task_mp21nid6_lfowf9]",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-13T03:13:53.943Z"
+    },
+    {
+      "id": "review_151192f96e1ff434aec00b31de9cd0c5d42e3416",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_151192f96e1ff434aec00b31de9cd0c5d42e3416",
+      "sha": "151192f96e1ff434aec00b31de9cd0c5d42e3416",
+      "shortSha": "151192f",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/151192f96e1ff434aec00b31de9cd0c5d42e3416",
+      "actor": "Dirtor",
+      "files": [
+        "README.md",
+        "docs/CUE商业计划书1.0.md",
+        "docs/CUE商业计划书2.0.md",
+        "docs/CUE商业计划书2.0.tex",
+        "docs/README.md",
+        "docs/功能优先级表1.0.md",
+        "docs/双设备 MVP 范围文档 1.0.md",
+        "docs/当前开发计划.md",
+        "docs/技术选型文档1.0.md",
+        "docs/第一周四人分工计划.md",
+        "docs/第二阶段开发计划-TRTC.md",
+        "docs/阶段进度追踪.md",
+        "frontend/web/src/components/Homepage.jsx"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: align project direction and planning",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.036Z"
+    },
+    {
+      "id": "review_8dc958911305af255f12ff2646ce3d4fc585f058",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_8dc958911305af255f12ff2646ce3d4fc585f058",
+      "sha": "8dc958911305af255f12ff2646ce3d4fc585f058",
+      "shortSha": "8dc9589",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/8dc958911305af255f12ff2646ce3d4fc585f058",
+      "actor": "hjttu",
+      "files": [
+        "backend/server.js",
+        "backend/server.test.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #58 from CUEAITECH/feat/task_mowpyew7_w3myk8-core-apis",
+      "owner": "胡佳涛",
+      "score": 90,
+      "level": "Warning",
+      "findings": [
+        "涉及认证、支付或权限模块，应提高审阅等级。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.036Z"
+    },
+    {
+      "id": "review_032e04c62ad930f0181bd672fab5a3e2687823e7",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_032e04c62ad930f0181bd672fab5a3e2687823e7",
+      "sha": "032e04c62ad930f0181bd672fab5a3e2687823e7",
+      "shortSha": "032e04c",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/032e04c62ad930f0181bd672fab5a3e2687823e7",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.036Z"
+    },
+    {
+      "id": "review_82ff8b6b92c4b7fff911d5f568d2938b201417ef",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_82ff8b6b92c4b7fff911d5f568d2938b201417ef",
+      "sha": "82ff8b6b92c4b7fff911d5f568d2938b201417ef",
+      "shortSha": "82ff8b6",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/82ff8b6b92c4b7fff911d5f568d2938b201417ef",
+      "actor": "hjttu",
+      "files": [
+        "backend/server.js",
+        "backend/server.test.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(api): [task_mowpyew7_w3myk8] implement core session APIs",
+      "owner": "胡佳涛",
+      "score": 90,
+      "level": "Warning",
+      "findings": [
+        "涉及认证、支付或权限模块，应提高审阅等级。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.036Z"
+    },
+    {
+      "id": "review_7e1b2514829485b19f42be7dc4014f5c5b188acf",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_7e1b2514829485b19f42be7dc4014f5c5b188acf",
+      "sha": "7e1b2514829485b19f42be7dc4014f5c5b188acf",
+      "shortSha": "7e1b251",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/7e1b2514829485b19f42be7dc4014f5c5b188acf",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 72,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "单次变更偏大，建议确认是否可以拆分。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.036Z"
+    },
+    {
+      "id": "review_9a7682d3394a2564badaef099e0549a35601f73a",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_9a7682d3394a2564badaef099e0549a35601f73a",
+      "sha": "9a7682d3394a2564badaef099e0549a35601f73a",
+      "shortSha": "9a7682d",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/9a7682d3394a2564badaef099e0549a35601f73a",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.036Z"
+    },
+    {
+      "id": "review_fbaa161b8ab27d66b15170211b4c506ce91a6bcd",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_fbaa161b8ab27d66b15170211b4c506ce91a6bcd",
+      "sha": "fbaa161b8ab27d66b15170211b4c506ce91a6bcd",
+      "shortSha": "fbaa161",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/fbaa161b8ab27d66b15170211b4c506ce91a6bcd",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "[task_movlxbho_bgmdj3] feat(iPhone): SOP 节点进度展示 - 三态 UI 完成 (#56)",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.036Z"
+    },
+    {
+      "id": "review_95f5f1a8564acd6b10165689501efb2c5980e70b",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_95f5f1a8564acd6b10165689501efb2c5980e70b",
+      "sha": "95f5f1a8564acd6b10165689501efb2c5980e70b",
+      "shortSha": "95f5f1a",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/95f5f1a8564acd6b10165689501efb2c5980e70b",
+      "actor": "ryanlzk",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge branch 'main' of https://github.com/CUEAITECH/Cue.AI",
+      "owner": "罗子宽",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_83d078c5eb46656e2bf80f43540f08fcb43beaea",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_83d078c5eb46656e2bf80f43540f08fcb43beaea",
+      "sha": "83d078c5eb46656e2bf80f43540f08fcb43beaea",
+      "shortSha": "83d078c",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/83d078c5eb46656e2bf80f43540f08fcb43beaea",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(iphone): two-tab classroom UI — meeting + AI copilot pages (#55)",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_95e241d5fee2c37d8ab42f874b7b99be894b251d",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_95e241d5fee2c37d8ab42f874b7b99be894b251d",
+      "sha": "95e241d5fee2c37d8ab42f874b7b99be894b251d",
+      "shortSha": "95e241d",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/95e241d5fee2c37d8ab42f874b7b99be894b251d",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: restore original template style, sync progress to actual commits",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_522032332ce3b229b054dde85ba1e5a399eae854",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_522032332ce3b229b054dde85ba1e5a399eae854",
+      "sha": "522032332ce3b229b054dde85ba1e5a399eae854",
+      "shortSha": "5220323",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/522032332ce3b229b054dde85ba1e5a399eae854",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: sync progress tracking and phase-2 plan with actual commit history",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_dfb1bc3a339e688a16f7078ad866e3d7613873b6",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_dfb1bc3a339e688a16f7078ad866e3d7613873b6",
+      "sha": "dfb1bc3a339e688a16f7078ad866e3d7613873b6",
+      "shortSha": "dfb1bc3",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/dfb1bc3a339e688a16f7078ad866e3d7613873b6",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: update README to reflect current state and AI-native platform direction",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_919c8a7dd89ec3d6fc414b433342e6801c80e5af",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_919c8a7dd89ec3d6fc414b433342e6801c80e5af",
+      "sha": "919c8a7dd89ec3d6fc414b433342e6801c80e5af",
+      "shortSha": "919c8a7",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/919c8a7dd89ec3d6fc414b433342e6801c80e5af",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #50 from CUEAITECH/feature/iphone-login-classroom-entry",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_7ca384ab0ff2efd6397edc97698f2f54ab1c36b8",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_7ca384ab0ff2efd6397edc97698f2f54ab1c36b8",
+      "sha": "7ca384ab0ff2efd6397edc97698f2f54ab1c36b8",
+      "shortSha": "7ca384a",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/7ca384ab0ff2efd6397edc97698f2f54ab1c36b8",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "[task_movlxbho_xtdgbt] fix: replace .tertiary Color with UIColor.tertiaryLabel",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_c795f7fe11e0e1fe80b702d154e43abe2d5ccb79",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_c795f7fe11e0e1fe80b702d154e43abe2d5ccb79",
+      "sha": "c795f7fe11e0e1fe80b702d154e43abe2d5ccb79",
+      "shortSha": "c795f7f",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/c795f7fe11e0e1fe80b702d154e43abe2d5ccb79",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "[task_movlxbho_xtdgbt] add iPhone login, classroom list, and output entry navigation",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_025b7c4a3569461990c9e3d101de4b2adbf93632",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_025b7c4a3569461990c9e3d101de4b2adbf93632",
+      "sha": "025b7c4a3569461990c9e3d101de4b2adbf93632",
+      "shortSha": "025b7c4",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/025b7c4a3569461990c9e3d101de4b2adbf93632",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(ci): expand DEPLOY_PATH in SSH deploy command",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_7737dd432c6553f758277d7d906e359ecaa948d5",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_7737dd432c6553f758277d7d906e359ecaa948d5",
+      "sha": "7737dd432c6553f758277d7d906e359ecaa948d5",
+      "shortSha": "7737dd4",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/7737dd432c6553f758277d7d906e359ecaa948d5",
+      "actor": "hjttu",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #49 from CUEAITECH/fix/security-env-credentials",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_588e9ab231960ff9e152eb59eb8c2c4a9974367a",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_588e9ab231960ff9e152eb59eb8c2c4a9974367a",
+      "sha": "588e9ab231960ff9e152eb59eb8c2c4a9974367a",
+      "shortSha": "588e9ab",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/588e9ab231960ff9e152eb59eb8c2c4a9974367a",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "ci: add ECS SSH auto-deploy job to CI/CD workflow",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_dce29d4a16c73aba3c139b08214cfa6997393d19",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_dce29d4a16c73aba3c139b08214cfa6997393d19",
+      "sha": "dce29d4a16c73aba3c139b08214cfa6997393d19",
+      "shortSha": "dce29d4",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/dce29d4a16c73aba3c139b08214cfa6997393d19",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #48 from CUEAITECH/codex/integrate-trtc-latest",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_7e117923934ce531087ba6f4fb24b8e1189ff282",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_7e117923934ce531087ba6f4fb24b8e1189ff282",
+      "sha": "7e117923934ce531087ba6f4fb24b8e1189ff282",
+      "shortSha": "7e11792",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/7e117923934ce531087ba6f4fb24b8e1189ff282",
+      "actor": "hjttu",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(security): move CI credentials to secrets [task_moueaa7k_it0hp6]",
+      "owner": "胡佳涛",
+      "score": 84,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-12T04:48:36.037Z"
+    },
+    {
+      "id": "review_dbb7bc2e7adf683365563c31bb8c36e5e7491030",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_dbb7bc2e7adf683365563c31bb8c36e5e7491030",
+      "sha": "dbb7bc2e7adf683365563c31bb8c36e5e7491030",
+      "shortSha": "dbb7bc2",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/dbb7bc2e7adf683365563c31bb8c36e5e7491030",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-07T08:03:59.118Z"
+    },
+    {
+      "id": "review_26e1cd4ce3b55048ae956a05cc2789b57cc92d08",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_26e1cd4ce3b55048ae956a05cc2789b57cc92d08",
+      "sha": "26e1cd4ce3b55048ae956a05cc2789b57cc92d08",
+      "shortSha": "26e1cd4",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/26e1cd4ce3b55048ae956a05cc2789b57cc92d08",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-07T03:30:51.923Z"
+    },
+    {
+      "id": "review_b53e51b271a219aaa17a4416e89cee9fab260c2c",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_b53e51b271a219aaa17a4416e89cee9fab260c2c",
+      "sha": "b53e51b271a219aaa17a4416e89cee9fab260c2c",
+      "shortSha": "b53e51b",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/b53e51b271a219aaa17a4416e89cee9fab260c2c",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-07T02:45:50.834Z"
+    },
+    {
+      "id": "review_f6b1c784c15ac09eab72f75794f6214e37e8253e",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f6b1c784c15ac09eab72f75794f6214e37e8253e",
+      "sha": "f6b1c784c15ac09eab72f75794f6214e37e8253e",
+      "shortSha": "f6b1c78",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/f6b1c784c15ac09eab72f75794f6214e37e8253e",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-07T02:30:50.809Z"
+    },
+    {
+      "id": "review_b329f8e969d28395d6a0055072ba941e7b4f3ab5",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_b329f8e969d28395d6a0055072ba941e7b4f3ab5",
+      "sha": "b329f8e969d28395d6a0055072ba941e7b4f3ab5",
+      "shortSha": "b329f8e",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/b329f8e969d28395d6a0055072ba941e7b4f3ab5",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-07T02:25:51.504Z"
+    },
+    {
+      "id": "review_74cb7f62d63c1d9a238b274adc888027b7c8b12a",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_74cb7f62d63c1d9a238b274adc888027b7c8b12a",
+      "sha": "74cb7f62d63c1d9a238b274adc888027b7c8b12a",
+      "shortSha": "74cb7f6",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/74cb7f62d63c1d9a238b274adc888027b7c8b12a",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-07T02:15:50.379Z"
+    },
+    {
+      "id": "review_22bcc966baf3841be065589edf42d48cb2518087",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_22bcc966baf3841be065589edf42d48cb2518087",
+      "sha": "22bcc966baf3841be065589edf42d48cb2518087",
+      "shortSha": "22bcc96",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/22bcc966baf3841be065589edf42d48cb2518087",
+      "actor": "Dirtor",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-06T19:50:49.814Z"
+    },
+    {
+      "id": "review_64eb211c1f19c2ea8937d945549ef9604adc67ae",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_64eb211c1f19c2ea8937d945549ef9604adc67ae",
+      "sha": "64eb211c1f19c2ea8937d945549ef9604adc67ae",
+      "shortSha": "64eb211",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/64eb211c1f19c2ea8937d945549ef9604adc67ae",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-06T19:40:49.464Z"
+    },
+    {
+      "id": "review_f34c0e4cf929316d4a1c575a882973d765817502",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f34c0e4cf929316d4a1c575a882973d765817502",
+      "sha": "f34c0e4cf929316d4a1c575a882973d765817502",
+      "shortSha": "f34c0e4",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/f34c0e4cf929316d4a1c575a882973d765817502",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-06T19:35:50.460Z"
+    },
+    {
+      "id": "review_05e5a07f3a6242401a4647bc01668de585e703b6",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_05e5a07f3a6242401a4647bc01668de585e703b6",
+      "sha": "05e5a07f3a6242401a4647bc01668de585e703b6",
+      "shortSha": "05e5a07",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/05e5a07f3a6242401a4647bc01668de585e703b6",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-06T19:33:58.520Z"
+    },
+    {
+      "id": "review_2a624c7db9d35130162ca38bffd8c311b2e0a7e1",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_2a624c7db9d35130162ca38bffd8c311b2e0a7e1",
+      "sha": "2a624c7db9d35130162ca38bffd8c311b2e0a7e1",
+      "shortSha": "2a624c7",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/2a624c7db9d35130162ca38bffd8c311b2e0a7e1",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-06T19:23:58.295Z"
+    },
+    {
+      "id": "review_cc0b46387f8008499c6deec61035374cfd60a8fc",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_cc0b46387f8008499c6deec61035374cfd60a8fc",
+      "sha": "cc0b46387f8008499c6deec61035374cfd60a8fc",
+      "shortSha": "cc0b463",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/cc0b46387f8008499c6deec61035374cfd60a8fc",
+      "actor": "Dirtor",
+      "files": [
+        "docs/阶段进度追踪.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 78,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-06T19:23:58.295Z"
+    },
+    {
+      "id": "review_1f841ec1425d47a926e573033e9ea58f13d011eb",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_1f841ec1425d47a926e573033e9ea58f13d011eb",
+      "sha": "1f841ec1425d47a926e573033e9ea58f13d011eb",
+      "shortSha": "1f841ec",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/1f841ec1425d47a926e573033e9ea58f13d011eb",
+      "actor": "ryanlzk",
+      "files": [
+        "backend/.env.example",
+        "backend/readme.md",
+        "backend/server.js",
+        "backend/server.test.js",
+        "backend/trtcService.js",
+        "backend/utils/trtcUserSig.js",
+        "backend/utils/trtcUserSig.test.js",
+        "docs/第二阶段开发计划-TRTC.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat: add usersig endpoint [task_mopyri4q_5t992t]",
+      "owner": "罗子宽",
+      "score": 68,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "单次变更偏大，建议确认是否可以拆分。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-06T08:40:50.522Z"
+    },
+    {
+      "id": "review_cc388c99b63bbdb01f26d0a7131e820609eb1964",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_cc388c99b63bbdb01f26d0a7131e820609eb1964",
+      "sha": "cc388c99b63bbdb01f26d0a7131e820609eb1964",
+      "shortSha": "cc388c9",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/cc388c99b63bbdb01f26d0a7131e820609eb1964",
+      "actor": "hjttu",
+      "files": [
+        "README.md",
+        "backend/.env.example",
+        "backend/models/session.js",
+        "backend/readme.md",
+        "backend/server.js",
+        "backend/server.test.js",
+        "backend/services/asrBot.js",
+        "backend/trtcService.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #42 from CUEAITECH/feat/session-start-trtc-asr-bot",
+      "owner": "胡佳涛",
+      "score": 84,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-06T08:04:52.315Z"
+    },
+    {
+      "id": "review_6ef38d7d694840be0a76ed914d0a60f922fdcb1f",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_6ef38d7d694840be0a76ed914d0a60f922fdcb1f",
+      "sha": "6ef38d7d694840be0a76ed914d0a60f922fdcb1f",
+      "shortSha": "6ef38d7",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/6ef38d7d694840be0a76ed914d0a60f922fdcb1f",
+      "actor": "hjttu",
+      "files": [
+        "README.md",
+        "backend/.env.example",
+        "backend/models/session.js",
+        "backend/readme.md",
+        "backend/server.js",
+        "backend/server.test.js",
+        "backend/services/asrBot.js",
+        "backend/trtcService.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(session): start TRTC AI ASR bot on session creation [task_mopyri4q_7vkmsa]",
+      "owner": "胡佳涛",
+      "score": 84,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-06T08:04:52.315Z"
+    },
+    {
+      "id": "review_10d91e17c265d8fe3e8970b3cb0784d10e4bce2e",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_10d91e17c265d8fe3e8970b3cb0784d10e4bce2e",
+      "sha": "10d91e17c265d8fe3e8970b3cb0784d10e4bce2e",
+      "shortSha": "10d91e1",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/10d91e17c265d8fe3e8970b3cb0784d10e4bce2e",
+      "actor": "hjttu",
+      "files": [
+        "backend/server.js",
+        "backend/server.test.js",
+        "docs/第二阶段开发计划-TRTC.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #41 from CUEAITECH/feat/task_mopyri4q_02mauc",
+      "owner": "胡佳涛",
+      "score": 90,
+      "level": "Warning",
+      "findings": [
+        "包含调试语句，合并前应清理或确认用途。",
+        "单次变更偏大，建议确认是否可以拆分。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T16:39:45.881Z"
+    },
+    {
+      "id": "review_8f5ce0ed509e07dc3008f4f8e8fac4b6ef9aec82",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_8f5ce0ed509e07dc3008f4f8e8fac4b6ef9aec82",
+      "sha": "8f5ce0ed509e07dc3008f4f8e8fac4b6ef9aec82",
+      "shortSha": "8f5ce0e",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/8f5ce0ed509e07dc3008f4f8e8fac4b6ef9aec82",
+      "actor": "hjttu",
+      "files": [
+        "backend/server.js",
+        "backend/server.test.js",
+        "docs/第二阶段开发计划-TRTC.md"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]",
+      "owner": "胡佳涛",
+      "score": 90,
+      "level": "Warning",
+      "findings": [
+        "包含调试语句，合并前应清理或确认用途。",
+        "单次变更偏大，建议确认是否可以拆分。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T16:39:45.881Z"
+    },
+    {
+      "id": "review_6152c0034c968b5acd06a58223b2361e0e1486d9",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_6152c0034c968b5acd06a58223b2361e0e1486d9",
+      "sha": "6152c0034c968b5acd06a58223b2361e0e1486d9",
+      "shortSha": "6152c00",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/6152c0034c968b5acd06a58223b2361e0e1486d9",
+      "actor": "hjttu",
+      "files": [
+        "README.md",
+        "backend/models/session.js",
+        "backend/readme.md",
+        "backend/server.test.js",
+        "backend/services/asrBot.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T10:43:38.348Z"
+    },
+    {
+      "id": "review_a5b5b6a928b92b5d3057eeb458fd6e9a2927a509",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_a5b5b6a928b92b5d3057eeb458fd6e9a2927a509",
+      "sha": "a5b5b6a928b92b5d3057eeb458fd6e9a2927a509",
+      "shortSha": "a5b5b6a",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/a5b5b6a928b92b5d3057eeb458fd6e9a2927a509",
+      "actor": "hjttu",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening",
+      "owner": "胡佳涛",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T10:43:38.349Z"
+    },
+    {
+      "id": "review_f374cbabce18f7e8579cbd027231bcdaf0f2ccd8",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f374cbabce18f7e8579cbd027231bcdaf0f2ccd8",
+      "sha": "f374cbabce18f7e8579cbd027231bcdaf0f2ccd8",
+      "shortSha": "f374cba",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/f374cbabce18f7e8579cbd027231bcdaf0f2ccd8",
+      "actor": "hjttu",
+      "files": [
+        "README.md",
+        "backend/models/session.js",
+        "backend/readme.md",
+        "backend/server.test.js",
+        "backend/services/asrBot.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T10:43:38.349Z"
+    },
+    {
+      "id": "review_3b40be18847ff9b9191f0e5a3f2dd68cde87ec8a",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_3b40be18847ff9b9191f0e5a3f2dd68cde87ec8a",
+      "sha": "3b40be18847ff9b9191f0e5a3f2dd68cde87ec8a",
+      "shortSha": "3b40be1",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/3b40be18847ff9b9191f0e5a3f2dd68cde87ec8a",
+      "actor": "hjttu",
+      "files": [
+        "README.md",
+        "backend/models/session.js",
+        "backend/readme.md",
+        "backend/server.test.js",
+        "backend/services/asrBot.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T10:43:38.349Z"
+    },
+    {
+      "id": "review_4a1822ce299388499addd1e5bf927391f4447a26",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_4a1822ce299388499addd1e5bf927391f4447a26",
+      "sha": "4a1822ce299388499addd1e5bf927391f4447a26",
+      "shortSha": "4a1822c",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/4a1822ce299388499addd1e5bf927391f4447a26",
+      "actor": "hjttu",
+      "files": [
+        "README.md",
+        "backend/models/session.js",
+        "backend/readme.md",
+        "backend/server.js",
+        "backend/server.test.js",
+        "backend/services/asrBot.js",
+        "backend/trtcService.js"
+      ],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #39 from CUEAITECH/feat/session-end-stop-asr",
+      "owner": "胡佳涛",
+      "score": 74,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "涉及认证、支付或权限模块，应提高审阅等级。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T10:43:38.349Z"
+    },
+    {
+      "id": "review_2ee082c6cd2fb85a8abe269ea27181e1ea43a04c",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_2ee082c6cd2fb85a8abe269ea27181e1ea43a04c",
+      "sha": "2ee082c6cd2fb85a8abe269ea27181e1ea43a04c",
+      "shortSha": "2ee082c",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/2ee082c6cd2fb85a8abe269ea27181e1ea43a04c",
+      "actor": "hjttu",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge branch 'feat/session-end-stop-asr-cuebase' into feat/session-end-stop-asr",
+      "owner": "胡佳涛",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T10:43:38.349Z"
+    },
+    {
+      "id": "review_a810dc44466110ce63d22f0ed3b02da3ed928822",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_a810dc44466110ce63d22f0ed3b02da3ed928822",
+      "sha": "a810dc44466110ce63d22f0ed3b02da3ed928822",
+      "shortSha": "a810dc4",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/a810dc44466110ce63d22f0ed3b02da3ed928822",
+      "actor": "hjttu",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(session): stop ASR bot on session end [task_mopyri4q_p2zomw]",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T10:43:38.349Z"
+    },
+    {
+      "id": "review_33b62e765a1bb2fed0b165f8ce824fe1cdb72dab",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_33b62e765a1bb2fed0b165f8ce824fe1cdb72dab",
+      "sha": "33b62e765a1bb2fed0b165f8ce824fe1cdb72dab",
+      "shortSha": "33b62e7",
+      "commitUrl": "https://github.com/CUEAITECH/Cue.AI/commit/33b62e765a1bb2fed0b165f8ce824fe1cdb72dab",
+      "actor": "hjttu",
+      "files": [],
+      "humanDecision": null,
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(session): stop ASR bot on session end [task_mopyri4q_p2zomw]",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-05T10:43:38.349Z"
+    },
+    {
+      "id": "review_63d70f0a0ffe17fe251a699f9d932ebd38ec46cc",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_63d70f0a0ffe17fe251a699f9d932ebd38ec46cc",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "P2 security: gate demo auth credentials behind env flags  本次提交针对 AI Review 对认证、token、凭据相关代码的阻断进行安全边界收敛。主要移除前后端中硬编码的 demo",
+      "owner": "胡佳涛",
+      "score": 68,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T16:35:37.870Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_7d5a1656fe4792c52fccc5d8a85abaf6122b31a2",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_7d5a1656fe4792c52fccc5d8a85abaf6122b31a2",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge remote-tracking branch 'origin/main' into hu",
+      "owner": "胡佳涛",
+      "score": 70,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "变更超过 40 行但没有明显测试文件或测试说明。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T16:35:37.870Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_f87129586baccbc1bb7e50da4b7fdc16f56883f8",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f87129586baccbc1bb7e50da4b7fdc16f56883f8",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "P2 security: gate demo auth credentials behind env flags",
+      "owner": "胡佳涛",
+      "score": 68,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T16:35:37.870Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_1e34492872ccf7d6dcba0039320825079d2b7c62",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_1e34492872ccf7d6dcba0039320825079d2b7c62",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "owner": "田家铭",
+      "score": 70,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "变更超过 40 行但没有明显测试文件或测试说明。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T16:17:25.830Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_5786aa720520189fd6c522f3e62dd05c63b5036a",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_5786aa720520189fd6c522f3e62dd05c63b5036a",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "修改主页成员内容",
+      "owner": "罗子宽",
+      "score": 86,
+      "level": "Warning",
+      "findings": [
+        "变更超过 40 行但没有明显测试文件或测试说明。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T09:01:40.107Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_a8c87a3f1fef91b28d4394af026c7a638975e498",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_a8c87a3f1fef91b28d4394af026c7a638975e498",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "修改团队介绍",
+      "owner": "罗子宽",
+      "score": 86,
+      "level": "Warning",
+      "findings": [
+        "变更超过 40 行但没有明显测试文件或测试说明。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T08:51:41.806Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_f8bc1bf05711db659b5098b4056ae3cb4a99a043",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f8bc1bf05711db659b5098b4056ae3cb4a99a043",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "更新一键登录，更新团队介绍",
+      "owner": "罗子宽",
+      "score": 80,
+      "level": "Warning",
+      "findings": [
+        "单次变更偏大，建议确认是否可以拆分。",
+        "变更超过 40 行但没有明显测试文件或测试说明。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T08:36:40.879Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_08e6d89f2bfa1d1b847e35d86c476e6f3f834013",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_08e6d89f2bfa1d1b847e35d86c476e6f3f834013",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "统一 Web 端鉴权链路并完善中文登录注册界面",
+      "owner": "胡佳涛",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T05:34:28.084Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_604947122b6c51b31936765ab334be70991c00a1",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_604947122b6c51b31936765ab334be70991c00a1",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "界面",
+      "owner": "罗子宽",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T05:34:28.084Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_7636207e79e3bb3ec9c8a49aa76d691db736f6f3",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_7636207e79e3bb3ec9c8a49aa76d691db736f6f3",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #31 from OmniNexusEdu/hu",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T05:34:28.084Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_c7528b3c3809563fb0084a084d473f1c3b3262b7",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_c7528b3c3809563fb0084a084d473f1c3b3262b7",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "兼容层 / 补齐接口对齐",
+      "owner": "胡佳涛",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T05:34:28.085Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_8f645fee8b99ded8ae0b0a25d0f0390757a4b8c6",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_8f645fee8b99ded8ae0b0a25d0f0390757a4b8c6",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #30 from OmniNexusEdu/claude/awesome-elbakyan-dfd655",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "suggestion": "",
+      "createdAt": "2026-05-03T05:34:28.085Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_mon63o76_lr2wzs",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat: task_123 add webhook signature check",
+      "owner": "AI Reviewer",
+      "score": 74,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "存在 TODO/FIXME/HACK 标记，建议补齐处理方案。",
+        "包含调试语句，合并前应清理或确认用途。"
+      ],
+      "createdAt": "2026-05-01T17:09:17.257Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_6cd2c79672fa85d9354e0c88a7ba27efe3ec1813",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_6cd2c79672fa85d9354e0c88a7ba27efe3ec1813",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "merge: integrate TRTC iPad changes",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.102Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_d8be31cf648e81aaba1d51d99563dd7cf2678d95",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_d8be31cf648e81aaba1d51d99563dd7cf2678d95",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge branch 'main' of https://github.com/OmniNexusEdu/OmniNexus-Edu-copilot",
+      "owner": "罗子宽",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.103Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_584433f3b5cd4bea7e13bb8ff37c58b83b70fce8",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_584433f3b5cd4bea7e13bb8ff37c58b83b70fce8",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "主页团队及合作机构",
+      "owner": "罗子宽",
+      "score": 86,
+      "level": "Warning",
+      "findings": [
+        "变更超过 40 行但没有明显测试文件或测试说明。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.103Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_58663f701afc212e46ea80b21870f92d9a7adec9",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_58663f701afc212e46ea80b21870f92d9a7adec9",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #37 from OmniNexusEdu/hu",
+      "owner": "胡佳涛",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.103Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_efada35292cd963d30c38e0fdf32453a65b488e7",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_efada35292cd963d30c38e0fdf32453a65b488e7",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "重做个人中心登录/注册/已登录态，新增前端校验、密码显示/隐藏、密码强度、demo 快捷登录、刷新登录状态、重复账号自动切到登录。",
+      "owner": "胡佳涛",
+      "score": 56,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "单次变更超过 500 行，建议拆分 PR 降低审阅风险。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.103Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_e3adb954c649d08bc83fdb0751f6feb79a38b82f",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_e3adb954c649d08bc83fdb0751f6feb79a38b82f",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat(iPad): integrate TRTC iOS SDK + redesign teacher app",
+      "owner": "田家铭",
+      "score": 76,
+      "level": "Warning",
+      "findings": [
+        "存在 TODO/FIXME/HACK 标记，建议补齐处理方案。",
+        "单次变更超过 500 行，建议拆分 PR 降低审阅风险。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.105Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_5e0f7f2c792e7a2244da7ddcfe83da5efd6f487a",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_5e0f7f2c792e7a2244da7ddcfe83da5efd6f487a",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #35 from OmniNexusEdu/claude/romantic-curie-08981d",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.105Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_f0b76a18f1005451adca25f52c61040bbb2f0fdc",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f0b76a18f1005451adca25f52c61040bbb2f0fdc",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "docs: bring CUE business plan into main",
+      "owner": "田家铭",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.105Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_96ce723657d0e78ab823112b815b47dba6ad0989",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_96ce723657d0e78ab823112b815b47dba6ad0989",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #33 from OmniNexusEdu/claude/romantic-curie-08981d",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.105Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_f94049ea2ebffc77ede34ed3e250a9cb6e337c90",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_f94049ea2ebffc77ede34ed3e250a9cb6e337c90",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "rebrand: 项目改名为 Cue.AI，同步 README 与下一阶段计划",
+      "owner": "田家铭",
+      "score": 84,
+      "level": "Warning",
+      "findings": [
+        "涉及认证、支付或权限模块，应提高审阅等级。",
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.105Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_080d3625911de69bfb59b57fce5bb7dd8f4529be",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_080d3625911de69bfb59b57fce5bb7dd8f4529be",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge pull request #32 from OmniNexusEdu/hu",
+      "owner": "田家铭",
+      "score": 100,
+      "level": "Pass",
+      "findings": [
+        "未发现明显阻断问题，可进入人工审阅。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.105Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_a0a8b508b3464d19e28aba7fe56d2797b2a7a20d",
+      "projectId": "cue_ai_classroom",
+      "activityId": "commit_a0a8b508b3464d19e28aba7fe56d2797b2a7a20d",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "Merge remote-tracking branch 'origin/main' into hu",
+      "owner": "胡佳涛",
+      "score": 94,
+      "level": "Warning",
+      "findings": [
+        "提交标题没有明显任务或 ticket 关联。"
+      ],
+      "createdAt": "2026-05-01T14:52:15.105Z",
+      "humanDecision": null
+    },
+    {
+      "id": "review_mon0nnn0_pakcko",
+      "repo": "CUEAITECH/Cue.AI",
+      "title": "feat: task_123 add auth token logging",
+      "owner": "AI Reviewer",
+      "score": 64,
+      "level": "Block",
+      "findings": [
+        "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+        "存在 TODO/FIXME/HACK 标记，建议补齐处理方案。",
+        "包含调试语句，合并前应清理或确认用途。",
+        "涉及认证、支付或权限模块，应提高审阅等级。"
+      ],
+      "createdAt": "2026-05-01T14:36:51.949Z",
+      "humanDecision": null
+    }
+  ],
+  "activities": [
+    {
+      "id": "commit_2401702692478c828acaa4fac025ebd1534c7411",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "fix(ipad): add audio + voip background modes to CueAI.Teacher Info.plist",
+      "sha": "2401702692478c828acaa4fac025ebd1534c7411",
+      "shortSha": "2401702",
+      "branch": "main",
+      "files": [
+        "frontend/iOS-iPad/CueAI.Teacher/CueAI.Teacher/Info.plist"
+      ],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/2401702692478c828acaa4fac025ebd1534c7411",
+      "createdAt": "2026-05-20T02:04:52Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_31102049cd40d4d4631f2dddf343b4663b71fd7c",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "feat(web): add StudentJoinPage with useTRTC hook for student room join",
+      "sha": "31102049cd40d4d4631f2dddf343b4663b71fd7c",
+      "shortSha": "3110204",
+      "branch": "main",
+      "files": [
+        "frontend/web/src/App.jsx",
+        "frontend/web/src/api/classroomApi.js",
+        "frontend/web/src/api/trtcJoinApi.js",
+        "frontend/web/src/hooks/useTRTC.js",
+        "frontend/web/src/pages/Join/StudentJoinPage.jsx",
+        "frontend/web/src/styles/app.css"
+      ],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/31102049cd40d4d4631f2dddf343b4663b71fd7c",
+      "createdAt": "2026-05-19T11:25:16Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_f9ea7251222b9a0bc13a1e9b415e6b47d16af182",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "feat(backend): modularize server.js into layered architecture",
+      "sha": "f9ea7251222b9a0bc13a1e9b415e6b47d16af182",
+      "shortSha": "f9ea725",
+      "branch": "main",
+      "files": [
+        "backend/app.js",
+        "backend/middleware/errorHandler.js",
+        "backend/repositories/courseTemplateRepository.js",
+        "backend/repositories/mongoRepository.js",
+        "backend/repositories/sessionRepository.js",
+        "backend/routes/healthRoutes.js",
+        "backend/routes/index.js",
+        "backend/routes/sessionRoutes.js",
+        "backend/routes/trtcRoutes.js",
+        "backend/server.js",
+        "backend/services/audioService.js",
+        "backend/services/classroomService.js",
+        "backend/services/sessionEventService.js",
+        "backend/services/trtcAsrCallbackService.js",
+        "backend/services/userSigService.js",
+        "backend/services/websocketService.js",
+        "backend/utils/asyncHandler.js",
+        "backend/utils/env.js",
+        "backend/utils/errors.js",
+        "backend/utils/logger.js",
+        "backend/utils/text.js",
+        "backend/utils/upload.js",
+        "docs/backend-server-modularization-inventory.md"
+      ],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/f9ea7251222b9a0bc13a1e9b415e6b47d16af182",
+      "createdAt": "2026-05-19T11:13:26Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_f23a99159a7d4cc276d9f3d3751aba5b1b4e2262",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "Merge feat/iphone-end-classroom into main",
+      "sha": "f23a99159a7d4cc276d9f3d3751aba5b1b4e2262",
+      "shortSha": "f23a991",
+      "branch": "main",
+      "files": [
+        "frontend/iOS-iPad/OmniNexusTeacherInput/OmniNexusTeacherInput/Assets.xcassets/AppIcon.appiconset/cue-app-icon-1024.png",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/Assets.xcassets/AppIcon.appiconset/Contents.json"
+      ],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/f23a99159a7d4cc276d9f3d3751aba5b1b4e2262",
+      "createdAt": "2026-05-19T10:36:39Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_62447265706b2ba70e9234489225de492cc0895f",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "Merge feat/iphone-login-classroom-entry-田家铭 into main",
+      "sha": "62447265706b2ba70e9234489225de492cc0895f",
+      "shortSha": "6244726",
+      "branch": "main",
+      "files": [
+        "docs/pr-assets/task_movlob90_v9aflz/01-login.png",
+        "docs/pr-assets/task_movlob90_v9aflz/02-classroom-list.png",
+        "docs/pr-assets/task_movlob90_v9aflz/03-output-view.png",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/AuthService.swift",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/ClassroomListView.swift",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/ContentView.swift",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/CueAI_StudentApp.swift",
+        "frontend/iOS-iPhone/CueAI.Student/CueAI.Student/SessionListService.swift"
+      ],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/62447265706b2ba70e9234489225de492cc0895f",
+      "createdAt": "2026-05-19T10:35:47Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_da62bfa66ba3eac7406a504eab2d5e403350b662",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "Merge feat/trtc-active-class-view-田家铭 into main",
+      "sha": "da62bfa66ba3eac7406a504eab2d5e403350b662",
+      "shortSha": "da62bfa",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/da62bfa66ba3eac7406a504eab2d5e403350b662",
+      "createdAt": "2026-05-19T10:35:09Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_4b7c5e08565821781a61f192349d5530fb638967",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "Merge pull request #57 from CUEAITECH/refactor/backend-modularize-task_mowpyew7_p90t0k",
+      "sha": "4b7c5e08565821781a61f192349d5530fb638967",
+      "shortSha": "4b7c5e0",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/4b7c5e08565821781a61f192349d5530fb638967",
+      "createdAt": "2026-05-19T10:33:06Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_0cb98121b15f2d7abdb726cecccd9c807e9b356d",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "Merge pull request #68 from CUEAITECH/chore/trtc-env-setup",
+      "sha": "0cb98121b15f2d7abdb726cecccd9c807e9b356d",
+      "shortSha": "0cb9812",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/0cb98121b15f2d7abdb726cecccd9c807e9b356d",
+      "createdAt": "2026-05-19T10:33:01Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_30289416df7f6e5ae132e74299e4d161876634c7",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "fix(ipad): restore left-large/right-small meeting layout; fix tab bar width; fix session prefix",
+      "sha": "30289416df7f6e5ae132e74299e4d161876634c7",
+      "shortSha": "3028941",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/30289416df7f6e5ae132e74299e4d161876634c7",
+      "createdAt": "2026-05-19T10:17:27Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_fe27c64d9f5bea35c86af9ffb1a1691117f07979",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "fix(ipad): explicit self.remoteUsers in closure",
+      "sha": "fe27c64d9f5bea35c86af9ffb1a1691117f07979",
+      "shortSha": "fe27c64",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/fe27c64d9f5bea35c86af9ffb1a1691117f07979",
+      "createdAt": "2026-05-19T10:11:15Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_ee25116969249b09a34473562d3a6148c0f5e4d0",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "feat(ipad): show live remote participants in meeting stage",
+      "sha": "ee25116969249b09a34473562d3a6148c0f5e4d0",
+      "shortSha": "ee25116",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/ee25116969249b09a34473562d3a6148c0f5e4d0",
+      "createdAt": "2026-05-19T10:09:31Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_b19fd9686a8bb30996081fee8ac6a25150322af2",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "feat(ipad): mic volume indicator — glow ring on teacher tile when speaking",
+      "sha": "b19fd9686a8bb30996081fee8ac6a25150322af2",
+      "shortSha": "b19fd96",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/b19fd9686a8bb30996081fee8ac6a25150322af2",
+      "createdAt": "2026-05-19T10:03:30Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_f027671015749c2b4596d77b02b1d2355d85118e",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "fix(ipad): pass roomId param in usersig request — server requires it",
+      "sha": "f027671015749c2b4596d77b02b1d2355d85118e",
+      "shortSha": "f027671",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/f027671015749c2b4596d77b02b1d2355d85118e",
+      "createdAt": "2026-05-19T10:00:09Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_a46d9fbff406b30186f4821d4ef39eb6da165755",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "fix(ipad): implement onError delegate; add flow prints; switch to voiceChatRoom scene",
+      "sha": "a46d9fbff406b30186f4821d4ef39eb6da165755",
+      "shortSha": "a46d9fb",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/a46d9fbff406b30186f4821d4ef39eb6da165755",
+      "createdAt": "2026-05-19T09:50:24Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_c207a18abc9ef557f97fc47a8a0440ec51e5daaa",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "sha": "c207a18abc9ef557f97fc47a8a0440ec51e5daaa",
+      "shortSha": "c207a18",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/c207a18abc9ef557f97fc47a8a0440ec51e5daaa",
+      "createdAt": "2026-05-19T09:45:17Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_82a67c946012202ae9acdedbccdd4e2dd0044afc",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "fix(ipad): support strRoomId for session-string room IDs; show TRTC error in meeting tab",
+      "sha": "82a67c946012202ae9acdedbccdd4e2dd0044afc",
+      "shortSha": "82a67c9",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/82a67c946012202ae9acdedbccdd4e2dd0044afc",
+      "createdAt": "2026-05-19T09:44:51Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_572ce0852f32a1a6eab32a356e8ec1e99988896d",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "refactor(ios): rename apps to CueAI Teacher and Student task_mp87kstg_j9jm4f",
+      "sha": "572ce0852f32a1a6eab32a356e8ec1e99988896d",
+      "shortSha": "572ce08",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/572ce0852f32a1a6eab32a356e8ec1e99988896d",
+      "createdAt": "2026-05-18T16:48:33Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_bd3c2acaa6f92d085707e67398369b85fa65be46",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "Dirtor",
+      "owner": "田家铭",
+      "title": "feat(ipad): add meeting-style active class shell task_mp87kstg_j9jm4f",
+      "sha": "bd3c2acaa6f92d085707e67398369b85fa65be46",
+      "shortSha": "bd3c2ac",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/bd3c2acaa6f92d085707e67398369b85fa65be46",
+      "createdAt": "2026-05-18T16:30:19Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_8270aabc27b236837ba6520eb80d98ae71192239",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "hjttu",
+      "owner": "胡佳涛",
+      "title": "Merge pull request #69 from CUEAITECH/feat/task_mp256s4v_n5jjkd-sse-sop-display",
+      "sha": "8270aabc27b236837ba6520eb80d98ae71192239",
+      "shortSha": "8270aab",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/8270aabc27b236837ba6520eb80d98ae71192239",
+      "createdAt": "2026-05-18T14:53:52Z",
+      "taskId": null,
+      "deliverableId": null
+    },
+    {
+      "id": "commit_307bb7b0b0e43ec94f43d87c9a7b45fd55627cc2",
+      "type": "commit",
+      "projectId": "cue_ai_classroom",
+      "repo": "CUEAITECH/Cue.AI",
+      "actor": "hjttu",
+      "owner": "胡佳涛",
+      "title": "feat(classroom): [task_mp256s4v_n5jjkd] show ASR-driven SOP node updates via SSE",
+      "sha": "307bb7b0b0e43ec94f43d87c9a7b45fd55627cc2",
+      "shortSha": "307bb7b",
+      "branch": "main",
+      "files": [],
+      "url": "https://github.com/CUEAITECH/Cue.AI/commit/307bb7b0b0e43ec94f43d87c9a7b45fd55627cc2",
+      "createdAt": "2026-05-18T14:50:57Z",
+      "taskId": null,
+      "deliverableId": null
+    }
+  ],
+  "standups": [
+    {
+      "id": "standup_mooejjmq_ks1a2p",
+      "date": "2026-05-02",
+      "owner": "胡佳涛",
+      "yesterday": "完成本地 Git 同步验证",
+      "today": "补晚会报告接口",
+      "blockers": "无",
+      "isLeave": false,
+      "proxy": "",
+      "createdAt": "2026-05-02T13:53:20.930Z",
+      "updatedAt": "2026-05-02T13:53:20.930Z"
+    }
+  ],
+  "assignments": [
+    {
+      "id": "assign_mooejjm1_fveac4",
+      "date": "2026-05-02",
+      "owner": "林世棋",
+      "taskId": "task_standup",
+      "taskTitle": "异步站会与请假登记",
+      "note": "晚会领取：完成站会和请假登记 MVP",
+      "status": "进行中",
+      "wecomStatus": "待企业微信确认",
+      "createdAt": "2026-05-02T13:53:20.905Z",
+      "updatedAt": "2026-05-02T13:53:20.905Z",
+      "deliverableId": null,
+      "projectId": "cue_ai_classroom"
+    }
+  ],
+  "attendanceRecords": [],
+  "alerts": [
+    {
+      "id": "alert_due_task_git_webhook",
+      "severity": "P1",
+      "target": "胡佳涛",
+      "title": "任务「GitHub commit / push 抓取」已到期但未完成",
+      "detail": "当前进度 72%，需要更新进展、拆分任务或标记阻塞。",
+      "source": "task_git_webhook"
+    },
+    {
+      "id": "alert_idle_task_git_webhook",
+      "severity": "P2",
+      "target": "胡佳涛",
+      "title": "任务「GitHub commit / push 抓取」超过 24 小时无更新",
+      "detail": "今日 3 次 commit，PR 已创建",
+      "source": "task_git_webhook"
+    },
+    {
+      "id": "alert_due_task_ai_review",
+      "severity": "P1",
+      "target": "罗子宽",
+      "title": "任务「AI Review 规则与阻断等级」已到期但未完成",
+      "detail": "当前进度 28%，需要更新进展、拆分任务或标记阻塞。",
+      "source": "task_ai_review"
+    },
+    {
+      "id": "alert_idle_task_ai_review",
+      "severity": "P2",
+      "target": "罗子宽",
+      "title": "任务「AI Review 规则与阻断等级」超过 24 小时无更新",
+      "detail": "缺少测试覆盖规则，需要补验收标准",
+      "source": "task_ai_review"
+    },
+    {
+      "id": "alert_no_git_task_ai_review",
+      "severity": "P3",
+      "target": "罗子宽",
+      "title": "任务「AI Review 规则与阻断等级」没有关联 Git 信号",
+      "detail": "请关联 commit、branch 或 PR，避免进度不可验证。",
+      "source": "task_ai_review"
+    },
+    {
+      "id": "alert_due_task_standup",
+      "severity": "P1",
+      "target": "林世棋",
+      "title": "任务「异步站会与请假登记」已到期但未完成",
+      "detail": "当前进度 12%，需要更新进展、拆分任务或标记阻塞。",
+      "source": "task_standup"
+    },
+    {
+      "id": "alert_idle_task_standup",
+      "severity": "P2",
+      "target": "林世棋",
+      "title": "任务「异步站会与请假登记」超过 24 小时无更新",
+      "detail": "晚会对账：昨日领取任务无提交支撑，需拆分、转派或标记阻塞",
+      "source": "task_standup"
+    },
+    {
+      "id": "alert_no_git_task_standup",
+      "severity": "P3",
+      "target": "林世棋",
+      "title": "任务「异步站会与请假登记」没有关联 Git 信号",
+      "detail": "请关联 commit、branch 或 PR，避免进度不可验证。",
+      "source": "task_standup"
+    },
+    {
+      "id": "alert_due_task_auto_planning",
+      "severity": "P1",
+      "target": "田家铭",
+      "title": "任务「阶段目标自动派单」已到期但未完成",
+      "detail": "当前进度 44%，需要更新进展、拆分任务或标记阻塞。",
+      "source": "task_auto_planning"
+    },
+    {
+      "id": "alert_idle_task_auto_planning",
+      "severity": "P2",
+      "target": "田家铭",
+      "title": "任务「阶段目标自动派单」超过 24 小时无更新",
+      "detail": "已生成 7 个候选任务，等待负责人确认",
+      "source": "task_auto_planning"
+    },
+    {
+      "id": "alert_review_review_1f841ec1425d47a926e573033e9ea58f13d011eb",
+      "severity": "P1",
+      "target": "罗子宽",
+      "title": "AI Review 阻断：feat: add usersig endpoint [task_mopyri4q_5t992t]",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；涉及认证、支付或权限模块，应提高审阅等级。；单次变更偏大，建议确认是否可以拆分。",
+      "source": "review_1f841ec1425d47a926e573033e9ea58f13d011eb"
+    },
+    {
+      "id": "alert_review_review_cc388c99b63bbdb01f26d0a7131e820609eb1964",
+      "severity": "P1",
+      "target": "胡佳涛",
+      "title": "AI Review 阻断：Merge pull request #42 from CUEAITECH/feat/session-start-trtc-asr-bot",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+      "source": "review_cc388c99b63bbdb01f26d0a7131e820609eb1964"
+    },
+    {
+      "id": "alert_review_review_6ef38d7d694840be0a76ed914d0a60f922fdcb1f",
+      "severity": "P1",
+      "target": "胡佳涛",
+      "title": "AI Review 阻断：feat(session): start TRTC AI ASR bot on session creation [task_mopyri4q_7vkmsa]",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。",
+      "source": "review_6ef38d7d694840be0a76ed914d0a60f922fdcb1f"
+    },
+    {
+      "id": "alert_review_review_4a1822ce299388499addd1e5bf927391f4447a26",
+      "severity": "P1",
+      "target": "胡佳涛",
+      "title": "AI Review 阻断：Merge pull request #39 from CUEAITECH/feat/session-end-stop-asr",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；涉及认证、支付或权限模块，应提高审阅等级。",
+      "source": "review_4a1822ce299388499addd1e5bf927391f4447a26"
+    },
+    {
+      "id": "alert_review_review_63d70f0a0ffe17fe251a699f9d932ebd38ec46cc",
+      "severity": "P1",
+      "target": "胡佳涛",
+      "title": "AI Review 阻断：P2 security: gate demo auth credentials behind env flags  本次提交针对 AI Review 对认证、token、凭据相关代码的阻断进行安全边界收敛。主要移除前后端中硬编码的 demo",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；涉及认证、支付或权限模块，应提高审阅等级。；提交标题没有明显任务或 ticket 关联。",
+      "source": "review_63d70f0a0ffe17fe251a699f9d932ebd38ec46cc"
+    },
+    {
+      "id": "alert_review_review_7d5a1656fe4792c52fccc5d8a85abaf6122b31a2",
+      "severity": "P1",
+      "target": "胡佳涛",
+      "title": "AI Review 阻断：Merge remote-tracking branch 'origin/main' into hu",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；变更超过 40 行但没有明显测试文件或测试说明。；提交标题没有明显任务或 ticket 关联。",
+      "source": "review_7d5a1656fe4792c52fccc5d8a85abaf6122b31a2"
+    },
+    {
+      "id": "alert_review_review_f87129586baccbc1bb7e50da4b7fdc16f56883f8",
+      "severity": "P1",
+      "target": "胡佳涛",
+      "title": "AI Review 阻断：P2 security: gate demo auth credentials behind env flags",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；涉及认证、支付或权限模块，应提高审阅等级。；提交标题没有明显任务或 ticket 关联。",
+      "source": "review_f87129586baccbc1bb7e50da4b7fdc16f56883f8"
+    },
+    {
+      "id": "alert_review_review_1e34492872ccf7d6dcba0039320825079d2b7c62",
+      "severity": "P1",
+      "target": "田家铭",
+      "title": "AI Review 阻断：docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；变更超过 40 行但没有明显测试文件或测试说明。；提交标题没有明显任务或 ticket 关联。",
+      "source": "review_1e34492872ccf7d6dcba0039320825079d2b7c62"
+    },
+    {
+      "id": "alert_review_review_mon63o76_lr2wzs",
+      "severity": "P1",
+      "target": "AI Reviewer",
+      "title": "AI Review 阻断：feat: task_123 add webhook signature check",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；存在 TODO/FIXME/HACK 标记，建议补齐处理方案。；包含调试语句，合并前应清理或确认用途。",
+      "source": "review_mon63o76_lr2wzs"
+    },
+    {
+      "id": "alert_review_review_efada35292cd963d30c38e0fdf32453a65b488e7",
+      "severity": "P1",
+      "target": "胡佳涛",
+      "title": "AI Review 阻断：重做个人中心登录/注册/已登录态，新增前端校验、密码显示/隐藏、密码强度、demo 快捷登录、刷新登录状态、重复账号自动切到登录。",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；涉及认证、支付或权限模块，应提高审阅等级。；单次变更超过 500 行，建议拆分 PR 降低审阅风险。；提交标题没有明显任务或 ticket 关联。",
+      "source": "review_efada35292cd963d30c38e0fdf32453a65b488e7"
+    },
+    {
+      "id": "alert_review_review_mon0nnn0_pakcko",
+      "severity": "P1",
+      "target": "AI Reviewer",
+      "title": "AI Review 阻断：feat: task_123 add auth token logging",
+      "detail": "涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；存在 TODO/FIXME/HACK 标记，建议补齐处理方案。；包含调试语句，合并前应清理或确认用途。；涉及认证、支付或权限模块，应提高审阅等级。",
+      "source": "review_mon0nnn0_pakcko"
+    }
+  ],
+  "projects": [
+    {
+      "id": "cue_ai_classroom",
+      "name": "Cue.AI",
+      "repository": "Cue.AI",
+      "localPath": "",
+      "branch": "main",
+      "status": "已同步 (GitHub)",
+      "lastSyncAt": "2026-05-20T02:22:09.698Z",
+      "summary": "Cue.AI 主仓库，作为项目中枢的真实研发交付试点项目。",
+      "commitCount": 20,
+      "dirtyFileCount": 0,
+      "githubOwner": "CUEAITECH",
+      "githubFullRepo": "CUEAITECH/Cue.AI",
+      "founderId": "user_project_admin"
+    }
+  ],
+  "eveningReports": {
+    "2026-05-02": {
+      "id": "evening_2026-05-02",
+      "date": "2026-05-02",
+      "generatedAt": "2026-05-02T14:19:15.942Z",
+      "window": {
+        "from": "2026-05-01T18:00:00+08:00",
+        "to": "2026-05-02T18:00:00+08:00"
+      },
+      "summary": {
+        "assignmentCount": 1,
+        "commitCount": 0,
+        "blockReviewCount": 4,
+        "noCommitAssignmentCount": 1,
+        "nextTargetCount": 3,
+        "stageProgress": 39
+      },
+      "reconciliation": [
+        {
+          "assignmentId": "assign_mooejjm1_fveac4",
+          "owner": "林世棋",
+          "taskId": "task_standup",
+          "taskTitle": "异步站会与请假登记",
+          "result": "无提交支撑",
+          "commitCount": 0,
+          "completed": false
+        }
+      ],
+      "nextTargets": [
+        {
+          "owner": "林世棋",
+          "taskId": "task_standup",
+          "taskTitle": "异步站会与请假登记",
+          "due": "2026-05-03",
+          "priority": "P1",
+          "reason": "昨日领取任务缺少提交支撑，需要拆小或转派。"
+        },
+        {
+          "owner": "罗子宽",
+          "taskId": "task_ai_review",
+          "taskTitle": "AI Review 规则与阻断等级",
+          "due": "2026-05-04",
+          "priority": "P2",
+          "reason": "进度低于 60%，建议补充 Git 关联和验收标准。"
+        },
+        {
+          "owner": "田家铭",
+          "taskId": "task_auto_planning",
+          "taskTitle": "阶段目标自动派单",
+          "due": "2026-05-05",
+          "priority": "P2",
+          "reason": "进度低于 60%，建议补充 Git 关联和验收标准。"
+        }
+      ],
+      "report": "# CUE 项目中枢晚会作战包 · 2026-05-02\n\n时间窗口：2026-05-01 18:00 - 2026-05-02 18:00\n\n当前阶段：CUE 项目中枢 MVP · 进度 39%\n\n## 1. 前一天任务领取复盘\n\n| 成员 | 领取任务 | 完成判断 | Git 支撑 | 晚会处理 |\n| --- | --- | --- | --- | --- |\n| 林世棋 | 异步站会与请假登记 | 无提交支撑 | 无 | 拆分/转派/标记阻塞 |\n\n## 2. 今日提交汇总\n\n> 暂无记录。\n\n未关联任务提交：0 条。\n\n## 3. AI Review 风险\n\nBlock：4 条；Warning：8 条。\n\n| 负责人 | 变更 | 主要问题 |\n| --- | --- | --- |\n| AI Reviewer | feat: task_123 add webhook signature check | 涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；存在 TODO/FIXME/HACK 标记，建议补齐处理方案。 |\n| 胡佳涛 | 重做个人中心登录/注册/已登录态，新增前端校验、密码显示/隐藏、密码强度、demo 快捷登录、刷新登录状态、重复账号自动切到登录。 | 涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；涉及认证、支付或权限模块，应提高审阅等级。 |\n| AI Reviewer | feat: task_123 add auth token logging | 涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；存在 TODO/FIXME/HACK 标记，建议补齐处理方案。 |\n| 林世棋 | chore: update auth flow styles | 任务关联不明确；修改范围包含无关认证逻辑 |\n\n## 4. 未完成任务与调整建议\n\n| 负责人 | 细化目标 | 优先级 | 建议 |\n| --- | --- | --- | --- |\n| 林世棋 | 异步站会与请假登记 | P1 | 昨日领取任务缺少提交支撑，需要拆小或转派。 |\n| 罗子宽 | AI Review 规则与阻断等级 | P2 | 进度低于 60%，建议补充 Git 关联和验收标准。 |\n| 田家铭 | 阶段目标自动派单 | P2 | 进度低于 60%，建议补充 Git 关联和验收标准。 |\n\n## 5. 晚会动作\n\n1. 逐条确认无提交支撑的领取任务：继续、拆分、转派或关闭。\n2. Block Review 必须明确处理人和下次检查时间。\n3. 晚会确认后的任务在企业微信领取，并回写到项目中枢。\n4. 明天 18:00 前继续按 Git 信号和 Review 结果自动对账。\n",
+      "wecomSent": false
+    },
+    "2026-05-03": {
+      "report": "# 2026-05-03 研发晚报\n\n今日提交：1 条\n分工领取：0 条\n\n（LLM 生成失败，显示基础数据）",
+      "generatedAt": "2026-05-03T10:00:35.633Z",
+      "commits": [
+        {
+          "id": "commit_f8bc1bf05711db659b5098b4056ae3cb4a99a043",
+          "type": "commit",
+          "projectId": "cue_ai_classroom",
+          "repo": "CUEAITECH/Cue.AI",
+          "actor": "ryanlzk",
+          "owner": "罗子宽",
+          "title": "更新一键登录，更新团队介绍",
+          "sha": "f8bc1bf05711db659b5098b4056ae3cb4a99a043",
+          "shortSha": "f8bc1bf",
+          "branch": "main",
+          "files": [
+            "frontend/web/src/App.jsx",
+            "frontend/web/src/components/AppHeader.jsx",
+            "frontend/web/src/components/Homepage.jsx",
+            "frontend/web/src/components/TeamPage.jsx",
+            "frontend/web/src/components/teamData.js",
+            "frontend/web/src/styles/app.css"
+          ],
+          "url": "https://github.com/CUEAITECH/Cue.AI/commit/f8bc1bf05711db659b5098b4056ae3cb4a99a043",
+          "createdAt": "2026-05-03T08:31:34Z"
+        }
+      ],
+      "assignments": []
+    },
+    "2026-05-06": {
+      "id": "evening_2026-05-06",
+      "date": "2026-05-06",
+      "generatedAt": "2026-05-06T09:45:54.448Z",
+      "window": {
+        "from": "2026-05-05T18:00:00+08:00",
+        "to": "2026-05-06T09:45:54.430Z"
+      },
+      "summary": {
+        "assignmentCount": 0,
+        "commitCount": 4,
+        "blockReviewCount": 4,
+        "noCommitAssignmentCount": 0,
+        "nextTargetCount": 3,
+        "stageProgress": 39
+      },
+      "reconciliation": [],
+      "nextTargets": [
+        {
+          "owner": "罗子宽",
+          "taskId": "task_ai_review",
+          "taskTitle": "AI Review 规则与阻断等级",
+          "due": "2026-05-04",
+          "priority": "P2",
+          "reason": "进度低于 60%，建议补充 Git 关联和验收标准。"
+        },
+        {
+          "owner": "林世棋",
+          "taskId": "task_standup",
+          "taskTitle": "异步站会与请假登记",
+          "due": "2026-05-01",
+          "priority": "P1",
+          "reason": "当前标记为高风险，晚会需要明确阻塞和负责人。"
+        },
+        {
+          "owner": "田家铭",
+          "taskId": "task_auto_planning",
+          "taskTitle": "阶段目标自动派单",
+          "due": "2026-05-05",
+          "priority": "P2",
+          "reason": "进度低于 60%，建议补充 Git 关联和验收标准。"
+        }
+      ],
+      "report": "# CUE 项目中枢晚会作战包 · 2026-05-06\n\n时间窗口：2026-05-05 18:00 - 05-06 17:45\n\n当前阶段：Cue.AI 双设备课堂 MVP / TRTC 联调阶段 · 进度 39%\n\n## 1. 前一天任务领取复盘\n\n> 暂无记录。\n\n## 2. 今日提交汇总\n\n| 成员 | 提交数 | 代表提交 |\n| --- | --- | --- |\n| 罗子宽 | 1 | 1f841ec |\n| 胡佳涛 | 3 | cc388c9、6ef38d7、10d91e1 |\n\n未关联任务提交：0 条。\n\n## 3. AI Review 风险\n\nBlock：4 条；Warning：4 条。\n\n| 负责人 | 变更 | 主要问题 |\n| --- | --- | --- |\n| 罗子宽 | feat: add usersig endpoint [task_mopyri4q_5t992t] | 涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；涉及认证、支付或权限模块，应提高审阅等级。 |\n| 胡佳涛 | Merge pull request #42 from CUEAITECH/feat/session-start-trtc-asr-bot | 涉及凭据、token 或密钥相关代码，需要人工复查安全边界。 |\n| 胡佳涛 | feat(session): start TRTC AI ASR bot on session creation [task_mopyri4q_7vkmsa] | 涉及凭据、token 或密钥相关代码，需要人工复查安全边界。 |\n| 胡佳涛 | Merge pull request #39 from CUEAITECH/feat/session-end-stop-asr | 涉及凭据、token 或密钥相关代码，需要人工复查安全边界。；涉及认证、支付或权限模块，应提高审阅等级。 |\n\n## 4. 未完成任务与调整建议\n\n| 负责人 | 细化目标 | 优先级 | 建议 |\n| --- | --- | --- | --- |\n| 罗子宽 | AI Review 规则与阻断等级 | P2 | 进度低于 60%，建议补充 Git 关联和验收标准。 |\n| 林世棋 | 异步站会与请假登记 | P1 | 当前标记为高风险，晚会需要明确阻塞和负责人。 |\n| 田家铭 | 阶段目标自动派单 | P2 | 进度低于 60%，建议补充 Git 关联和验收标准。 |\n\n## 5. 晚会动作\n\n1. 逐条确认无提交支撑的领取任务：继续、拆分、转派或关闭。\n2. Block Review 必须明确处理人和下次检查时间。\n3. 晚会确认后的任务在企业微信领取，并回写到项目中枢。\n4. 明天 18:00 前继续按 Git 信号和 Review 结果自动对账。\n",
+      "commits": [
+        {
+          "id": "commit_1f841ec1425d47a926e573033e9ea58f13d011eb",
+          "type": "commit",
+          "projectId": "cue_ai_classroom",
+          "repo": "CUEAITECH/Cue.AI",
+          "actor": "ryanlzk",
+          "owner": "罗子宽",
+          "title": "feat: add usersig endpoint [task_mopyri4q_5t992t]",
+          "sha": "1f841ec1425d47a926e573033e9ea58f13d011eb",
+          "shortSha": "1f841ec",
+          "branch": "main",
+          "files": [
+            "backend/.env.example",
+            "backend/readme.md",
+            "backend/server.js",
+            "backend/server.test.js",
+            "backend/trtcService.js",
+            "backend/utils/trtcUserSig.js",
+            "backend/utils/trtcUserSig.test.js",
+            "docs/第二阶段开发计划-TRTC.md"
+          ],
+          "url": "https://github.com/CUEAITECH/Cue.AI/commit/1f841ec1425d47a926e573033e9ea58f13d011eb",
+          "createdAt": "2026-05-06T08:32:21Z"
+        },
+        {
+          "id": "commit_cc388c99b63bbdb01f26d0a7131e820609eb1964",
+          "type": "commit",
+          "projectId": "cue_ai_classroom",
+          "repo": "CUEAITECH/Cue.AI",
+          "actor": "hjttu",
+          "owner": "胡佳涛",
+          "title": "Merge pull request #42 from CUEAITECH/feat/session-start-trtc-asr-bot",
+          "sha": "cc388c99b63bbdb01f26d0a7131e820609eb1964",
+          "shortSha": "cc388c9",
+          "branch": "main",
+          "files": [
+            "README.md",
+            "backend/.env.example",
+            "backend/models/session.js",
+            "backend/readme.md",
+            "backend/server.js",
+            "backend/server.test.js",
+            "backend/services/asrBot.js",
+            "backend/trtcService.js"
+          ],
+          "url": "https://github.com/CUEAITECH/Cue.AI/commit/cc388c99b63bbdb01f26d0a7131e820609eb1964",
+          "createdAt": "2026-05-06T08:03:44Z"
+        },
+        {
+          "id": "commit_6ef38d7d694840be0a76ed914d0a60f922fdcb1f",
+          "type": "commit",
+          "projectId": "cue_ai_classroom",
+          "repo": "CUEAITECH/Cue.AI",
+          "actor": "hjttu",
+          "owner": "胡佳涛",
+          "title": "feat(session): start TRTC AI ASR bot on session creation [task_mopyri4q_7vkmsa]",
+          "sha": "6ef38d7d694840be0a76ed914d0a60f922fdcb1f",
+          "shortSha": "6ef38d7",
+          "branch": "main",
+          "files": [
+            "README.md",
+            "backend/.env.example",
+            "backend/models/session.js",
+            "backend/readme.md",
+            "backend/server.js",
+            "backend/server.test.js",
+            "backend/services/asrBot.js",
+            "backend/trtcService.js"
+          ],
+          "url": "https://github.com/CUEAITECH/Cue.AI/commit/6ef38d7d694840be0a76ed914d0a60f922fdcb1f",
+          "createdAt": "2026-05-06T08:00:34Z"
+        },
+        {
+          "id": "commit_10d91e17c265d8fe3e8970b3cb0784d10e4bce2e",
+          "type": "commit",
+          "projectId": "cue_ai_classroom",
+          "repo": "CUEAITECH/Cue.AI",
+          "actor": "hjttu",
+          "owner": "胡佳涛",
+          "title": "Merge pull request #41 from CUEAITECH/feat/task_mopyri4q_02mauc",
+          "sha": "10d91e17c265d8fe3e8970b3cb0784d10e4bce2e",
+          "shortSha": "10d91e1",
+          "branch": "main",
+          "files": [
+            "backend/server.js",
+            "backend/server.test.js",
+            "docs/第二阶段开发计划-TRTC.md"
+          ],
+          "url": "https://github.com/CUEAITECH/Cue.AI/commit/10d91e17c265d8fe3e8970b3cb0784d10e4bce2e",
+          "createdAt": "2026-05-05T16:34:47Z"
+        }
+      ],
+      "assignments": []
+    }
+  },
+  "reports": {},
+  "planAdjustments": [
+    {
+      "id": "adjust_mpdfs09o_9hlje9",
+      "date": "2026-05-20",
+      "trigger": "fix(ipad): add audio + voip background modes to CueAI.Teacher Info.plist; feat(web): add StudentJoinPage with useTRTC hook for student room join; feat(backend): modularize server.js into layered architecture; Merge feat/iphone-end-classroom into main; Merge feat/iphone-login-classroom-entry-田家铭 into main; Merge feat/trtc-active-class-view-田家铭 into main; Merge pull request #57 from CUEAITECH/refactor/backend-modularize-task_mowpyew7_p90t0k; Merge pull request #68 from CUEAITECH/chore/trtc-env-setup; fix(ipad): restore left-large/right-small meeting layout; fix tab bar width; fix session prefix; fix(ipad): explicit self.remoteUsers in closure; feat(ipad): show live remote participants in meeting stage; feat(ipad): mic volume indicator — glow ring on teacher tile when speaking; fix(ipad): pass roomId param in usersig request — server requires it; fix(ipad): implement onError delegate; add flow prints; switch to voiceChatRoom scene; docs: 更新阶段进度追踪 [CUE Hub AI PM]; fix(ipad): support strRoomId for session-string room IDs; show TRTC error in meeting tab; refactor(ios): rename apps to CueAI Teacher and Student task_mp87kstg_j9jm4f; feat(ipad): add meeting-style active class shell task_mp87kstg_j9jm4f",
+      "triggerCount": 18,
+      "source": "github-sync",
+      "scope": "progress",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "同步 commit 进度信号",
+      "suggestion": "",
+      "impact": "只更新任务进度信号和 commit 证据。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调",
+        "progressDelta": 8
+      },
+      "costReason": "本轮 18 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-20T02:22:09.756Z",
+      "createdAt": "2026-05-20T02:22:09.756Z"
+    },
+    {
+      "id": "adjust_mpcerrwt_p9r7a8",
+      "date": "2026-05-19",
+      "trigger": "Merge pull request #69 from CUEAITECH/feat/task_mp256s4v_n5jjkd-sse-sop-display; feat(classroom): [task_mp256s4v_n5jjkd] show ASR-driven SOP node updates via SSE; docs: add CLAUDE.md with architecture, commands, and dev skill guide; fix: validate usersig room binding; Merge pull request #60 from CUEAITECH/feat/session-management",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-19T09:06:13.134Z",
+      "createdAt": "2026-05-19T09:06:13.134Z"
+    },
+    {
+      "id": "adjust_mpa44cd6_b1nqzv",
+      "date": "2026-05-18",
+      "trigger": "Merge pull request #66 from CUEAITECH/feat/classroom-concept-unification; feat(classroom): 统一课堂参与端概念，移除输入端/输出端表述 [task_mp256s4w_073460]; feat(student-web): task_mp256s4w_5wtaj5 接入 trtc-sdk-v5 完成进房与麦克风开启; Merge remote-tracking branch 'cue/main' into feat/classroom-concept-unification; feat(student-web): task_mp256s4w_5wtaj5 接入 trtc-sdk-v5 完成进房与麦克风开启; Merge pull request #64 from CUEAITECH/claude/keen-edison-e00532; feat(backend): session GC — auto-end idle sessions and evict ended ones; Merge remote-tracking branch 'cue/main' into feat/task_mowpyew7_w3myk8-core-apis; feat(ui): [task_mp256s4w_157usd] 统一课堂参与端文案，移除输入端/输出端表述。; Merge pull request #63 from CUEAITECH/feat/session-management; fix(web): disable automatic reconnect on student join; Merge remote-tracking branch 'cue/main' into feat/task_mowpyew7_w3myk8-core-apis; Merge pull request #62 from CUEAITECH/feat/session-management; fix(web): keep /join in student classroom mode; feat(web): 学生 Web 端 TRTC 进房页开发",
+      "triggerCount": 15,
+      "source": "github-sync",
+      "scope": "progress",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "同步 commit 进度信号",
+      "suggestion": "",
+      "impact": "只更新任务进度信号和 commit 证据。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调",
+        "progressDelta": 8
+      },
+      "costReason": "本轮 15 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-17T18:32:31.386Z",
+      "createdAt": "2026-05-17T18:32:31.386Z"
+    },
+    {
+      "id": "adjust_mp3hjktq_p7xa06",
+      "date": "2026-05-13",
+      "trigger": "Merge pull request #60 from CUEAITECH/feat/session-management; feat(session): add lifecycle management task_mp1mms8p_t4jrlf; fix(railway): pin npm package manager version [task_mp21nid6_lfowf9]; fix(railway): declare node runtime for build [task_mp21nid6_lfowf9]",
+      "triggerCount": 4,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 4 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 4 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-13T03:13:53.966Z",
+      "createdAt": "2026-05-13T03:13:53.966Z"
+    },
+    {
+      "id": "adjust_mp25hiie_4mr4q9",
+      "date": "2026-05-12",
+      "trigger": "docs: align project direction and planning; Merge pull request #58 from CUEAITECH/feat/task_mowpyew7_w3myk8-core-apis; docs: 更新阶段进度追踪 [CUE Hub AI PM]; feat(api): [task_mowpyew7_w3myk8] implement core session APIs; docs: 更新阶段进度追踪 [CUE Hub AI PM]; docs: 更新阶段进度追踪 [CUE Hub AI PM]; [task_movlxbho_bgmdj3] feat(iPhone): SOP 节点进度展示 - 三态 UI 完成 (#56); Merge branch 'main' of https://github.com/CUEAITECH/Cue.AI; feat(iphone): two-tab classroom UI — meeting + AI copilot pages (#55); docs: restore original template style, sync progress to actual commits; docs: sync progress tracking and phase-2 plan with actual commit history; docs: update README to reflect current state and AI-native platform direction; Merge pull request #50 from CUEAITECH/feature/iphone-login-classroom-entry; [task_movlxbho_xtdgbt] fix: replace .tertiary Color with UIColor.tertiaryLabel; [task_movlxbho_xtdgbt] add iPhone login, classroom list, and output entry navigation; fix(ci): expand DEPLOY_PATH in SSH deploy command; Merge pull request #49 from CUEAITECH/fix/security-env-credentials; ci: add ECS SSH auto-deploy job to CI/CD workflow; Merge pull request #48 from CUEAITECH/codex/integrate-trtc-latest; fix(security): move CI credentials to secrets [task_moueaa7k_it0hp6]",
+      "triggerCount": 20,
+      "source": "github-sync",
+      "scope": "progress",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "同步 commit 进度信号",
+      "suggestion": "",
+      "impact": "只更新任务进度信号和 commit 证据。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调",
+        "progressDelta": 8
+      },
+      "costReason": "本轮 20 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-12T04:48:36.086Z",
+      "createdAt": "2026-05-12T04:48:36.086Z"
+    },
+    {
+      "id": "adjust_movahhib_hnu0wz",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #41 from CUEAITECH/feat/task_mopyri4q_02mauc; feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T09:34:09.635Z",
+      "createdAt": "2026-05-07T09:34:09.635Z"
+    },
+    {
+      "id": "adjust_mova4nqr_3lr8px",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #41 from CUEAITECH/feat/task_mopyri4q_02mauc; feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T09:24:11.187Z",
+      "createdAt": "2026-05-07T09:24:11.187Z"
+    },
+    {
+      "id": "adjust_mov91zf0_3sqkqg",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #41 from CUEAITECH/feat/task_mopyri4q_02mauc; feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T08:54:06.732Z",
+      "createdAt": "2026-05-07T08:54:06.732Z"
+    },
+    {
+      "id": "adjust_mov8p2d2_9flfmt",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #41 from CUEAITECH/feat/task_mopyri4q_02mauc; feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T08:44:04.022Z",
+      "createdAt": "2026-05-07T08:44:04.022Z"
+    },
+    {
+      "id": "adjust_mov8cc4j_32knyr",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #41 from CUEAITECH/feat/task_mopyri4q_02mauc; feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T08:34:10.147Z",
+      "createdAt": "2026-05-07T08:34:10.147Z"
+    },
+    {
+      "id": "adjust_mov7zc7j_ef1enf",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #41 from CUEAITECH/feat/task_mopyri4q_02mauc; feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T08:24:03.727Z",
+      "createdAt": "2026-05-07T08:24:03.727Z"
+    },
+    {
+      "id": "adjust_mov7mf5n_v6zxgz",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #41 from CUEAITECH/feat/task_mopyri4q_02mauc; feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T08:14:01.019Z",
+      "createdAt": "2026-05-07T08:14:01.019Z"
+    },
+    {
+      "id": "adjust_mov79iqg_g8jp6j",
+      "date": "2026-05-07",
+      "trigger": "docs: 更新阶段进度追踪 [CUE Hub AI PM]; feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "progress",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "同步 commit 进度信号",
+      "suggestion": "",
+      "impact": "只更新任务进度信号和 commit 证据。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调",
+        "progressDelta": 8
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T08:03:59.129Z",
+      "createdAt": "2026-05-07T08:03:59.129Z"
+    },
+    {
+      "id": "adjust_mov6wo4j_ewvhuj",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T07:53:59.587Z",
+      "createdAt": "2026-05-07T07:53:59.587Z"
+    },
+    {
+      "id": "adjust_mov6jt5n_ous6gi",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T07:43:59.580Z",
+      "createdAt": "2026-05-07T07:43:59.580Z"
+    },
+    {
+      "id": "adjust_mov6705p_osxlyj",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T07:34:02.125Z",
+      "createdAt": "2026-05-07T07:34:02.125Z"
+    },
+    {
+      "id": "adjust_mov5u3sa_na2gvr",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T07:24:00.298Z",
+      "createdAt": "2026-05-07T07:24:00.298Z"
+    },
+    {
+      "id": "adjust_mov5h99q_qzwip0",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T07:14:00.878Z",
+      "createdAt": "2026-05-07T07:14:00.878Z"
+    },
+    {
+      "id": "adjust_mov54emr_dco7jo",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T07:04:01.299Z",
+      "createdAt": "2026-05-07T07:04:01.299Z"
+    },
+    {
+      "id": "adjust_mov4rjbc_sszbg2",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T06:54:00.840Z",
+      "createdAt": "2026-05-07T06:54:00.840Z"
+    },
+    {
+      "id": "adjust_mov4eozm_84lvkp",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T06:44:01.666Z",
+      "createdAt": "2026-05-07T06:44:01.666Z"
+    },
+    {
+      "id": "adjust_mov41u1t_q7v3yc",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T06:34:01.697Z",
+      "createdAt": "2026-05-07T06:34:01.697Z"
+    },
+    {
+      "id": "adjust_mov3oz8y_sq7p7c",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T06:24:01.906Z",
+      "createdAt": "2026-05-07T06:24:01.906Z"
+    },
+    {
+      "id": "adjust_mov3c40u_2ffhro",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T06:14:01.566Z",
+      "createdAt": "2026-05-07T06:14:01.566Z"
+    },
+    {
+      "id": "adjust_mov2z9k1_k7aioe",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T06:04:02.209Z",
+      "createdAt": "2026-05-07T06:04:02.209Z"
+    },
+    {
+      "id": "adjust_mov2mfcv_a3omgo",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T05:54:03.200Z",
+      "createdAt": "2026-05-07T05:54:03.200Z"
+    },
+    {
+      "id": "adjust_mov29ioa_37qqgt",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T05:44:00.970Z",
+      "createdAt": "2026-05-07T05:44:00.970Z"
+    },
+    {
+      "id": "adjust_mov1wnr7_3jtqhr",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T05:34:01.028Z",
+      "createdAt": "2026-05-07T05:34:01.028Z"
+    },
+    {
+      "id": "adjust_mov1jspb_eap7c6",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T05:24:00.911Z",
+      "createdAt": "2026-05-07T05:24:00.911Z"
+    },
+    {
+      "id": "adjust_mov16y0r_a1wdn3",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T05:14:01.275Z",
+      "createdAt": "2026-05-07T05:14:01.275Z"
+    },
+    {
+      "id": "adjust_mov0u2g5_sp152c",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T05:04:00.486Z",
+      "createdAt": "2026-05-07T05:04:00.486Z"
+    },
+    {
+      "id": "adjust_mov0h7v3_qok3zn",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T04:54:00.976Z",
+      "createdAt": "2026-05-07T04:54:00.976Z"
+    },
+    {
+      "id": "adjust_mov04cif_kcdead",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T04:44:00.471Z",
+      "createdAt": "2026-05-07T04:44:00.471Z"
+    },
+    {
+      "id": "adjust_mouzrh5r_s3e67i",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T04:33:59.967Z",
+      "createdAt": "2026-05-07T04:33:59.967Z"
+    },
+    {
+      "id": "adjust_mouzemr9_m0lf5z",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T04:24:00.693Z",
+      "createdAt": "2026-05-07T04:24:00.693Z"
+    },
+    {
+      "id": "adjust_mouz1ris_hdacoj",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T04:14:00.340Z",
+      "createdAt": "2026-05-07T04:14:00.340Z"
+    },
+    {
+      "id": "adjust_mouyowkr_xcical",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T04:04:00.363Z",
+      "createdAt": "2026-05-07T04:04:00.363Z"
+    },
+    {
+      "id": "adjust_mouyc1ii_xzzuns",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T03:54:00.234Z",
+      "createdAt": "2026-05-07T03:54:00.234Z"
+    },
+    {
+      "id": "adjust_mouxz8dn_hj8jwy",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T03:44:02.603Z",
+      "createdAt": "2026-05-07T03:44:02.603Z"
+    },
+    {
+      "id": "adjust_mouxmbj1_0j0fu7",
+      "date": "2026-05-07",
+      "trigger": "feat(asr): implement TRTC ASR callback [task_mopyri4q_02mauc]; Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T03:34:00.157Z",
+      "createdAt": "2026-05-07T03:34:00.157Z"
+    },
+    {
+      "id": "adjust_mouxiaan_ewfgwo",
+      "date": "2026-05-07",
+      "trigger": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "triggerCount": 1,
+      "source": "github-sync",
+      "scope": "progress",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "同步 commit 进度信号",
+      "suggestion": "",
+      "impact": "只更新任务进度信号和 commit 证据。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "progressDelta": 2
+      },
+      "costReason": "本轮 1 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T03:30:51.935Z",
+      "createdAt": "2026-05-07T03:30:51.935Z"
+    },
+    {
+      "id": "adjust_moux9gjn_cb2k5k",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; Merge pull request #39 from CUEAITECH/feat/session-end-stop-asr",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T03:24:00.131Z",
+      "createdAt": "2026-05-07T03:24:00.131Z"
+    },
+    {
+      "id": "adjust_mouwwlrw_sbe1a3",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; Merge pull request #39 from CUEAITECH/feat/session-end-stop-asr",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T03:14:00.380Z",
+      "createdAt": "2026-05-07T03:14:00.380Z"
+    },
+    {
+      "id": "adjust_mouwjqlj_3i7txc",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; Merge pull request #39 from CUEAITECH/feat/session-end-stop-asr",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T03:04:00.104Z",
+      "createdAt": "2026-05-07T03:04:00.104Z"
+    },
+    {
+      "id": "adjust_mouw6uq6_uonqbo",
+      "date": "2026-05-07",
+      "trigger": "Merge pull request #40 from CUEAITECH/fix/session-asr-bot-review-hardening; Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; Merge pull request #39 from CUEAITECH/feat/session-end-stop-asr",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T02:53:58.927Z",
+      "createdAt": "2026-05-07T02:53:58.927Z"
+    },
+    {
+      "id": "adjust_mouvwe4h_w3a2r9",
+      "date": "2026-05-07",
+      "trigger": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "triggerCount": 1,
+      "source": "github-sync",
+      "scope": "progress",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "同步 commit 进度信号",
+      "suggestion": "",
+      "impact": "只更新任务进度信号和 commit 证据。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "progressDelta": 2
+      },
+      "costReason": "本轮 1 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T02:45:50.849Z",
+      "createdAt": "2026-05-07T02:45:50.849Z"
+    },
+    {
+      "id": "adjust_mouvtzxc_6hxjgn",
+      "date": "2026-05-07",
+      "trigger": "Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; Merge pull request #39 from CUEAITECH/feat/session-end-stop-asr; Merge branch 'feat/session-end-stop-asr-cuebase' into feat/session-end-stop-asr",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T02:43:59.136Z",
+      "createdAt": "2026-05-07T02:43:59.136Z"
+    },
+    {
+      "id": "adjust_mouvh4sq_j8hw4q",
+      "date": "2026-05-07",
+      "trigger": "Merge branch 'feat/session-end-stop-asr' into fix/session-asr-bot-review-hardening; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; fix(session): harden ASR bot stop state [task_mopyri4q_p2zomw]; Merge pull request #39 from CUEAITECH/feat/session-end-stop-asr; Merge branch 'feat/session-end-stop-asr-cuebase' into feat/session-end-stop-asr",
+      "triggerCount": 5,
+      "source": "github-sync",
+      "scope": "minor",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "根据 commit 调整开发计划",
+      "suggestion": "",
+      "impact": "影响 5 条 commit 对应的当天跟进项。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "shortName": "MVP / TRTC 联调"
+      },
+      "costReason": "本轮 5 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T02:33:58.922Z",
+      "createdAt": "2026-05-07T02:33:58.922Z"
+    },
+    {
+      "id": "adjust_mouvd3o0_6rc22y",
+      "date": "2026-05-07",
+      "trigger": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "triggerCount": 1,
+      "source": "github-sync",
+      "scope": "progress",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "同步 commit 进度信号",
+      "suggestion": "",
+      "impact": "只更新任务进度信号和 commit 证据。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "progressDelta": 2
+      },
+      "costReason": "本轮 1 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T02:30:50.832Z",
+      "createdAt": "2026-05-07T02:30:50.832Z"
+    },
+    {
+      "id": "adjust_mouv6opn_sa9v3p",
+      "date": "2026-05-07",
+      "trigger": "docs: 更新阶段进度追踪 [CUE Hub AI PM]",
+      "triggerCount": 1,
+      "source": "github-sync",
+      "scope": "progress",
+      "mode": "auto",
+      "status": "auto_applied",
+      "summary": "同步 commit 进度信号",
+      "suggestion": "",
+      "impact": "只更新任务进度信号和 commit 证据。",
+      "requiresApprovalReason": "",
+      "stageUpdate": {
+        "progressDelta": 2
+      },
+      "costReason": "本轮 1 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。",
+      "appliedAt": "2026-05-07T02:25:51.515Z",
+      "createdAt": "2026-05-07T02:25:51.515Z"
+    }
+  ],
+  "roadmapReviews": [],
+  "docTasks": {},
+  "deliverables": [],
+  "phases": [],
+  "checklistOverrides": {},
+  "semanticLinks": {},
+  "riskAnalyses": [],
+  "healthAnalysis": null,
+  "users": [
+    {
+      "id": "user_project_admin",
+      "username": "admin",
+      "name": "系统管理员",
+      "phone": "",
+      "email": "noreply@cueai.top",
+      "role": "admin",
+      "projectIds": [
+        "*"
+      ],
+      "projectRoles": {
+        "*": "admin"
+      },
+      "active": true,
+      "passwordHash": "scrypt:20e40a2a13df19a7e1aa70c78e789773:18fa8ec9f1b78ca2b2ffbe6e19c5079c46661be94ddfa730b1059ee5cfbb1513",
+      "createdAt": "2026-05-12T04:48:19.483Z",
+      "updatedAt": "2026-05-20T02:21:52.796Z"
+    },
+    {
+      "id": "user_tian_jiaming",
+      "username": "田家铭",
+      "name": "田家铭",
+      "phone": "",
+      "email": "",
+      "role": "developer",
+      "projectIds": [
+        "*"
+      ],
+      "projectRoles": {
+        "*": "developer"
+      },
+      "active": true,
+      "passwordHash": "scrypt:8df96b2a099f8461195c901e05495a39:cab738908879349987041a6332b7f09ff8eb7127d91bca2bf7a06fa7d9cbac86",
+      "createdAt": "2026-05-13T03:13:36.944Z",
+      "updatedAt": "2026-05-20T02:21:52.796Z"
+    },
+    {
+      "id": "user_lin_shiqi",
+      "username": "林世棋",
+      "name": "林世棋",
+      "phone": "",
+      "email": "",
+      "role": "developer",
+      "projectIds": [
+        "*"
+      ],
+      "projectRoles": {
+        "*": "developer"
+      },
+      "active": true,
+      "passwordHash": "scrypt:7c8593b828b436b3c88f120879d7be38:d4e9715367f82229f9e11c43cff60256de4e026fe7eeca7338cf2999f12d0b10",
+      "createdAt": "2026-05-13T03:13:36.944Z",
+      "updatedAt": "2026-05-20T02:21:52.796Z"
+    },
+    {
+      "id": "user_hu_jiatao",
+      "username": "胡佳涛",
+      "name": "胡佳涛",
+      "phone": "",
+      "email": "",
+      "role": "developer",
+      "projectIds": [
+        "*"
+      ],
+      "projectRoles": {
+        "*": "developer"
+      },
+      "active": true,
+      "passwordHash": "scrypt:2a0b68e5467fd08b1c14b92f57f28d1e:41458eadcfa61b56f0e6b1d6d9efc6b6582f30cd375bbba70f07cad04ad4182f",
+      "createdAt": "2026-05-13T03:13:36.944Z",
+      "updatedAt": "2026-05-20T02:21:52.796Z"
+    },
+    {
+      "id": "user_luo_zikuan",
+      "username": "罗子宽",
+      "name": "罗子宽",
+      "phone": "",
+      "email": "",
+      "role": "developer",
+      "projectIds": [
+        "*"
+      ],
+      "projectRoles": {
+        "*": "developer"
+      },
+      "active": true,
+      "passwordHash": "scrypt:825abe1887d7dfdd63ee0192c677f64f:28ce342a09aa9d79906711a515b0c9ca96535d14571cf91edcb23f88c9dbb63d",
+      "createdAt": "2026-05-13T03:13:36.944Z",
+      "updatedAt": "2026-05-20T02:21:52.796Z"
+    }
+  ],
+  "currentStage": {
+    "id": "stage_cue_ai_trtc_mvp",
+    "name": "Cue.AI 双设备课堂 MVP / TRTC 联调阶段",
+    "shortName": "MVP / TRTC 联调",
+    "targetDate": "2026-05-15",
+    "progress": 100,
+    "status": "进行中",
+    "updatedAt": "2026-05-20T02:22:09.757Z",
+    "phases": [
+      {
+        "id": "phase_backend",
+        "title": "后端基础",
+        "status": "进行中"
+      },
+      {
+        "id": "phase_integration",
+        "title": "多端联调",
+        "status": "待开始"
+      },
+      {
+        "id": "phase_acceptance",
+        "title": "验收上线",
+        "status": "待开始"
+      }
+    ],
+    "checklist": [
+      {
+        "id": "stage_backend_realtime",
+        "phaseId": "phase_backend",
+        "title": "后端实时课堂链路",
+        "owner": "后端/架构",
+        "taskIds": [],
+        "keywords": [
+          "后端",
+          "session",
+          "usersig",
+          "asr",
+          "callback",
+          "机器人",
+          "sop",
+          "sos",
+          "summary",
+          "接口"
+        ],
+        "acceptance": "完成课堂 Session、UserSig、TRTC ASR 机器人、回调处理、SOP 推进、SOS 和课后总结的后端闭环。"
+      },
+      {
+        "id": "stage_ipad_teacher",
+        "phaseId": "phase_integration",
+        "title": "iPad 老师端开课",
+        "owner": "iOS",
+        "taskIds": [],
+        "keywords": [
+          "ipad",
+          "ios",
+          "老师",
+          "教师",
+          "txliteavsdk",
+          "trtc ios",
+          "开课",
+          "音频",
+          "设备绑定"
+        ],
+        "acceptance": "iPad 老师端能登录、选择课程模块、创建课堂、进入 TRTC 房间并持续采集课堂音频。"
+      },
+      {
+        "id": "stage_trtc_full_loop",
+        "phaseId": "phase_integration",
+        "title": "TRTC 全链路联调",
+        "owner": "全员",
+        "taskIds": [],
+        "keywords": [
+          "trtc",
+          "全链路",
+          "联调",
+          "课堂",
+          "session",
+          "summary",
+          "sos",
+          "asr"
+        ],
+        "acceptance": "跑通老师开课、学生加入、ASR 转写、SOP 推进、SOS 触发和 summary 生成的完整课堂链路。"
+      },
+      {
+        "id": "stage_student_teacher_clients",
+        "phaseId": "phase_integration",
+        "title": "学生/教师端加入与提示",
+        "owner": "Web / iPhone",
+        "taskIds": [],
+        "keywords": [
+          "web",
+          "join",
+          "学生",
+          "iphone",
+          "教师",
+          "连接",
+          "配对",
+          "sop节点",
+          "下一环节",
+          "课后总结"
+        ],
+        "acceptance": "学生 Web 端可用房间码加入课堂，教师移动端可查看连接状态、SOP 进度、SOS 结果和课后总结。"
+      },
+      {
+        "id": "stage_content_demo_acceptance",
+        "phaseId": "phase_acceptance",
+        "title": "内容 SOP 与 Demo 验收",
+        "owner": "产品/内容",
+        "taskIds": [],
+        "keywords": [
+          "数学",
+          "内容",
+          "sop",
+          "关键词",
+          "话术",
+          "模板",
+          "验收",
+          "demo",
+          "八步",
+          "闭环"
+        ],
+        "acceptance": "准备一门课的 SOP 内容包、关键词、SOS 话术和演示验收脚本，用于完整 Demo 验收。"
+      }
+    ]
+  },
+  "_resetLog": {
+    "strippedTasks": 1,
+    "at": "2026-05-11T19:56:53.377Z"
+  }
+}

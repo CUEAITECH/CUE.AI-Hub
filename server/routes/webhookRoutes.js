@@ -1,3 +1,4 @@
+import logger from '../logger.js';
 // 进行中的项目级任务（防止 webhook 突发流量导致 LLM 调用堆积）
 const inFlightDocsSync = new Set();
 const inFlightPlanAdjust = new Set();
@@ -111,30 +112,17 @@ export function createWebhookRoutes({
       const prNumber = json.pull_request?.number;
       if (repoFull && prNumber) {
         upsertPullFromWebhook(repoFull, prNumber, json.action)
-          .catch((err) => console.error('[Webhook/PR]', err.message));
+          .catch((err) => logger.error('[Webhook/PR]', err.message));
       }
     }
 
+    // PR 事件的审阅已由 upsertPullFromWebhook（上方）通过真实 diff 处理，
+    // 不再在此用伪 diff 创建 Pass 级审阅（Pass 会被队列过滤，徒增噪声）。
     const currentStore = loadStore ? await loadStore() : null;
     for (const activity of activities) {
       if (activity.type === 'pull_request') {
-        const bound = bindActivityToExplicitRefs && currentStore
-          ? bindActivityToExplicitRefs(activity, currentStore)
-          : activity;
-        const linkedTask = bound.taskId && currentStore
-          ? (currentStore.tasks || []).find((t) => t.id === bound.taskId)
-          : null;
-        reviews.push({
-          id: createId('review'),
-          ...await reviewChange({
-            repo: activity.repo,
-            title: activity.title,
-            owner: activity.actor,
-            diff: `${activity.action || ''} ${activity.branch || ''}`,
-            files: activity.files,
-            task: linkedTask || null
-          })
-        });
+        // PR 审阅由 pullPipeline（upsertPullFromWebhook）负责，此处仅记录日志
+        logger.info(`[Webhook/PR] activity 记录: ${activity.action} PR #${activity.number}`);
       }
     }
 
@@ -156,11 +144,11 @@ export function createWebhookRoutes({
         generatePlanAdjustment(boundActivities, nextStore).then((adjustment) => {
           if (!adjustment) return null;
           return persistPlanAdjustment(adjustment, boundActivities, 'github-webhook');
-        }).catch((err) => console.error('[PlanAdjust]', err.message)).finally(() => {
+        }).catch((err) => logger.error('[PlanAdjust]', err.message)).finally(() => {
           inFlightPlanAdjust.delete(planKey);
         });
       } else {
-        console.log(`[Webhook] plan-adjust 跳过 ${planKey}：已有进行中任务`);
+        logger.info(`[Webhook] plan-adjust 跳过 ${planKey}：已有进行中任务`);
       }
     }
 
@@ -177,14 +165,14 @@ export function createWebhookRoutes({
       );
       for (const project of candidateProjects) {
         if (inFlightDocsSync.has(project.id)) {
-          console.log(`[Webhook] docs sync 跳过 ${project.githubFullRepo}：已有进行中任务`);
+          logger.info(`[Webhook] docs sync 跳过 ${project.githubFullRepo}：已有进行中任务`);
           continue;
         }
         inFlightDocsSync.add(project.id);
         importDocsForProject(project, project.id).then((result) => {
-          console.log(`[Webhook] docs/ 变更触发 sync-docs：${project.githubFullRepo} — 新增任务 ${result.imported || 0}，phases ${result.phases || 0}`);
+          logger.info(`[Webhook] docs/ 变更触发 sync-docs：${project.githubFullRepo} — 新增任务 ${result.imported || 0}，phases ${result.phases || 0}`);
         }).catch((err) => {
-          console.error(`[Webhook] docs sync 失败 ${project.githubFullRepo}：`, err.message);
+          logger.error(`[Webhook] docs sync 失败 ${project.githubFullRepo}：`, err.message);
         }).finally(() => {
           inFlightDocsSync.delete(project.id);
         });

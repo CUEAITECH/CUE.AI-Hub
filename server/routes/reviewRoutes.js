@@ -33,19 +33,72 @@ export function createReviewRoutes({
     if (req.method === 'PATCH' && url.pathname.startsWith('/api/reviews/')) {
       const id = decodeURIComponent(url.pathname.split('/').pop());
       const { json } = await readBody(req);
-      const allowed = ['acknowledged', 'needs-fix', 'exempted'];
-      const decision = allowed.includes(json?.humanDecision) ? json.humanDecision : null;
+
+      // 新格式：decision + reason + overrideBlock + overrideReason
+      // 向后兼容：旧格式 humanDecision string（'acknowledged'|'needs-fix'|'exempted'）
+      const isNewFormat = ['LGTM', 'request_changes', 'waiting'].includes(json?.decision);
+      const isLegacyFormat = ['acknowledged', 'needs-fix', 'exempted'].includes(json?.humanDecision);
+
+      // override Block 时，overrideReason 必填
+      if (isNewFormat && json?.overrideBlock && !String(json?.overrideReason || '').trim()) {
+        sendError(res, 400, 'overrideReason 为必填项（覆盖 Block 决定需记录理由）');
+        return true;
+      }
+
       let updated = null;
       await updateStore((draft) => {
         const index = (draft.reviews || []).findIndex((review) => review.id === id);
         if (index === -1) return draft;
+        const existing = draft.reviews[index];
+
+        let humanDecision;
+        if (isNewFormat) {
+          const decisionStatusMap = { LGTM: 'approved', request_changes: 'requested_changes', waiting: 'waiting' };
+          humanDecision = {
+            status: decisionStatusMap[json.decision],
+            reviewer: json?.reviewer || '',
+            reason: String(json?.reason || '').trim(),
+            overrideBlock: Boolean(json?.overrideBlock),
+            overrideReason: String(json?.overrideReason || '').trim(),
+            timestamp: new Date().toISOString()
+          };
+          // 同步更新 blocks 的 isOverridden 标记
+          if (json?.overrideBlock && Array.isArray(existing.blocks)) {
+            const updatedBlocks = existing.blocks.map((b) => ({ ...b, isOverridden: true }));
+            draft.reviews[index] = { ...existing, blocks: updatedBlocks };
+          }
+        } else if (isLegacyFormat) {
+          // 向后兼容旧格式，转换为对象结构
+          const legacyMap = { acknowledged: 'approved', 'needs-fix': 'requested_changes', exempted: 'approved' };
+          humanDecision = {
+            status: legacyMap[json.humanDecision] || 'approved',
+            reviewer: '',
+            reason: String(json?.humanNote || '').trim(),
+            overrideBlock: json.humanDecision === 'exempted',
+            overrideReason: json.humanDecision === 'exempted' ? String(json?.humanNote || '').trim() : '',
+            timestamp: new Date().toISOString()
+          };
+        } else {
+          return draft; // 格式不合法，不更新
+        }
+
         updated = {
-          ...draft.reviews[index],
-          humanDecision: decision,
-          humanNote: String(json?.humanNote || '').trim() || draft.reviews[index].humanNote || '',
+          ...existing,
+          humanDecision,
+          // 保留旧字段向后兼容（供现有前端读取）
+          humanNote: String(json?.reason || json?.humanNote || '').trim() || existing.humanNote || '',
           humanAt: new Date().toISOString()
         };
         draft.reviews[index] = updated;
+
+        // 同步 humanDecision → store.pulls[pullId].hubReview（双向一致）
+        if (existing.pullId) {
+          const pullIdx = (draft.pulls || []).findIndex((p) => p.id === existing.pullId);
+          if (pullIdx >= 0 && draft.pulls[pullIdx].hubReview) {
+            draft.pulls[pullIdx].hubReview.humanDecision = humanDecision;
+          }
+        }
+
         return draft;
       });
       if (!updated) { sendError(res, 404, 'review not found'); return true; }
@@ -176,19 +229,120 @@ AI 建议：${review.suggestion || '无'}`;
     if (req.method === 'GET' && url.pathname === '/api/reviews/queue') {
       const store = await loadStore();
       const allReviews = store.reviews || [];
-      const pending = allReviews.filter(
+      const tasks = store.tasks || [];
+
+      // 队列只展示 PR 审阅（有 pullId 或 id 以 rev_pr_ 开头）
+      // commit push 审阅语义不同（无合并动作），不进此队列
+      const pulls = store.pulls || [];
+      const prReviews = allReviews.filter((r) => {
+        if (!r.pullId && !r.id?.startsWith('rev_pr_')) return false;
+        // 已关闭/合并的 PR 不需要人工审阅
+        if (r.pullId) {
+          const pull = pulls.find((p) => p.id === r.pullId);
+          if (pull && pull.state !== 'open') return false;
+        }
+        return true;
+      });
+
+      // 完成度分层过滤：< 50% 不进队列（太早，让作者继续迭代）
+      const eligible = prReviews.filter((review) => {
+        const rate = review.completionRate;
+        return rate === null || rate === undefined || rate >= 50;
+      });
+
+      const pending = eligible.filter(
         (review) => (review.level === 'Block' || review.level === 'Escalate') && !review.humanDecision
       );
-      const recent = allReviews.filter((review) => {
+      const recent = eligible.filter((review) => {
         if (review.humanDecision) return false;
         if (review.level === 'Block' || review.level === 'Escalate') return false;
         if (review.level === 'Pass') return false;
         return true;
       });
+
+      // 关联 task spec
+      const enrich = (review) => {
+        const linkedTask = review.compliance?.taskId
+          ? tasks.find((t) => t.id === review.compliance.taskId)
+          : null;
+        return {
+          ...review,
+          linkedTask: linkedTask ? {
+            id: linkedTask.id,
+            title: linkedTask.title,
+            description: linkedTask.description || '',
+            owner: linkedTask.owner || ''
+          } : null
+        };
+      };
+
       const queue = [
         ...pending.sort((a, b) => (b.level === 'Block') - (a.level === 'Block')),
         ...recent.slice(0, 30)
-      ];
+      ].map(enrich);
+
+      sendJson(res, 200, {
+        queue,
+        pendingCount: pending.length,
+        recentCount: recent.length,
+        generatedAt: new Date().toISOString()
+      });
+      return true;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/reviews/queue/detailed') {
+      const store = await loadStore();
+      const allReviews = store.reviews || [];
+      const tasks = store.tasks || [];
+
+      // 与 /queue 一致：只展示 open PR 审阅
+      const pulls = store.pulls || [];
+      const prReviews = allReviews.filter((r) => {
+        if (!r.pullId && !r.id?.startsWith('rev_pr_')) return false;
+        if (r.pullId) {
+          const pull = pulls.find((p) => p.id === r.pullId);
+          if (pull && pull.state !== 'open') return false;
+        }
+        return true;
+      });
+
+      // 与 /queue 一致的过滤逻辑，但返回完整 AI 报告 + task spec
+      const eligible = prReviews.filter((review) => {
+        const rate = review.completionRate;
+        return rate === null || rate === undefined || rate >= 50;
+      });
+
+      const pending = eligible.filter(
+        (review) => (review.level === 'Block' || review.level === 'Escalate') && !review.humanDecision
+      );
+      const recent = eligible.filter((review) => {
+        if (review.humanDecision) return false;
+        if (review.level === 'Block' || review.level === 'Escalate') return false;
+        if (review.level === 'Pass') return false;
+        return true;
+      });
+
+      const enrich = (review) => {
+        const linkedTask = review.compliance?.taskId
+          ? tasks.find((t) => t.id === review.compliance.taskId)
+          : null;
+        return {
+          ...review,
+          linkedTask: linkedTask || null,
+          // 完成度分层标签
+          completionLabel: (review.completionRate !== null && review.completionRate !== undefined)
+            ? (review.completionRate >= 90 ? `${review.completionRate}% — AI PASS 可合并`
+              : review.completionRate >= 50 ? `${review.completionRate}% — 待人工审阅`
+              : `${review.completionRate}% — 太早，继续迭代`)
+            : '完成度未计算'
+        };
+      };
+
+      const queue = [
+        ...pending.sort((a, b) => (b.level === 'Block') - (a.level === 'Block')),
+        ...recent.slice(0, 30)
+      ].map(enrich);
+
       sendJson(res, 200, {
         queue,
         pendingCount: pending.length,

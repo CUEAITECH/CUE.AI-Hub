@@ -1,6 +1,6 @@
 name: PR-Agent Review
 # PR-Agent 是自动审阅和合规信号源，不替代人工 reviewer。
-# 需要仓库 Actions secret：ANTHROPIC_KEY。
+# 默认使用 OpenAI-compatible API（ikuncode），以匹配当前仓库 secrets 和回归测试。
 
 on:
   pull_request:
@@ -23,10 +23,10 @@ jobs:
     steps:
       - name: Validate PR-Agent configuration
         env:
-          ANTHROPIC_KEY_VALUE: ${{ secrets.ANTHROPIC_KEY }}
+          OPENAI_KEY_VALUE: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          if [ -z "$ANTHROPIC_KEY_VALUE" ]; then
-            echo "::error::Missing repository secret ANTHROPIC_KEY. PR-Agent cannot run."
+          if [ -z "$OPENAI_KEY_VALUE" ]; then
+            echo "::error::Missing repository secret OPENAI_API_KEY for PR-Agent."
             exit 1
           fi
 
@@ -35,9 +35,15 @@ jobs:
         uses: the-pr-agent/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
-          config.model: ${{ vars.PR_AGENT_MODEL || 'anthropic/claude-sonnet-4-20250514' }}
-          config.fallback_models: ${{ vars.PR_AGENT_FALLBACK_MODELS || '["anthropic/claude-3-5-haiku-20241022"]' }}
+          # OpenAI-compatible provider. Double-underscore names are the current
+          # documented env form; OPENAI_KEY/API_BASE are kept for older action builds.
+          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI__KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_BASE: https://api.ikuncode.cc/v1
+          OPENAI__API_BASE: https://api.ikuncode.cc/v1
+          # 使用第三方 OpenAI-compatible API（gpt-5.4-mini 做 review，成本低）
+          CONFIG.MODEL: gpt-5.4-mini
+          CONFIG.AI_PROVIDER: openai
           github_action_config.auto_review: "true"
           github_action_config.auto_improve: "false"
           github_action_config.auto_describe: "true"

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { defaultCurrentStage, defaultPhases, defaultStageChecklist, normalizeStageName, reassignChecklistPhaseIds } from './services/stageChecklist.js';
 import { rebindStoreExplicitRefs } from './services/bindingEngine.js';
 import { normalizeUserRecord, verifyPassword } from './services/auth.js';
+import { scheduleSyncJsonToSqlite } from './services/jsonToSqliteSync.js';
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, 'server', 'data');
@@ -258,10 +259,33 @@ export function migrateStore(store) {
       const migrated = legacyCueAiRepoAliases.has(review.repo) || legacyHubReviewRepos.has(review.repo)
         ? { ...review, repo: cueAiRepo }
         : review;
-      // 补充 humanDecision 字段（人工审阅决策）
-      const withDecision = Object.hasOwn(migrated, 'humanDecision') ? migrated : { ...migrated, humanDecision: null };
-      // 补充 compliance / issues 字段（PR-Agent 风格验收对账，旧 review 为 null/[]）
-      const withCompliance = Object.hasOwn(withDecision, 'compliance') ? withDecision : { ...withDecision, compliance: null };
+      // humanDecision：旧格式为 string（'acknowledged'|'needs-fix'|'exempted'），迁移为对象结构
+      const legacyDecisionMap = { acknowledged: 'approved', 'needs-fix': 'requested_changes', exempted: 'approved' };
+      let humanDecision = migrated.humanDecision;
+      if (typeof humanDecision === 'string' && humanDecision) {
+        humanDecision = {
+          status: legacyDecisionMap[humanDecision] || 'approved',
+          reviewer: '',
+          reason: migrated.humanNote || '',
+          overrideBlock: humanDecision === 'exempted',
+          overrideReason: humanDecision === 'exempted' ? (migrated.humanNote || '') : '',
+          timestamp: migrated.humanAt || now
+        };
+      } else if (!humanDecision || typeof humanDecision !== 'object') {
+        humanDecision = null;
+      }
+      const withDecision = { ...migrated, humanDecision };
+      // 补充 completionRate（AI 评估完成度，默认 null 表示未计算）
+      const withRate = Object.hasOwn(withDecision, 'completionRate') ? withDecision : { ...withDecision, completionRate: null };
+      // 补充 blocks（Block 级问题列表，用于 override 流程）
+      const withBlocks = Object.hasOwn(withRate, 'blocks') ? withRate : {
+        ...withRate,
+        blocks: (withRate.issues || [])
+          .filter((i) => i.severity === 'critical' || i.severity === 'security')
+          .map((i) => ({ issue: i.header || i.description || '', severity: i.severity, isOverridden: false }))
+      };
+      // 补充 compliance / issues 字段
+      const withCompliance = Object.hasOwn(withBlocks, 'compliance') ? withBlocks : { ...withBlocks, compliance: null };
       const withIssues = Object.hasOwn(withCompliance, 'issues') ? withCompliance : { ...withCompliance, issues: [] };
       return Object.hasOwn(withIssues, 'pullId') ? withIssues : { ...withIssues, pullId: null };
     });
@@ -421,6 +445,8 @@ export async function saveStore(nextStore) {
   // 写入前先备份，保留上一个版本供紧急恢复
   try { await copyFile(dbPath, backupPath); } catch { /* db.json 不存在时跳过 */ }
   await writeJson(dbPath, cache);
+  // 同步进 SQLite（防抖 2s，让 v2 接口读到最新数据）
+  try { scheduleSyncJsonToSqlite(cache); } catch { /* DB 未初始化时静默跳过 */ }
   return cache;
 }
 
