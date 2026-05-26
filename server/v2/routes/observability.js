@@ -107,8 +107,12 @@ export async function handle(ctx) {
   // GET /v2/observability/llm
   if (method === 'GET' && path === '/v2/observability/llm') {
     const db = getDb();
+    // SQLite CURRENT_TIMESTAMP 存储格式为 'YYYY-MM-DD HH:MM:SS'（空格，非 ISO T 分隔）
+    // toISOString() 产生 'YYYY-MM-DDTHH:MM:SS.mmmZ'，字符串比较时空格(0x20) < T(0x54)
+    // 必须统一为空格格式，否则 UTC 时区服务器上今天所有记录都查不到
+    const toSqliteTs = (d) => d.toISOString().replace('T', ' ').slice(0, 19);
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const fiveMinAgo = toSqliteTs(new Date(Date.now() - 5 * 60 * 1000));
 
     const daily = db.prepare(`
       SELECT
@@ -118,13 +122,13 @@ export async function handle(ctx) {
         SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END) as cacheHits,
         SUM(CASE WHEN output_tokens IS NULL OR output_tokens = 0 THEN 1 ELSE 0 END) as failedCalls
       FROM llm_calls WHERE ts >= ?
-    `).get(todayStart.toISOString());
+    `).get(toSqliteTs(todayStart));
 
     const byPurpose = db.prepare(`
       SELECT purpose, COUNT(*) as calls, SUM(input_tokens) as input, SUM(output_tokens) as output
       FROM llm_calls WHERE ts >= ?
       GROUP BY purpose ORDER BY calls DESC LIMIT 10
-    `).all(todayStart.toISOString());
+    `).all(toSqliteTs(todayStart));
 
     const recentFailRate = (() => {
       const r = db.prepare(`

@@ -45,7 +45,9 @@ async function runMonitorCheck() {
     }
 
     // 2. LLM 调用失败率（近 5 分钟）
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // SQLite CURRENT_TIMESTAMP 格式为 'YYYY-MM-DD HH:MM:SS'，必须用空格而非 T 分隔，否则字符串比较会出错
+    const toSqliteTs = (d) => d.toISOString().replace('T', ' ').slice(0, 19);
+    const fiveMinAgo = toSqliteTs(new Date(Date.now() - 5 * 60 * 1000));
     const llmStats = db.prepare(`
       SELECT
         COUNT(*) as total,
@@ -76,7 +78,7 @@ async function runMonitorCheck() {
         COUNT(*) as totalCalls
       FROM llm_calls
       WHERE ts >= ?
-    `).get(todayStart.toISOString());
+    `).get(toSqliteTs(todayStart));
 
     if (costStats.totalInput || costStats.totalOutput) {
       const costUsd = (costStats.totalInput  || 0) * MONITOR_CONFIG.costPerInputToken
