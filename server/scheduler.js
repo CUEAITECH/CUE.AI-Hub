@@ -30,9 +30,13 @@ export function startScheduler(deps) {
   let lastTaskCompletionPromptDate = '';
   let lastMeetingAttendancePromptDate = '';
   let lastMeetingAbsenceCloseDate = '';
+  let lastPrReviewReminderDate = '';
   let githubSyncRunning = false;
   const prepHour = meetingHour === 0 ? 23 : meetingHour - 1;
   const prepMinute = 45;
+  // PR 审阅截点提醒：晚会前 1h（如 17:00）
+  const prReminderHour = meetingHour <= 1 ? meetingHour + 22 : meetingHour - 1;
+  const prReminderMinute = 0;
   const reviewHour = meetingHour <= 1 ? meetingHour + 22 : meetingHour - 2;
 
   async function syncGitHubProjects() {
@@ -154,6 +158,56 @@ export function startScheduler(deps) {
         draft.attendanceRecords = draft.attendanceRecords.slice(0, 2000);
         return draft;
       }).catch((err) => logger.error('[Scheduler] 晚会缺勤自动收口失败', err.message));
+    }
+
+    // 晚会前 1h（如 17:00）：扫描待审阅 PR，>= 2 个时推送企微提醒
+    if (isWorkday && sh === prReminderHour && sm === prReminderMinute && lastPrReviewReminderDate !== today) {
+      lastPrReviewReminderDate = today;
+      if (isWeComAvailable()) {
+        try {
+          const reminderStore = await loadStore();
+          const allReviews = reminderStore.reviews || [];
+
+          // 筛选"待人工审阅"的 review：完成度 >= 50%、未决策、非 Pass
+          const pendingReviews = allReviews.filter((r) => {
+            const rate = r.completionRate;
+            const eligible = rate === null || rate === undefined || rate >= 50;
+            const undecided = !r.humanDecision;
+            const needsHuman = r.level !== 'Pass';
+            return eligible && undecided && needsHuman;
+          });
+
+          if (pendingReviews.length >= 2) {
+            const now = new Date();
+            const reviewLines = pendingReviews.slice(0, 5).map((r) => {
+              const waited = Math.round((now - new Date(r.createdAt || now)) / 60000);
+              const waitLabel = waited < 60 ? `${waited} 分钟` : `${Math.round(waited / 60)} 小时`;
+              const rate = r.completionRate !== null && r.completionRate !== undefined
+                ? `${r.completionRate}%` : '未计算';
+              return `- ${r.title?.slice(0, 30) || r.id}（${rate}，等待 ${waitLabel}）`;
+            });
+            const estimatedMinutes = Math.ceil(pendingReviews.length * 8); // 每条约 8 分钟
+            const msg = [
+              `## ⚠️ 晚会倒计时 1h，还有 ${pendingReviews.length} 个 PR 需审阅`,
+              '',
+              ...reviewLines,
+              pendingReviews.length > 5 ? `...还有 ${pendingReviews.length - 5} 个` : '',
+              '',
+              `> 预计审阅时间 ≤ ${estimatedMinutes} min，请在 ${meetingHour}:00 前完成`,
+              `> [打开 Hub 审阅](${hubUrl})`
+            ].filter(Boolean).join('\n');
+
+            await sendWeComMarkdown(msg).catch((err) =>
+              logger.error('[Scheduler] PR 审阅截点提醒推送失败:', err.message)
+            );
+            logger.info(`[Scheduler] ${prReminderHour}:00 PR 审阅截点提醒已推送：${pendingReviews.length} 个待审 PR`);
+          } else {
+            logger.info(`[Scheduler] ${prReminderHour}:00 待审 PR 数量 ${pendingReviews.length}，少于 2 个，跳过提醒`);
+          }
+        } catch (err) {
+          logger.error('[Scheduler] PR 审阅截点提醒失败:', err.message);
+        }
+      }
     }
 
     if (isWorkday && sh === prepHour && sm === prepMinute && lastEveningReportDate !== today) {

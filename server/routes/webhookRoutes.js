@@ -119,6 +119,12 @@ export function createWebhookRoutes({
     const currentStore = loadStore ? await loadStore() : null;
     for (const activity of activities) {
       if (activity.type === 'pull_request') {
+        // 仅在 opened 和 synchronize 事件触发审阅，过滤掉 closed/labeled/edited 等
+        if (!['opened', 'synchronize'].includes(activity.action)) {
+          logger.info(`[Webhook/PR] 跳过非审阅事件: ${activity.action} (${activity.number})`);
+          continue;
+        }
+
         const bound = bindActivityToExplicitRefs && currentStore
           ? bindActivityToExplicitRefs(activity, currentStore)
           : activity;

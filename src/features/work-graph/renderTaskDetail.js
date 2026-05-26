@@ -15,6 +15,7 @@ export function renderTaskDetail(state, {
   onMarkAssignmentDone,
   onMarkTaskDone,
   onRegenerateBrief,
+  onMergePR,
 }) {
   const title   = document.querySelector('#taskDetailTitle');
   const subtitle = document.querySelector('#taskDetailSubtitle');
@@ -62,12 +63,48 @@ export function renderTaskDetail(state, {
         <strong>文档侧建议完成</strong>
         <span>目标仓库进度文档已将所属交付项标记为完成。请先在这里确认任务完成，再由负责人确认交付项。</span>
       </div>` : ''}
+      ${(() => {
+        // 查找关联的 open PR
+        const linkedPull = (state.pulls || []).find((p) =>
+          (p.linkedTaskIds || []).includes(task.id) && p.state === 'open'
+        );
+        const review = linkedPull?.hubReview || null;
+        const humanDecision = review?.humanDecision;
+        const humanApproved = (typeof humanDecision === 'object' && humanDecision?.status === 'approved')
+          || humanDecision === 'exempted' || humanDecision === 'acknowledged';
+        const aiAutoPass = review?.level === 'Pass' && (review?.completionRate ?? 0) >= 90;
+        const unresolvedBlocks = (review?.blocks || []).filter((b) => !b.isOverridden).length;
+        const mergeReady = linkedPull && (humanApproved || aiAutoPass) && !unresolvedBlocks;
+        if (!linkedPull) return '';
+        return `<div class="pull-merge-status">
+          <span style="font-size:12px;color:var(--text-dim)">
+            关联 PR #${escapeHtml(String(linkedPull.number))}：
+            ${review?.completionRate !== null && review?.completionRate !== undefined ? `${review.completionRate}% ·` : ''}
+            ${escapeHtml(review?.level || '未评估')}
+            ${mergeReady ? '· <span style="color:var(--success)">✅ 准备合并</span>' : ''}
+          </span>
+        </div>`;
+      })()}
       <div class="task-detail-actions">
         ${latestAssignment && latestAssignment.status !== '已完成'
           ? `<button class="task-confirm-done-btn" data-assignment-id="${escapeHtml(latestAssignment.id)}">确认任务完成</button>`
           : task.status !== '已完成'
             ? '<button class="task-confirm-done-btn" data-task-only="true">确认任务完成</button>'
             : '<span class="task-done-mark">任务已完成</span>'}
+        ${(() => {
+          const linkedPull = (state.pulls || []).find((p) =>
+            (p.linkedTaskIds || []).includes(task.id) && p.state === 'open'
+          );
+          const review = linkedPull?.hubReview || null;
+          const humanDecision = review?.humanDecision;
+          const humanApproved = (typeof humanDecision === 'object' && humanDecision?.status === 'approved')
+            || humanDecision === 'exempted' || humanDecision === 'acknowledged';
+          const aiAutoPass = review?.level === 'Pass' && (review?.completionRate ?? 0) >= 90;
+          const unresolvedBlocks = (review?.blocks || []).filter((b) => !b.isOverridden).length;
+          const mergeReady = linkedPull && (humanApproved || aiAutoPass) && !unresolvedBlocks;
+          if (!mergeReady) return '';
+          return `<button class="task-merge-btn" data-action="merge-pr" data-pull-id="${escapeHtml(linkedPull.id)}" data-task-id="${escapeHtml(task.id)}">🚀 合并 PR #${escapeHtml(String(linkedPull.number))}</button>`;
+        })()}
       </div>
     </article>
 

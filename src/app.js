@@ -1745,20 +1745,37 @@ function renderReviewQueue(queue) {
     container.innerHTML = '<div class="empty-state">暂无需要人工确认的审阅项 ✅</div>';
     return;
   }
-  const decisionLabel = { acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免' };
+
+  const getDecisionLabel = (humanDecision) => {
+    if (!humanDecision) return null;
+    if (typeof humanDecision === 'string') {
+      return { acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免' }[humanDecision] || humanDecision;
+    }
+    return { approved: '✅ 已 LGTM', requested_changes: '💬 已打回', waiting: '⏱️ 待更多 commit' }[humanDecision.status] || humanDecision.status;
+  };
+
+  const getCompletionBadge = (rate) => {
+    if (rate === null || rate === undefined) return '';
+    if (rate >= 90) return `<span class="completion-badge completion-high">${rate}% ✅ 可合并</span>`;
+    return `<span class="completion-badge completion-mid">${rate}% 待审阅</span>`;
+  };
+
   container.innerHTML = queue.map((review) => {
     const levelClass = `review-${String(review.level || '').toLowerCase()}`;
-    const decided = review.humanDecision;
+    const decisionLabel = getDecisionLabel(review.humanDecision);
     const isSelected = review.id === _selectedReviewId;
+    const taskTitle = review.linkedTask?.title || review.compliance?.taskTitle || '';
     return `
     <div class="review-queue-item ${levelClass}${isSelected ? ' selected' : ''}" data-review-id="${escapeHtml(review.id)}" data-action="open-review-detail">
       <div class="review-queue-info">
         <strong>${escapeHtml(review.title)}</strong>
-        <span>${escapeHtml(review.owner || '未知')} · ${escapeHtml(getReviewLevelLabel(review.level))} · 分数 ${Number(review.score) || 0}</span>
+        ${taskTitle ? `<span class="review-task-link">🔗 ${escapeHtml(taskTitle.slice(0, 35))}</span>` : ''}
+        <span>${escapeHtml(review.owner || '未知')} · ${escapeHtml(getReviewLevelLabel(review.level))}</span>
       </div>
       <div class="review-queue-actions">
-        ${decided
-          ? `<span class="review-decided">${escapeHtml(decisionLabel[decided] || decided)}</span>`
+        ${getCompletionBadge(review.completionRate)}
+        ${decisionLabel
+          ? `<span class="review-decided">${escapeHtml(decisionLabel)}</span>`
           : `<span class="review-level-badge level-${String(review.level||'').toLowerCase()}">${escapeHtml(getReviewLevelLabel(review.level))}</span>`}
       </div>
     </div>`;
@@ -1853,6 +1870,21 @@ async function openReviewDetail(reviewId) {
         </div>
       </div>
 
+      ${review.completionRate !== null && review.completionRate !== undefined ? `
+      <div>
+        <div class="review-section-label">完成度评估</div>
+        <div class="completion-bar-wrap">
+          <div class="completion-bar" style="width:${Math.min(review.completionRate,100)}%;background:${review.completionRate>=90?'var(--success)':review.completionRate>=50?'var(--accent)':'var(--warning)'}"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:4px">${review.completionRate}% 完成</div>
+        ${review.compliance ? `
+        <div style="margin-top:8px;font-size:12px">
+          ${(review.compliance.done||[]).length ? `<div style="color:var(--success)">✅ 已完成：${review.compliance.done.map(escapeHtml).join('、')}</div>` : ''}
+          ${(review.compliance.notDone||[]).length ? `<div style="color:var(--warning)">⬜ 未完成：${review.compliance.notDone.map(escapeHtml).join('、')}</div>` : ''}
+          ${(review.compliance.needsHumanCheck||[]).length ? `<div style="color:var(--accent)">⚠️ 需人工确认：${review.compliance.needsHumanCheck.map(escapeHtml).join('、')}</div>` : ''}
+        </div>` : ''}
+      </div>` : ''}
+
       ${review.suggestion ? `
       <div>
         <div class="review-section-label">AI 建议</div>
@@ -1870,7 +1902,16 @@ async function openReviewDetail(reviewId) {
 
       ${decided ? `
       <div class="review-decision-area">
-        <div style="font-size:13px;color:var(--text-dim)">已处理：${{ acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免（通过）' }[decided] || decided}</div>
+        ${(() => {
+          if (typeof decided === 'object' && decided !== null) {
+            const statusLabel = { approved: '✅ 已 LGTM', requested_changes: '💬 已打回修改', waiting: '⏱️ 等待更多 commit' };
+            return `<div style="font-size:13px;color:var(--text-dim)">${statusLabel[decided.status] || decided.status}</div>
+              ${decided.reviewer ? `<div style="font-size:12px;color:var(--text-dim)">审阅人：${escapeHtml(decided.reviewer)}</div>` : ''}
+              ${decided.reason ? `<div style="font-size:12px;color:var(--text-dim)">理由：${escapeHtml(decided.reason)}</div>` : ''}
+              ${decided.overrideBlock && decided.overrideReason ? `<div style="font-size:12px;color:var(--warning)">⚠️ Override Block：${escapeHtml(decided.overrideReason)}</div>` : ''}`;
+          }
+          return `<div style="font-size:13px;color:var(--text-dim)">已处理：${{ acknowledged: '已确认', 'needs-fix': '需修复', exempted: '已豁免（通过）' }[decided] || decided}</div>`;
+        })()}
         ${review.humanNote ? `<div style="font-size:12px;color:var(--text-dim)">备注：${escapeHtml(review.humanNote)}</div>` : ''}
         ${review.resolvedTaskId ? `<div style="font-size:12px;color:var(--accent)">已建任务：${escapeHtml(review.resolvedTaskId)}</div>` : ''}
       </div>` : `
@@ -1894,9 +1935,24 @@ async function openReviewDetail(reviewId) {
       </div>
 
       <div class="review-decision-area" id="reviewDecisionArea">
+        <div class="review-section-label">人工审阅决策</div>
         <div class="review-decision-row">
-          <button class="btn-sm btn-resolve-pass" onclick="resolveReview('${escapeHtml(reviewId)}','pass')">✓ 通过</button>
-          <button class="btn-sm btn-resolve-fix" onclick="resolveReview('${escapeHtml(reviewId)}','needs-fix')">↩ 打回 ${escapeHtml(review.owner || review.actor || '负责人')}</button>
+          <button class="btn-sm btn-lgtm" onclick="submitHumanDecision('${escapeHtml(reviewId)}','LGTM')">✅ LGTM</button>
+          <button class="btn-sm btn-request-changes" onclick="submitHumanDecision('${escapeHtml(reviewId)}','request_changes')">💬 Request Changes</button>
+          <button class="btn-sm btn-waiting" onclick="submitHumanDecision('${escapeHtml(reviewId)}','waiting')">⏱️ Waiting</button>
+        </div>
+        ${(review.blocks || []).length ? `
+        <div class="override-block-area" id="overrideBlockArea">
+          <label style="font-size:13px;color:var(--warning);display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="overrideBlockCheck" onchange="document.getElementById('overrideReasonArea').style.display=this.checked?'block':'none'">
+            ⚠️ Override Block（${review.blocks.length} 项安全风险）
+          </label>
+          <div id="overrideReasonArea" style="display:none;margin-top:8px">
+            <textarea id="overrideReasonText" class="review-note-input" placeholder="必填：说明为什么可以豁免这些 Block 项（记录在案，晚会报表可查）" rows="2" style="width:100%;resize:vertical"></textarea>
+          </div>
+        </div>` : ''}
+        <div style="margin-top:8px">
+          <textarea id="reviewDecisionNote" class="review-note-input" placeholder="决策理由（可选，留空也可以提交）" rows="2" style="width:100%;resize:vertical"></textarea>
         </div>
       </div>`}
     </div>`;
@@ -1907,6 +1963,86 @@ async function openReviewDetail(reviewId) {
     const sc = document.querySelector('#solutionsContainer');
     if (sc) sc.dataset.solutions = JSON.stringify(cachedSols);
   }
+}
+
+/**
+ * 提交人工审阅决策（新格式：LGTM / request_changes / waiting）
+ * 支持 Override Block（附理由，记入晚会报表）
+ */
+async function submitHumanDecision(reviewId, decision) {
+  const reasonEl = document.getElementById('reviewDecisionNote');
+  const overrideCheck = document.getElementById('overrideBlockCheck');
+  const overrideReasonEl = document.getElementById('overrideReasonText');
+
+  const overrideBlock = Boolean(overrideCheck?.checked);
+  const overrideReason = overrideReasonEl?.value?.trim() || '';
+
+  if (overrideBlock && !overrideReason) {
+    toast('⚠️ Override Block 时，必须填写豁免理由');
+    overrideReasonEl?.focus();
+    return;
+  }
+
+  const payload = {
+    decision,
+    reason: reasonEl?.value?.trim() || '',
+    overrideBlock,
+    overrideReason
+  };
+
+  try {
+    const result = await api(`/api/reviews/${encodeURIComponent(reviewId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+
+    // 更新缓存，避免重新打开时读到旧状态
+    if (_reviewDetailCache[reviewId]) {
+      _reviewDetailCache[reviewId].review = result.review;
+    }
+
+    const decisionMsg = { LGTM: '✅ LGTM 提交成功', request_changes: '💬 已打回，等待作者修改', waiting: '⏱️ 已标记等待，PR 留在队列' };
+    toast(decisionMsg[decision] || '决策已提交');
+
+    // 决策后关闭面板，刷新队列
+    await loadReviewQueue();
+    if (decision !== 'waiting') {
+      _selectedReviewId = null;
+      const panel = document.querySelector('#reviewDetailContent');
+      if (panel) panel.innerHTML = '<div class="empty-state">请从左侧选择审阅项</div>';
+    } else {
+      // Waiting：重新打开面板，显示已标记状态
+      delete _reviewDetailCache[reviewId];
+      openReviewDetail(reviewId);
+    }
+  } catch (err) {
+    toast(err.message || '提交决策失败，请重试');
+  }
+}
+
+/**
+ * 任务负责人触发 PR 合并
+ * 合并成功后：pull 状态变 merged + task 状态变已完成 + 企微推送
+ */
+async function mergePRFromTask(pullId, taskId) {
+  const result = await api(`/api/pulls/${encodeURIComponent(pullId)}/merge`, {
+    method: 'POST',
+    body: JSON.stringify({ actor: state.me?.name || '' })
+  });
+  if (!result.merged) throw new Error('合并返回结果异常');
+
+  toast(`✅ PR 已合并，任务${result.task ? '已标记为完成' : '状态已更新'}`);
+
+  // 刷新本地 state
+  const prIdx = (state.pulls || []).findIndex((p) => p.id === pullId);
+  if (prIdx !== -1) state.pulls[prIdx] = { ...state.pulls[prIdx], state: 'merged' };
+  if (result.task) {
+    const taskIdx = (state.tasks || []).findIndex((t) => t.id === result.task.id);
+    if (taskIdx !== -1) state.tasks[taskIdx] = { ...state.tasks[taskIdx], ...result.task };
+  }
+
+  // 刷新 task 详情面板
+  renderCurrentView();
 }
 
 let _selectedSolution = null;
@@ -4400,6 +4536,26 @@ function bindEvents() {
   });
   document.querySelector('[data-action="push-evening-report"]')?.addEventListener('click', () => {
     pushEveningReportManual().catch((e) => toast(e.message));
+  });
+
+  // 任务详情：合并 PR 按钮（事件委托，按钮动态生成）
+  document.addEventListener('click', async (event) => {
+    const mergeBtn = event.target.closest('[data-action="merge-pr"]');
+    if (mergeBtn && !mergeBtn.disabled) {
+      const pullId = mergeBtn.dataset.pullId;
+      const taskId = mergeBtn.dataset.taskId;
+      if (!pullId) return;
+      mergeBtn.disabled = true;
+      const origText = mergeBtn.textContent;
+      mergeBtn.textContent = '合并中...';
+      try {
+        await mergePRFromTask(pullId, taskId);
+      } catch (e) {
+        mergeBtn.disabled = false;
+        mergeBtn.textContent = origText;
+        toast(`合并失败：${e.message || e}`);
+      }
+    }
   });
 
   // 健康度 modal

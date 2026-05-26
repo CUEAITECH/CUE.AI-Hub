@@ -7,7 +7,7 @@
  *   - webhookRoutes.js（GitHub PR webhook / PR-Agent sink）
  */
 
-import { fetchProjectPRs, fetchPRDetail, parseRepo } from './githubApi.js';
+import { fetchProjectPRs, fetchPRDetail, fetchPRDiff, fetchPRFiles, parseRepo } from './githubApi.js';
 import { parsePrAgentReview } from './prAgentParser.js';
 import { reviewChange } from './reviewer.js';
 import { bindActivityToExplicitRefs } from './bindingEngine.js';
@@ -73,7 +73,7 @@ function normalizePullEntry(prData, projectId, linkedTaskIds = []) {
  *
  * LLM_DRY_RUN=true 时不调真 API，返回 stub 结果（用于排查调用频次问题，不烧钱）
  */
-async function buildHubReview(prDetail, linkedTaskIds, store) {
+async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
   if (process.env.LLM_DRY_RUN === 'true') {
     trace('llm-dryrun-stub', { prNumber: prDetail.number });
     return {
@@ -91,19 +91,51 @@ async function buildHubReview(prDetail, linkedTaskIds, store) {
     : null;
 
   try {
+    // 获取真实 PR diff 和文件列表（若有 GitHub 配置）
+    let diff = prDetail.body || '';
+    let files = [];
+
+    if (owner && repo && prDetail.number) {
+      try {
+        [diff, files] = await Promise.all([
+          fetchPRDiff(owner, repo, prDetail.number),
+          fetchPRFiles(owner, repo, prDetail.number)
+        ]);
+      } catch (err) {
+        logger.warn(`[pullPipeline] 获取 PR diff 失败，降级使用 PR body: ${err.message}`);
+      }
+    }
+
     const result = await reviewChange({
       repo: `${prDetail.number}`,
       title: prDetail.title,
       owner: prDetail.author,
-      diff: prDetail.body || '',
-      files: [],
+      diff,
+      files,
       task: linkedTask || null
     });
 
+    // 计算完成度：done / (done + notDone) * 100
+    const compliance = result.compliance || null;
+    let completionRate = null;
+    if (compliance) {
+      const done = Array.isArray(compliance.done) ? compliance.done.length : 0;
+      const notDone = Array.isArray(compliance.notDone) ? compliance.notDone.length : 0;
+      const total = done + notDone;
+      completionRate = total > 0 ? Math.round((done / total) * 100) : null;
+    }
+
+    // 提取 Block 级问题（用于 override 流程）
+    const blocks = (result.issues || [])
+      .filter((i) => i.severity === 'critical' || i.severity === 'security')
+      .map((i) => ({ issue: i.header || i.description || '', severity: i.severity, isOverridden: false }));
+
     return {
       level: result.level || 'Pass',
-      compliance: linkedTask && result.compliance ? { taskId: linkedTask.id, ...result.compliance } : null,
+      compliance: linkedTask && compliance ? { taskId: linkedTask.id, ...compliance } : null,
       issues: result.issues || [],
+      completionRate,
+      blocks,
       createdAt: new Date().toISOString()
     };
   } catch (err) {
@@ -116,8 +148,14 @@ async function buildHubReview(prDetail, linkedTaskIds, store) {
  * 同步单个 PR 进 store
  * - 若已存在（按 pull id）则更新；否则新增
  * - 返回 { isNew: boolean, pull: object }
+ * @param {object} prDetail - PR 详情
+ * @param {string} projectId - 项目 ID
+ * @param {function} updateStore - 更新 store 的回调
+ * @param {object} store - 当前 store 快照
+ * @param {string} owner - GitHub owner（可选，用于获取真实 diff）
+ * @param {string} repo - GitHub repo（可选，用于获取真实 diff）
  */
-export async function upsertPullIntoStore(prDetail, projectId, updateStore, store) {
+export async function upsertPullIntoStore(prDetail, projectId, updateStore, store, owner, repo) {
   const linkedTaskIds = extractLinkedTaskIds(prDetail.title, prDetail.body, store);
   const pullId = `pull_${prDetail.number}_${projectId}`;
   const existing = (store.pulls || []).find((p) => p.id === pullId);
@@ -141,7 +179,7 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
       newState: prDetail.state
     });
   }
-  const hubReview = unchanged ? existing.hubReview : await buildHubReview(prDetail, linkedTaskIds, store);
+  const hubReview = unchanged ? existing.hubReview : await buildHubReview(prDetail, linkedTaskIds, store, owner, repo);
   const prAgentReview = parsePrAgentReview(prDetail);
 
   const pullEntry = {
@@ -210,7 +248,7 @@ export async function syncProjectPRs(project, store, updateStore, options = {}) 
     try {
       // 拉取完整详情（含 review comments，用于 prAgentParser）
       const prDetail = await fetchPRDetail(owner, repo, pr.number);
-      const { isNew, pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store);
+      const { isNew, pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store, owner, repo);
       if (isNew) added++;
       else updated++;
       results.push(pull);
@@ -257,7 +295,7 @@ export async function upsertPullFromWebhook(repoFull, prNumber, action) {
 
   try {
     const prDetail = await fetchPRDetail(owner, repoName, prNumber);
-    const { pull } = await upsertPullIntoStore(prDetail, project.id, update, store);
+    const { pull } = await upsertPullIntoStore(prDetail, project.id, update, store, owner, repoName);
     logger.info(`[pullPipeline] PR #${prNumber} (${action}) upserted via webhook`);
     return pull;
   } catch (err) {
@@ -287,7 +325,7 @@ export async function handlePrAgentSink(payload, store, updateStore) {
 
   try {
     const prDetail = await fetchPRDetail(owner, repoName, pr_number);
-    const { pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store);
+    const { pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store, owner, repoName);
     logger.info(`[pullPipeline] PR #${pr_number} upserted (project: ${project.id})`);
     return pull;
   } catch (err) {

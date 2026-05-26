@@ -253,3 +253,91 @@ export async function fetchPRDetail(owner, repo, prNumber) {
     }))
   };
 }
+
+/**
+ * 获取 PR 的文件列表和改动统计
+ * @param {string} owner
+ * @param {string} repo
+ * @param {number} prNumber
+ * @returns {Promise<Array>} 文件列表，包含 filename, status, additions, deletions, patch
+ */
+export async function fetchPRFiles(owner, repo, prNumber) {
+  const files = await ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=100`);
+  return (files || []).map((f) => ({
+    filename: f.filename || '',
+    status: f.status || '',
+    additions: f.additions || 0,
+    deletions: f.deletions || 0,
+    patch: f.patch || '',
+    changes: f.changes || 0
+  }));
+}
+
+/**
+ * 获取 PR 的完整 diff 文本（unified diff 格式）
+ * @param {string} owner
+ * @param {string} repo
+ * @param {number} prNumber
+ * @returns {Promise<string>} 完整 diff 文本
+ */
+export async function fetchPRDiff(owner, repo, prNumber) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`;
+  const res = await fetch(url, {
+    headers: {
+      ...authHeaders(),
+      'Accept': 'application/vnd.github.v3.diff'
+    }
+  });
+  if (res.status === 403 || res.status === 429) {
+    const reset = res.headers.get('x-ratelimit-reset');
+    const resetTime = reset ? new Date(Number(reset) * 1000).toLocaleTimeString('zh-CN') : '未知';
+    throw new Error(`GitHub API 速率限制，${reset ? `恢复时间 ${resetTime}` : '请配置 GITHUB_TOKEN 提高配额'}`);
+  }
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    throw new Error(`GitHub API ${res.status}: ${errBody.slice(0, 200)}`);
+  }
+  return res.text();
+}
+
+/**
+ * 合并 PR（手动触发或自动合并）
+ * @param {string} owner
+ * @param {string} repo
+ * @param {number} prNumber
+ * @param {object} options - { commit_title, commit_message, merge_method }
+ * @returns {Promise<object>} merge 结果，含 merged, sha 等
+ */
+export async function mergePR(owner, repo, prNumber, options = {}) {
+  const body = {
+    commit_title: options.commit_title,
+    commit_message: options.commit_message,
+    merge_method: options.merge_method || 'squash'
+  };
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/merge`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`GitHub API ${res.status}: ${errBody.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+/**
+ * 获取分支保护规则（用于检查 PR 是否满足 merge 条件）
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string} branch - 分支名
+ * @returns {Promise<object|null>} 保护规则或 null（无保护）
+ */
+export async function getBranchProtection(owner, repo, branch) {
+  try {
+    return await ghFetch(`/repos/${owner}/${repo}/branches/${branch}/protection`);
+  } catch (err) {
+    if (err.message.includes('404')) return null;
+    throw err;
+  }
+}
