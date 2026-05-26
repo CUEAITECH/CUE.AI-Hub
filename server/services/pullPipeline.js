@@ -197,11 +197,21 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
   // 先解析 PR-Agent 数据（需要在 unchanged 判断之前）
   // 原因：即使 PR 内容没变，PR-Agent 可能刚发完 review，需要触发混合模式重跑
   const prAgentDataEarly = parsePrAgentReview(prDetail);
-  const prAgentJustArrived = prAgentDataEarly?.issues?.length > 0 &&
+  const freshIssueCount = prAgentDataEarly?.issues?.length ?? 0;
+  const storedIssueCount = existing?.prAgentReview?.issues?.length ?? 0;
+
+  // 情况 1：PR-Agent 数据首次到达（之前没有 llm+pr-agent 来源的审阅）
+  const prAgentJustArrived = freshIssueCount > 0 &&
     existing?.hubReview?.analysisSource !== 'llm+pr-agent';
 
-  // 跳过条件：已有 review + 真实 diff + PR 未变 + 未被强制重建 + PR-Agent 未新增数据
-  const unchanged = !forceRebuild && !dryRun && !prAgentJustArrived && existing?.hubReview &&
+  // 情况 2：解析器逻辑更新导致 issue 数发生变化（例如修复了误分类 bug）
+  // 这确保服务器重启后，Parser 修复会自动重跑受影响的 PR
+  const prAgentIssuesChanged = freshIssueCount !== storedIssueCount &&
+    existing?.hubReview?.analysisSource === 'llm+pr-agent';
+
+  // 跳过条件：已有 review + 真实 diff + PR 未变 + 未被强制重建 + PR-Agent 数据未变
+  const unchanged = !forceRebuild && !dryRun && !prAgentJustArrived && !prAgentIssuesChanged &&
+    existing?.hubReview &&
     existing.hubReview.diffVersion === 'real' &&
     existing.state === prDetail.state &&
     existing.updatedAt >= (prDetail.updatedAt || '');
@@ -209,6 +219,7 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
   const rebuildReason = dryRun ? 'dry-run'
     : forceRebuild ? 'pr-agent-sink'
     : prAgentJustArrived ? 'pr-agent-data-arrived'
+    : prAgentIssuesChanged ? 'pr-agent-issues-changed'
     : existing ? 'pr-changed'
     : 'new-pr';
 
