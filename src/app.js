@@ -1720,15 +1720,28 @@ function renderReviews() {
     const complianceBadge = c
       ? `<span class="review-compliance-badge" title="${escapeHtml(c.taskTitle || '')}">验收 ✅${(c.done||[]).length} ❌${(c.notDone||[]).length} ⚠️${(c.needsHumanCheck||[]).length}</span>`
       : '';
+    // 分数/完成度：PR审阅用 completionRate，旧 commit 审阅用 score，都没有则隐藏
+    const scorePart = review.completionRate !== null && review.completionRate !== undefined
+      ? `<b>${review.completionRate}%</b>`
+      : (review.score !== undefined && review.score !== null && review.score > 0)
+        ? `<b>${Number(review.score)}</b>`
+        : '';
+    // 来源类型标注
+    const sourceTag = review.pullId || review.id?.startsWith('rev_pr_')
+      ? `<span style="font-size:10px;color:var(--accent);font-weight:600">PR</span>`
+      : `<span style="font-size:10px;color:var(--text-dim)">commit</span>`;
     return `
     <div class="review-item review-${escapeHtml(String(review.level).toLowerCase())}">
       <div>
-        <strong>${escapeHtml(review.title)}</strong>
-        <span>${escapeHtml(review.repo)} · ${escapeHtml(review.owner)} · ${escapeHtml((review.findings || []).join('；'))}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${sourceTag}
+          <strong>${escapeHtml(review.title)}</strong>
+        </div>
+        <span>${escapeHtml(review.owner)} · ${escapeHtml((review.findings || []).slice(0,1).join(''))}</span>
         ${complianceBadge}
         ${review.suggestion ? `<p class="review-suggestion">${escapeHtml(review.suggestion)}</p>` : ''}
       </div>
-      <b>${Number(review.score) || 0}</b>
+      ${scorePart}
       <em>${escapeHtml(getReviewLevelLabel(review.level))}</em>
     </div>`;
   }).join('');
