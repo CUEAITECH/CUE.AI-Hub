@@ -61,6 +61,10 @@ function normalizePullEntry(prData, projectId, linkedTaskIds = []) {
     prAgentReview: null,
     hubReview: null,
     commits: prData.commits || [],
+    files: prData.files || [],
+    additions: prData.additions || 0,
+    deletions: prData.deletions || 0,
+    changedFiles: prData.changedFiles || 0,
     mergedAt: prData.mergedAt || null,
     createdAt: prData.createdAt || new Date().toISOString(),
     updatedAt: prData.updatedAt || new Date().toISOString()
@@ -200,8 +204,15 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
     linkedTaskIds,
     hubReview,
     prAgentReview: prAgentReview || existing?.prAgentReview || null,
+    commits: prDetail.commits || existing?.commits || [],
+    files: prDetail.files || existing?.files || [],
+    additions: prDetail.additions ?? existing?.additions ?? 0,
+    deletions: prDetail.deletions ?? existing?.deletions ?? 0,
+    changedFiles: prDetail.changedFiles ?? existing?.changedFiles ?? 0,
     mergedAt: prDetail.mergedAt || existing?.mergedAt || null,
-    updatedAt: new Date().toISOString()
+    createdAt: prDetail.createdAt || existing?.createdAt || new Date().toISOString(),
+    updatedAt: prDetail.updatedAt || existing?.updatedAt || new Date().toISOString(),
+    syncedAt: new Date().toISOString()
   };
 
   let isNew = false;

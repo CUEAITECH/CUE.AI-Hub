@@ -39,3 +39,63 @@ jobs:
                 '详见 .github/CUE_AI_GITHUB_RULES.md'
               ].join('\n'));
             }
+
+  pr-body-policy:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查 PR 描述完整性
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr?.body || '';
+            const isDraft = Boolean(pr?.draft);
+            const requiredSections = [
+              '## 关联任务',
+              '## 变更说明',
+              '## 验收清单（AC）',
+              '## 测试说明',
+              '## 风险说明',
+              '## 人工核查'
+            ];
+
+            const missing = requiredSections.filter((section) => !body.includes(section));
+            const hasTaskRef = /(task_[A-Za-z0-9_-]+|#[0-9]+)/.test(body);
+            const hasAcItem = /- \[(x|X| |~)\]\s+\S+/.test(body);
+            const hasCheckedOrManualAc = /- \[(x|X|~)\]\s+\S+/.test(body);
+
+            const sectionText = (heading) => {
+              const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const match = body.match(new RegExp(`${escaped}\\s*([\\s\\S]*?)(?=\\n## |$)`, 'm'));
+              return match?.[1]?.trim() || '';
+            };
+
+            const testText = sectionText('## 测试说明');
+            const manualText = sectionText('## 人工核查');
+            const riskText = sectionText('## 风险说明');
+
+            const failures = [];
+            if (missing.length) failures.push(`缺少必填章节：${missing.join('、')}`);
+            const readyFailures = [];
+            if (!hasTaskRef) readyFailures.push('缺少关联任务：请填写 task_xxx 或 #issue号');
+            if (!hasAcItem) readyFailures.push('缺少验收清单项：请至少填写一条 - [ ] / - [x] / - [~]');
+            if (!hasCheckedOrManualAc) readyFailures.push('验收清单不能全是空项：至少一项应为 [x] 或 [~]');
+            if (testText.length < 10) readyFailures.push('测试说明过短：请写明运行的命令、手动验证步骤或未测试原因');
+            if (manualText.length < 10) readyFailures.push('人工核查过短：请写明 reviewer 需要检查的页面、接口、日志、截图或 Hub 状态');
+            if (riskText.length < 4) readyFailures.push('风险说明不能为空；无风险请写“无明显风险”');
+
+            if (isDraft && readyFailures.length) {
+              for (const warning of readyFailures) core.warning(`Draft PR 待补：${warning}`);
+            } else {
+              failures.push(...readyFailures);
+            }
+
+            if (failures.length) {
+              core.setFailed([
+                'PR 描述不符合 Cue.AI 提交流程：',
+                ...failures.map((item) => `- ${item}`),
+                '',
+                '请按 .github/pull_request_template.md 填写，并参考 docs/PR-WORKFLOW.md。'
+              ].join('\n'));
+            }

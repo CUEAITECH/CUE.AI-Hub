@@ -1,25 +1,41 @@
 name: PR-Agent Review
+# PR-Agent 是自动审阅和合规信号源，不替代人工 reviewer。
+# 默认使用 OpenAI-compatible API（ikuncode），以匹配当前仓库 secrets 和回归测试。
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review, review_requested]
   pull_request_review_comment:
     types: [created]
   issue_comment:
     types: [created]
+  workflow_dispatch:
 
 jobs:
   pr_agent_job:
+    if: ${{ github.event.sender.type != 'Bot' && (github.event_name != 'issue_comment' || github.event.issue.pull_request) }}
     runs-on: ubuntu-latest
+    name: Run PR-Agent review
     permissions:
       issues: write
       pull-requests: write
-      contents: read
+      contents: write
     steps:
-      - name: PR-Agent Review
-        uses: Codium-ai/pr-agent@main
+      - name: Validate PR-Agent configuration
         env:
-          # PR-Agent/OpenAI-like API config. Double-underscore names are the current
+          OPENAI_KEY_VALUE: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_KEY_VALUE" ]; then
+            echo "::error::Missing repository secret OPENAI_API_KEY for PR-Agent."
+            exit 1
+          fi
+
+      - name: PR-Agent review
+        id: pragent
+        uses: the-pr-agent/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # OpenAI-compatible provider. Double-underscore names are the current
           # documented env form; OPENAI_KEY/API_BASE are kept for older action builds.
           OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI__KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -31,17 +47,27 @@ jobs:
           github_action_config.auto_review: "true"
           github_action_config.auto_improve: "false"
           github_action_config.auto_describe: "true"
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review", "review_requested"]'
+          pr_reviewer.require_tests_review: "true"
+          pr_reviewer.require_score_review: "true"
 
       - name: Notify Hub (sink)
         if: always()
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || '' }}
+          HUB_URL: ${{ vars.HUB_URL || secrets.CUE_HUB_URL }}
+          CUE_API_KEY: ${{ secrets.CUE_API_KEY }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
           if [ -z "$PR_NUMBER" ]; then
             echo "No PR number found, skipping Hub notification"
             exit 0
           fi
-          curl -sf -X POST "${{ secrets.CUE_HUB_URL }}/api/webhooks/pr-agent" \
+          if [ -z "$HUB_URL" ]; then
+            echo "No HUB_URL/CUE_HUB_URL configured, skipping Hub notification"
+            exit 0
+          fi
+          curl -sf -X POST "$HUB_URL/api/webhooks/pr-agent" \
             -H "Content-Type: application/json" \
-            -H "X-CUE-API-Key: ${{ secrets.CUE_API_KEY }}" \
+            -H "X-CUE-API-Key: $CUE_API_KEY" \
             -d "{\"event\":\"pr_agent_review\",\"repo\":\"${{ github.repository }}\",\"pr_number\":${PR_NUMBER},\"run_id\":\"${{ github.run_id }}\"}" \
             || echo "Hub notification failed (non-fatal)"
