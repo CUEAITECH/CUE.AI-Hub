@@ -4094,6 +4094,9 @@ function setRoute(route) {
   if (route === 'pulls') {
     fetchAndRenderPulls().catch((err) => toast(err.message));
   }
+  if (route === 'reviews') {
+    loadReviewQueue().catch((err) => toast(err.message));
+  }
   if (route === 'account-admin') {
     renderAccountAdmin().catch((error) => toast(error.message));
   }
