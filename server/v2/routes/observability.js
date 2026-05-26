@@ -142,13 +142,13 @@ export async function handle(ctx) {
     const costUsd  = ((daily.totalInput || 0) * 0.000003 + (daily.totalOutput || 0) * 0.000015);
     const costYuan = costUsd * 7.2;
     const cacheHitRate = daily.totalCalls > 0
-      ? Math.round(daily.cacheHits / daily.totalCalls * 100) : 0;
+      ? Math.round(daily.cacheHits / daily.totalCalls * 100) : null; // null → 前端显示 '—'
 
     sendV2Json(200, {
       today: {
         totalCalls:    daily.totalCalls,
         failedCalls:   daily.failedCalls,
-        cacheHitRate:  `${cacheHitRate}%`,
+        cacheHitRate:  cacheHitRate != null ? `${cacheHitRate}%` : null,
         estimatedCostYuan: parseFloat(costYuan.toFixed(2)),
         estimatedCostUsd:  parseFloat(costUsd.toFixed(4)),
       },
