@@ -215,10 +215,13 @@ export async function fetchProjectPRs(owner, repo, options = {}) {
  * @param {number} prNumber
  */
 export async function fetchPRDetail(owner, repo, prNumber) {
-  const [pr, reviews, comments] = await Promise.all([
+  // PR-Agent 把 review 发为 issue comment（/issues/:number/comments），
+  // 而不是 PR review（/pulls/:number/reviews），必须同时抓两个接口。
+  const [pr, reviews, comments, issueComments] = await Promise.all([
     ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}`),
     ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/reviews`),
-    ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/comments`)
+    ghFetch(`/repos/${owner}/${repo}/pulls/${prNumber}/comments`),
+    ghFetch(`/repos/${owner}/${repo}/issues/${prNumber}/comments`)
   ]);
 
   return {
@@ -243,14 +246,26 @@ export async function fetchPRDetail(owner, repo, prNumber) {
       submittedAt: r.submitted_at || '',
       htmlUrl: r.html_url || ''
     })),
-    reviewComments: (comments || []).map((c) => ({
-      id: c.id,
-      user: c.user?.login || '',
-      body: c.body || '',
-      path: c.path || '',
-      line: c.line || c.original_line || null,
-      createdAt: c.created_at || ''
-    }))
+    reviewComments: [
+      // inline code comments (PR review comments)
+      ...(comments || []).map((c) => ({
+        id: c.id,
+        user: c.user?.login || '',
+        body: c.body || '',
+        path: c.path || '',
+        line: c.line || c.original_line || null,
+        createdAt: c.created_at || ''
+      })),
+      // issue-level comments（PR-Agent /review 结果发在这里）
+      ...(issueComments || []).map((c) => ({
+        id: c.id,
+        user: c.user?.login || '',
+        body: c.body || '',
+        path: '',
+        line: null,
+        createdAt: c.created_at || ''
+      }))
+    ]
   };
 }
 

@@ -194,25 +194,34 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
 
   const dryRun = process.env.LLM_DRY_RUN === 'true';
 
-  // 跳过条件：已有 review + 真实 diff + PR 未变 + 未被强制重建
-  // forceRebuild=true：PR-Agent sink 到达后触发，让 Hub 以混合模式重跑
-  const unchanged = !forceRebuild && !dryRun && existing?.hubReview &&
+  // 先解析 PR-Agent 数据（需要在 unchanged 判断之前）
+  // 原因：即使 PR 内容没变，PR-Agent 可能刚发完 review，需要触发混合模式重跑
+  const prAgentDataEarly = parsePrAgentReview(prDetail);
+  const prAgentJustArrived = prAgentDataEarly?.issues?.length > 0 &&
+    existing?.hubReview?.analysisSource !== 'llm+pr-agent';
+
+  // 跳过条件：已有 review + 真实 diff + PR 未变 + 未被强制重建 + PR-Agent 未新增数据
+  const unchanged = !forceRebuild && !dryRun && !prAgentJustArrived && existing?.hubReview &&
     existing.hubReview.diffVersion === 'real' &&
     existing.state === prDetail.state &&
     existing.updatedAt >= (prDetail.updatedAt || '');
+
+  const rebuildReason = dryRun ? 'dry-run'
+    : forceRebuild ? 'pr-agent-sink'
+    : prAgentJustArrived ? 'pr-agent-data-arrived'
+    : existing ? 'pr-changed'
+    : 'new-pr';
+
   if (unchanged) {
     trace('llm-skip', { prNumber: prDetail.number, projectId, reason: 'unchanged' });
   } else {
     trace('llm-call', {
-      prNumber: prDetail.number,
-      projectId,
-      reason: dryRun ? 'dry-run' : forceRebuild ? 'pr-agent-sink' : (existing ? 'pr-changed' : 'new-pr'),
-      existingState: existing?.state,
-      newState: prDetail.state
+      prNumber: prDetail.number, projectId, reason: rebuildReason,
+      existingState: existing?.state, newState: prDetail.state
     });
   }
   const hubReview = unchanged ? existing.hubReview : await buildHubReview(prDetail, linkedTaskIds, store, owner, repo);
-  const prAgentReview = parsePrAgentReview(prDetail);
+  const prAgentReview = prAgentDataEarly; // 已在 unchanged 判断前解析，直接复用
 
   const pullEntry = {
     ...(existing || normalizePullEntry(prDetail, projectId, linkedTaskIds)),
