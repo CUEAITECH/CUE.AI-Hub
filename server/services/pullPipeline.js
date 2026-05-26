@@ -73,6 +73,13 @@ function normalizePullEntry(prData, projectId, linkedTaskIds = []) {
  *
  * LLM_DRY_RUN=true 时不调真 API，返回 stub 结果（用于排查调用频次问题，不烧钱）
  */
+/**
+ * 混合审阅模式：
+ *   有 PR-Agent 数据 → Hub LLM 只做 AC 对账，代码 issues 用 PR-Agent 的结果
+ *   无 PR-Agent 数据 → Hub LLM 全量审阅（当前行为）
+ *
+ * 好处：避免重复分析代码质量，Hub 专注 Task 合规；PR-Agent 负责代码细节
+ */
 async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
   if (process.env.LLM_DRY_RUN === 'true') {
     trace('llm-dryrun-stub', { prNumber: prDetail.number });
@@ -91,10 +98,10 @@ async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
     : null;
 
   try {
-    // 获取真实 PR diff 和文件列表（若有 GitHub 配置）
+    // 获取真实 PR diff 和文件列表
     let diff = prDetail.body || '';
     let files = [];
-    let diffVersion = 'body'; // 标记 diff 来源，用于判断是否需要重新分析
+    let diffVersion = 'body';
 
     if (owner && repo && prDetail.number) {
       try {
@@ -108,16 +115,29 @@ async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
       }
     }
 
+    // 解析 PR-Agent 审阅（可能是 null，取决于 PR-Agent 是否已跑完）
+    const prAgentData = parsePrAgentReview(prDetail);
+    const prAgentIssues = prAgentData?.issues?.length ? prAgentData.issues : null;
+
+    if (prAgentIssues) {
+      trace('hybrid-review', {
+        prNumber: prDetail.number,
+        prAgentIssueCount: prAgentIssues.length,
+        botLogin: prAgentData.botLogin
+      });
+    }
+
     const result = await reviewChange({
       repo: `${prDetail.number}`,
       title: prDetail.title,
       owner: prDetail.author,
       diff,
       files,
-      task: linkedTask || null
+      task: linkedTask || null,
+      prAgentIssues        // 传入后 reviewer 自动切换 AC-only 模式
     });
 
-    // 计算完成度：done / (done + notDone) * 100
+    // 完成度：done / (done + notDone) * 100
     const compliance = result.compliance || null;
     let completionRate = null;
     if (compliance) {
@@ -127,7 +147,7 @@ async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
       completionRate = total > 0 ? Math.round((done / total) * 100) : null;
     }
 
-    // 提取 Block 级问题（用于 override 流程）
+    // Block 级问题（critical/security → override 流程）
     const blocks = (result.issues || [])
       .filter((i) => i.severity === 'critical' || i.severity === 'security')
       .map((i) => ({ issue: i.header || i.description || '', severity: i.severity, isOverridden: false }));
@@ -141,6 +161,10 @@ async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
       blocks,
       diffVersion,
       analysisSource: result._source || 'unknown',
+      // PR-Agent 元数据（用于前端展示来源和 effort 参考）
+      prAgentMeta: prAgentData
+        ? { botLogin: prAgentData.botLogin, effort: prAgentData.effort, hasSecurityConcern: prAgentData.hasSecurityConcern, rawUrl: prAgentData.rawUrl }
+        : null,
       createdAt: new Date().toISOString()
     };
   } catch (err) {
@@ -153,25 +177,26 @@ async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
  * 同步单个 PR 进 store
  * - 若已存在（按 pull id）则更新；否则新增
  * - 返回 { isNew: boolean, pull: object }
- * @param {object} prDetail - PR 详情
- * @param {string} projectId - 项目 ID
- * @param {function} updateStore - 更新 store 的回调
- * @param {object} store - 当前 store 快照
- * @param {string} owner - GitHub owner（可选，用于获取真实 diff）
- * @param {string} repo - GitHub repo（可选，用于获取真实 diff）
+ * @param {object}  prDetail   - PR 详情
+ * @param {string}  projectId  - 项目 ID
+ * @param {function} updateStore
+ * @param {object}  store      - 当前 store 快照
+ * @param {string}  owner      - GitHub owner（可选）
+ * @param {string}  repo       - GitHub repo（可选）
+ * @param {object}  [options]
+ * @param {boolean} [options.forceRebuild=false] - 强制重建 hubReview（PR-Agent sink 触发时使用）
  */
-export async function upsertPullIntoStore(prDetail, projectId, updateStore, store, owner, repo) {
+export async function upsertPullIntoStore(prDetail, projectId, updateStore, store, owner, repo, options = {}) {
+  const { forceRebuild = false } = options;
   const linkedTaskIds = extractLinkedTaskIds(prDetail.title, prDetail.body, store);
   const pullId = `pull_${prDetail.number}_${projectId}`;
   const existing = (store.pulls || []).find((p) => p.id === pullId);
 
-  // LLM_DRY_RUN=true：绕过缓存，强制让每个 PR 进 buildHubReview 路径
-  // 这样能完整复现"原始触发次数"（buildHubReview 内部会走 stub 不烧钱）
   const dryRun = process.env.LLM_DRY_RUN === 'true';
 
-  // 跳过 LLM：已有 review 且 PR 状态/更新时间未变，且已经用真实 diff 分析过
-  // diffVersion !== 'real' 的旧缓存（用 PR body 或伪字符串分析）会被强制重建
-  const unchanged = !dryRun && existing?.hubReview &&
+  // 跳过条件：已有 review + 真实 diff + PR 未变 + 未被强制重建
+  // forceRebuild=true：PR-Agent sink 到达后触发，让 Hub 以混合模式重跑
+  const unchanged = !forceRebuild && !dryRun && existing?.hubReview &&
     existing.hubReview.diffVersion === 'real' &&
     existing.state === prDetail.state &&
     existing.updatedAt >= (prDetail.updatedAt || '');
@@ -181,7 +206,7 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
     trace('llm-call', {
       prNumber: prDetail.number,
       projectId,
-      reason: dryRun ? 'dry-run' : (existing ? 'pr-changed' : 'new-pr'),
+      reason: dryRun ? 'dry-run' : forceRebuild ? 'pr-agent-sink' : (existing ? 'pr-changed' : 'new-pr'),
       existingState: existing?.state,
       newState: prDetail.state
     });
@@ -370,8 +395,12 @@ export async function handlePrAgentSink(payload, store, updateStore) {
 
   try {
     const prDetail = await fetchPRDetail(owner, repoName, pr_number);
-    const { pull } = await upsertPullIntoStore(prDetail, project.id, updateStore, store, owner, repoName);
-    logger.info(`[pullPipeline] PR #${pr_number} upserted (project: ${project.id})`);
+    // forceRebuild=true：让 Hub 以混合模式重跑审阅（读取 PR-Agent 评论 → AC-only LLM）
+    const { pull } = await upsertPullIntoStore(
+      prDetail, project.id, updateStore, store, owner, repoName,
+      { forceRebuild: true }
+    );
+    logger.info(`[pullPipeline] PR #${pr_number} upserted via PR-Agent sink (hybrid mode)`);
     return pull;
   } catch (err) {
     logger.error(`[pullPipeline] handlePrAgentSink failed:`, err.message);

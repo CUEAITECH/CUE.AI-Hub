@@ -101,6 +101,36 @@ const REVIEWER_SYSTEM_PROMPT = `你是 CUE Project Hub 的代码审阅 AI，参�
   "suggestion": "总体建议，50 字以内"
 }`;
 
+/**
+ * AC-only 模式：PR-Agent 已负责代码质量审阅时，Hub 只做 Task AC 对账
+ * issues 留空数组，节省 token，避免重复分析
+ */
+const REVIEWER_AC_ONLY_PROMPT = `你是 CUE Project Hub 的验收标准核查 AI。
+本次代码质量审阅由 PR-Agent 负责，你只需要完成一件事：
+
+验收标准对账（仅当用户输入提供了"任务验收标准"时执行；未提供则所有数组留空）
+  - done：本次或既往提交已实现，且这次没有破坏
+  - notDone：尚未实现，或这次把之前实现的功能改坏了
+  - needsHumanCheck：仅从代码无法判定（UI 视觉、运行时行为、外部服务等）
+
+规则：
+  - 必须涵盖每一条验收标准，三桶加起来等于全部条目
+  - 不要新增验收标准里没有的条目
+  - 不需要检测代码问题（issues 返回空数组）
+
+输出严格遵守如下 JSON 格式，不要任何多余文字：
+
+{
+  "ticket_requirements": ["验收标准1原文复述"],
+  "compliance": {
+    "done": ["..."],
+    "notDone": ["..."],
+    "needsHumanCheck": ["..."]
+  },
+  "issues": [],
+  "suggestion": ""
+}`;
+
 function countChangedLines(diff) {
   const lines = String(diff || '').split('\n');
   return lines.filter((line) => line.startsWith('+') || line.startsWith('-')).length;
@@ -161,7 +191,20 @@ function reviewChangeWithRules({ title = '', repo = '', owner = '', diff = '', f
  * @param {string[]} params.files
  * @param {object} [params.task]  关联任务（含 id/title/acceptance），用于验收对账
  */
-export async function reviewChange({ title = '', repo = '', owner = '', diff = '', files = [], task = null }) {
+/**
+ * @param {object} params
+ * @param {string}  params.title
+ * @param {string}  params.repo
+ * @param {string}  params.owner
+ * @param {string}  params.diff
+ * @param {string[]} params.files
+ * @param {object}  [params.task]          关联任务（含 acceptance），用于验收对账
+ * @param {Array}   [params.prAgentIssues] PR-Agent 已提供的代码问题（传入时走 AC-only 模式）
+ */
+export async function reviewChange({ title = '', repo = '', owner = '', diff = '', files = [], task = null, prAgentIssues = null }) {
+  // 如果 PR-Agent 已提供代码问题，Hub 只做 AC 对账，不重复做代码质量分析
+  const acOnlyMode = Array.isArray(prAgentIssues) && prAgentIssues.length > 0;
+
   if (isAvailable()) {
     const truncatedDiff = diff.length > MAX_DIFF_LEN
       ? diff.slice(0, MAX_DIFF_LEN / 2) + '\n\n... [diff 已截断] ...\n\n' + diff.slice(-MAX_DIFF_LEN / 2)
@@ -179,7 +222,8 @@ ${acceptanceBlock}
 Diff 内容：
 ${truncatedDiff}`.trim();
 
-    const raw = await callClaude(REVIEWER_SYSTEM_PROMPT, userPrompt);
+    const systemPrompt = acOnlyMode ? REVIEWER_AC_ONLY_PROMPT : REVIEWER_SYSTEM_PROMPT;
+    const raw = await callClaude(systemPrompt, userPrompt);
     const result = parseJsonOutput(raw);
 
     if (result && (result.compliance || result.issues)) {
@@ -193,7 +237,12 @@ ${truncatedDiff}`.trim();
             needsHumanCheck: Array.isArray(result.compliance?.needsHumanCheck) ? result.compliance.needsHumanCheck : []
           }
         : null;
-      const issues = Array.isArray(result.issues) ? result.issues.filter((i) => i && i.file) : [];
+
+      // AC-only 模式：用 PR-Agent 的 issues；全量模式：用 Hub LLM 的 issues
+      const issues = acOnlyMode
+        ? prAgentIssues
+        : (Array.isArray(result.issues) ? result.issues.filter((i) => i && i.file) : []);
+
       const score = deriveScore(issues);
       const level = deriveLevel(issues, compliance);
       const findings = issues.length
@@ -208,7 +257,7 @@ ${truncatedDiff}`.trim();
         suggestion: String(result.suggestion || ''),
         compliance,
         issues,
-        _source: 'llm',
+        _source: acOnlyMode ? 'llm+pr-agent' : 'llm',
         createdAt: new Date().toISOString()
       };
     }

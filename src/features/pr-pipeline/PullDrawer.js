@@ -42,7 +42,29 @@ function buildPullDrawerHtml(pull, state, { escapeHtml }) {
     ${complianceHtml('Hub Review', pull.hubReview?.compliance)}
     ${complianceHtml('PR-Agent', pull.prAgentReview?.compliance)}
 
-    ${pull.hubReview?.level ? `<div class="pr-info-row" style="margin-top:0.8rem;"><strong>Hub Review 级别：</strong>${pull.hubReview.level}</div>` : ''}
+    ${pull.hubReview?.level ? (() => {
+      const level = pull.hubReview.level;
+      const src = pull.hubReview.analysisSource;
+      const prAgentMeta = pull.hubReview.prAgentMeta;
+      const levelColor = level === 'Block' || level === 'Escalate' ? '#ef4444'
+        : level === 'Warning' ? '#f59e0b' : '#22c55e';
+      const srcBadge = src === 'llm+pr-agent'
+        ? `<span style="font-size:0.75rem;color:#6366f1;margin-left:0.5rem;">✦ Hub AC + PR-Agent</span>`
+        : src === 'llm'
+          ? `<span style="font-size:0.75rem;color:#22c55e;margin-left:0.5rem;">✦ Hub AI</span>`
+          : `<span style="font-size:0.75rem;color:#f59e0b;margin-left:0.5rem;">⚠ 关键词扫描</span>`;
+      const effortBadge = prAgentMeta?.effort
+        ? `<span style="font-size:0.75rem;color:#9ca3af;margin-left:0.5rem;">审阅工作量 ${'🔵'.repeat(prAgentMeta.effort)}${'⚪'.repeat(5 - prAgentMeta.effort)}</span>`
+        : '';
+      const secBadge = prAgentMeta?.hasSecurityConcern
+        ? `<span style="font-size:0.75rem;color:#ef4444;margin-left:0.5rem;">🔒 安全问题</span>`
+        : '';
+      return `<div class="pr-info-row" style="margin-top:0.8rem;align-items:center;flex-wrap:wrap;gap:0.25rem;">
+        <strong>Hub Review：</strong><span style="color:${levelColor};font-weight:600;">${level}</span>
+        ${srcBadge}${effortBadge}${secBadge}
+        ${prAgentMeta?.rawUrl ? `<a href="${prAgentMeta.rawUrl}" target="_blank" rel="noopener" style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">查看 PR-Agent 原文 →</a>` : ''}
+      </div>`;
+    })() : ''}
 
     <div class="pr-decision-row">
       <button class="btn-pass" onclick="submitPullDecision('${pull.id}', 'Pass')">✓ Pass</button>
