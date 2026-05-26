@@ -166,7 +166,10 @@ export function startScheduler(deps) {
       if (isWeComAvailable()) {
         try {
           const reminderStore = await loadStore();
-          const allReviews = reminderStore.reviews || [];
+          // 只看 PR 审阅（commit 审阅语义不同，不参与合并门控提醒）
+          const allReviews = (reminderStore.reviews || []).filter(
+            (r) => r.pullId || r.id?.startsWith('rev_pr_')
+          );
 
           // 筛选"待人工审阅"的 review：完成度 >= 50%、未决策、非 Pass
           const pendingReviews = allReviews.filter((r) => {

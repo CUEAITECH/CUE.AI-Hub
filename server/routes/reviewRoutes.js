@@ -231,8 +231,14 @@ AI 建议：${review.suggestion || '无'}`;
       const allReviews = store.reviews || [];
       const tasks = store.tasks || [];
 
+      // 队列只展示 PR 审阅（有 pullId 或 id 以 rev_pr_ 开头）
+      // commit push 审阅语义不同（无合并动作），不进此队列
+      const prReviews = allReviews.filter(
+        (r) => r.pullId || r.id?.startsWith('rev_pr_')
+      );
+
       // 完成度分层过滤：< 50% 不进队列（太早，让作者继续迭代）
-      const eligible = allReviews.filter((review) => {
+      const eligible = prReviews.filter((review) => {
         const rate = review.completionRate;
         return rate === null || rate === undefined || rate >= 50;
       });
@@ -282,8 +288,13 @@ AI 建议：${review.suggestion || '无'}`;
       const allReviews = store.reviews || [];
       const tasks = store.tasks || [];
 
+      // 与 /queue 一致：只展示 PR 审阅
+      const prReviews = allReviews.filter(
+        (r) => r.pullId || r.id?.startsWith('rev_pr_')
+      );
+
       // 与 /queue 一致的过滤逻辑，但返回完整 AI 报告 + task spec
-      const eligible = allReviews.filter((review) => {
+      const eligible = prReviews.filter((review) => {
         const rate = review.completionRate;
         return rate === null || rate === undefined || rate >= 50;
       });
