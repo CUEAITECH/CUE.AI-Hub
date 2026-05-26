@@ -94,6 +94,7 @@ async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
     // 获取真实 PR diff 和文件列表（若有 GitHub 配置）
     let diff = prDetail.body || '';
     let files = [];
+    let diffVersion = 'body'; // 标记 diff 来源，用于判断是否需要重新分析
 
     if (owner && repo && prDetail.number) {
       try {
@@ -101,6 +102,7 @@ async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
           fetchPRDiff(owner, repo, prDetail.number),
           fetchPRFiles(owner, repo, prDetail.number)
         ]);
+        diffVersion = 'real';
       } catch (err) {
         logger.warn(`[pullPipeline] 获取 PR diff 失败，降级使用 PR body: ${err.message}`);
       }
@@ -136,6 +138,7 @@ async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
       issues: result.issues || [],
       completionRate,
       blocks,
+      diffVersion,
       createdAt: new Date().toISOString()
     };
   } catch (err) {
@@ -164,8 +167,10 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
   // 这样能完整复现"原始触发次数"（buildHubReview 内部会走 stub 不烧钱）
   const dryRun = process.env.LLM_DRY_RUN === 'true';
 
-  // 跳过 LLM：已有 review 且 PR 状态/更新时间未变
+  // 跳过 LLM：已有 review 且 PR 状态/更新时间未变，且已经用真实 diff 分析过
+  // diffVersion !== 'real' 的旧缓存（用 PR body 或伪字符串分析）会被强制重建
   const unchanged = !dryRun && existing?.hubReview &&
+    existing.hubReview.diffVersion === 'real' &&
     existing.state === prDetail.state &&
     existing.updatedAt >= (prDetail.updatedAt || '');
   if (unchanged) {
