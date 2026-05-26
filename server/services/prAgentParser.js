@@ -50,14 +50,30 @@ function extractIssues(text = '') {
   const sectionMatch = text.match(sectionRe);
   const scanText = sectionMatch ? sectionMatch[1] : text;
 
+  // 负向过滤：PR-Agent 用于「无问题」的标准短语，不应被当作 issue
+  const NEGATIVE_PHRASES = [
+    /no\s+(security|major|critical|relevant|issues?|concerns?|tests?|bugs?)\s+(concerns?|identified|detected|found)/i,
+    /no\s+issues?\s+detected/i,
+    /no\s+relevant\s+tests/i,
+    /security\s+concerns?\s+identified/i,
+    /no\s+major\s+issues/i,
+    /estimated\s+effort/i,
+    /preparing\s+review/i,
+    /persistent\s+review/i,
+    /updated\s+to\s+latest/i,
+  ];
+
   for (const line of scanText.split('\n')) {
     const t = line.trim();
     if (!t || t.length < 10) continue;
 
+    // 先检查负向短语，命中则跳过整行
+    if (NEGATIVE_PHRASES.some((re) => re.test(t))) continue;
+
     let severity = null;
     if (/🔴|critical|blocker|security.risk|vulnerabilit|sql.inject|xss|rce/i.test(t)) {
       severity = 'critical';
-    } else if (/🔒|security\s+concern/i.test(t) && !/:\s*(no|false)/i.test(t)) {
+    } else if (/🔒|security\s+concern/i.test(t)) {
       severity = 'critical';
     } else if (/🟠|major|important|significant|breaking.change/i.test(t)) {
       severity = 'major';
