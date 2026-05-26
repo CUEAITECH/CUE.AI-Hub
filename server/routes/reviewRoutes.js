@@ -233,9 +233,16 @@ AI 建议：${review.suggestion || '无'}`;
 
       // 队列只展示 PR 审阅（有 pullId 或 id 以 rev_pr_ 开头）
       // commit push 审阅语义不同（无合并动作），不进此队列
-      const prReviews = allReviews.filter(
-        (r) => r.pullId || r.id?.startsWith('rev_pr_')
-      );
+      const pulls = store.pulls || [];
+      const prReviews = allReviews.filter((r) => {
+        if (!r.pullId && !r.id?.startsWith('rev_pr_')) return false;
+        // 已关闭/合并的 PR 不需要人工审阅
+        if (r.pullId) {
+          const pull = pulls.find((p) => p.id === r.pullId);
+          if (pull && pull.state !== 'open') return false;
+        }
+        return true;
+      });
 
       // 完成度分层过滤：< 50% 不进队列（太早，让作者继续迭代）
       const eligible = prReviews.filter((review) => {
@@ -288,10 +295,16 @@ AI 建议：${review.suggestion || '无'}`;
       const allReviews = store.reviews || [];
       const tasks = store.tasks || [];
 
-      // 与 /queue 一致：只展示 PR 审阅
-      const prReviews = allReviews.filter(
-        (r) => r.pullId || r.id?.startsWith('rev_pr_')
-      );
+      // 与 /queue 一致：只展示 open PR 审阅
+      const pulls = store.pulls || [];
+      const prReviews = allReviews.filter((r) => {
+        if (!r.pullId && !r.id?.startsWith('rev_pr_')) return false;
+        if (r.pullId) {
+          const pull = pulls.find((p) => p.id === r.pullId);
+          if (pull && pull.state !== 'open') return false;
+        }
+        return true;
+      });
 
       // 与 /queue 一致的过滤逻辑，但返回完整 AI 报告 + task spec
       const eligible = prReviews.filter((review) => {

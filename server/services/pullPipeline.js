@@ -139,6 +139,7 @@ async function buildHubReview(prDetail, linkedTaskIds, store, owner, repo) {
       completionRate,
       blocks,
       diffVersion,
+      analysisSource: result._source || 'unknown',
       createdAt: new Date().toISOString()
     };
   } catch (err) {

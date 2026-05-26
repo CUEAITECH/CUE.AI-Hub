@@ -1850,6 +1850,11 @@ async function openReviewDetail(reviewId) {
           : review.score !== undefined && review.score !== null
             ? `<span class="review-meta-chip">分数 ${Number(review.score)}/100</span>`
             : ''}
+        ${review.analysisSource === 'rule-engine'
+          ? '<span class="review-meta-chip" style="color:var(--warning,#f59e0b)" title="LLM 调用失败，已降级为关键词扫描，结果仅供参考">⚠️ 关键词扫描</span>'
+          : review.analysisSource === 'llm'
+            ? '<span class="review-meta-chip" style="color:var(--success,#22c55e)">✦ AI 深度分析</span>'
+            : ''}
         <span class="review-meta-chip">作者：${escapeHtml(review.owner || review.actor || '未知')}</span>
         ${review.shortSha ? `<span class="review-meta-chip">${escapeHtml(review.shortSha)}</span>` : ''}
         ${review.commitUrl ? `<span class="review-meta-chip"><a href="${escapeHtml(review.commitUrl)}" target="_blank">查看 GitHub ↗</a></span>` : ''}

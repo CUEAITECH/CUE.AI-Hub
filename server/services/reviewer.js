@@ -147,6 +147,7 @@ function reviewChangeWithRules({ title = '', repo = '', owner = '', diff = '', f
     suggestion: '',
     compliance: null,
     issues,
+    _source: 'rule-engine',
     createdAt: new Date().toISOString()
   };
 }
@@ -207,6 +208,7 @@ ${truncatedDiff}`.trim();
         suggestion: String(result.suggestion || ''),
         compliance,
         issues,
+        _source: 'llm',
         createdAt: new Date().toISOString()
       };
     }
