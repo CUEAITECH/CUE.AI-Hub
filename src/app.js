@@ -1845,7 +1845,11 @@ async function openReviewDetail(reviewId) {
     <div class="review-detail-body">
       <div class="review-detail-meta">
         <span class="review-level-badge level-${levelLower}">${escapeHtml(getReviewLevelLabel(review.level))}</span>
-        <span class="review-meta-chip">分数 ${Number(review.score) || 0}/100</span>
+        ${review.completionRate !== null && review.completionRate !== undefined
+          ? `<span class="review-meta-chip">完成度 ${review.completionRate}%</span>`
+          : review.score !== undefined && review.score !== null
+            ? `<span class="review-meta-chip">分数 ${Number(review.score)}/100</span>`
+            : ''}
         <span class="review-meta-chip">作者：${escapeHtml(review.owner || review.actor || '未知')}</span>
         ${review.shortSha ? `<span class="review-meta-chip">${escapeHtml(review.shortSha)}</span>` : ''}
         ${review.commitUrl ? `<span class="review-meta-chip"><a href="${escapeHtml(review.commitUrl)}" target="_blank">查看 GitHub ↗</a></span>` : ''}
@@ -1866,7 +1870,14 @@ async function openReviewDetail(reviewId) {
       <div>
         <div class="review-section-label">AI 发现的问题</div>
         <div class="review-findings">
-          ${(review.findings || ['无明显问题']).map((f) => `<div class="review-finding-item">${escapeHtml(f)}</div>`).join('')}
+          ${review.findings?.length
+            ? review.findings.map((f) => `<div class="review-finding-item">${escapeHtml(f)}</div>`).join('')
+            : review.issues?.length
+              ? review.issues.map((i) => {
+                  const sev = i.severity === 'critical' ? '🔴 严重' : i.severity === 'security' ? '🔴 安全' : i.severity === 'major' ? '🟡 重要' : '🔵 提示';
+                  return `<div class="review-finding-item" style="border-left-color:${i.severity==='critical'||i.severity==='security'?'var(--red,#f87171)':i.severity==='major'?'var(--yellow,#fbbf24)':'var(--accent)'}">${sev}：${escapeHtml(i.header || i.description || '')}</div>`;
+                }).join('')
+              : '<div class="review-finding-item" style="border-left-color:var(--success,#22c55e)">无明显问题 ✅</div>'}
         </div>
       </div>
 
