@@ -4954,6 +4954,57 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 .btn-resolve-fix   { background: rgba(248,113,113,.12); color: #f87171; border-color: #f87171; }
 .btn-resolve-pass:hover, .btn-resolve-fix:hover { opacity: 0.8; }
 
+/* 人工审阅决策三按钮 */
+.btn-lgtm {
+  background: rgba(34,197,94,.12); color: #4ade80;
+  border: 1px solid rgba(34,197,94,.35); border-radius: 6px;
+  padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-lgtm:hover { background: rgba(34,197,94,.22); transform: translateY(-1px); }
+.btn-lgtm:active { transform: translateY(0); }
+
+.btn-request-changes {
+  background: rgba(248,113,113,.12); color: #f87171;
+  border: 1px solid rgba(248,113,113,.35); border-radius: 6px;
+  padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-request-changes:hover { background: rgba(248,113,113,.22); transform: translateY(-1px); }
+.btn-request-changes:active { transform: translateY(0); }
+
+.btn-waiting {
+  background: rgba(148,163,184,.1); color: var(--text-dim);
+  border: 1px solid rgba(148,163,184,.25); border-radius: 6px;
+  padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-waiting:hover { background: rgba(148,163,184,.2); transform: translateY(-1px); }
+.btn-waiting:active { transform: translateY(0); }
+
+/* 完成度进度条 */
+.completion-bar-wrap {
+  height: 6px; border-radius: 3px;
+  background: var(--panel-3, rgba(255,255,255,.08));
+  overflow: hidden; margin: 4px 0 2px;
+}
+.completion-bar {
+  height: 100%; border-radius: 3px; transition: width 0.3s ease;
+}
+
+/* 完成度 badge */
+.completion-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; border-radius: 4px;
+  padding: 2px 7px; vertical-align: middle;
+}
+.completion-badge.completion-high {
+  background: rgba(34,197,94,.15); color: #4ade80;
+}
+.completion-badge.completion-mid {
+  background: rgba(251,191,36,.15); color: #fbbf24;
+}
+
 /* ── 快速认领成员按钮 ── */
 .claim-member-btns {
   display: flex;

@@ -208,6 +208,39 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
       draft.pulls[idx] = pullEntry;
     }
     draft.pulls = draft.pulls.slice(0, 500);
+
+    // 镜像 hubReview → store.reviews（供审阅队列 + 人工决策接口使用）
+    // 使用稳定 ID rev_pr_<pullId>，让 PATCH /api/reviews/:id 能定位到同一条记录
+    if (hubReview) {
+      const reviewId = `rev_pr_${pullId}`;
+      if (!Array.isArray(draft.reviews)) draft.reviews = [];
+      const revIdx = draft.reviews.findIndex((r) => r.id === reviewId);
+      const existing = revIdx >= 0 ? draft.reviews[revIdx] : null;
+      const reviewEntry = {
+        id: reviewId,
+        pullId,
+        title: prDetail.title || '',
+        owner: prDetail.author || '',
+        level: hubReview.level || 'Pass',
+        completionRate: hubReview.completionRate !== undefined ? hubReview.completionRate : null,
+        blocks: hubReview.blocks || [],
+        compliance: hubReview.compliance || null,
+        issues: hubReview.issues || [],
+        // 保留已有的人工决策（不被新一轮 AI review 覆盖）
+        humanDecision: existing?.humanDecision || null,
+        humanNote: existing?.humanNote || '',
+        humanAt: existing?.humanAt || null,
+        createdAt: existing?.createdAt || hubReview.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      if (revIdx === -1) {
+        draft.reviews.unshift(reviewEntry);
+      } else {
+        draft.reviews[revIdx] = reviewEntry;
+      }
+      draft.reviews = draft.reviews.slice(0, 200);
+    }
+
     return draft;
   });
 

@@ -90,6 +90,15 @@ export function createReviewRoutes({
           humanAt: new Date().toISOString()
         };
         draft.reviews[index] = updated;
+
+        // 同步 humanDecision → store.pulls[pullId].hubReview（双向一致）
+        if (existing.pullId) {
+          const pullIdx = (draft.pulls || []).findIndex((p) => p.id === existing.pullId);
+          if (pullIdx >= 0 && draft.pulls[pullIdx].hubReview) {
+            draft.pulls[pullIdx].hubReview.humanDecision = humanDecision;
+          }
+        }
+
         return draft;
       });
       if (!updated) { sendError(res, 404, 'review not found'); return true; }

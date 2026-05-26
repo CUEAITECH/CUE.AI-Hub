@@ -4754,6 +4754,7 @@ window.loadReviewSolutions = loadReviewSolutions;
 window.resolveReview = resolveReview;
 window.selectSolution = selectSolution;
 window.openReviewDetail = openReviewDetail;
+window.submitHumanDecision = submitHumanDecision;
 window.openPullDrawer = openPullDrawer;
 window.closePullDrawer = closePullDrawer;
 window.submitPullDecision = submitPullDecision;

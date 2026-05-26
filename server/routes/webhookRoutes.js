@@ -116,32 +116,13 @@ export function createWebhookRoutes({
       }
     }
 
+    // PR 事件的审阅已由 upsertPullFromWebhook（上方）通过真实 diff 处理，
+    // 不再在此用伪 diff 创建 Pass 级审阅（Pass 会被队列过滤，徒增噪声）。
     const currentStore = loadStore ? await loadStore() : null;
     for (const activity of activities) {
       if (activity.type === 'pull_request') {
-        // 仅在 opened 和 synchronize 事件触发审阅，过滤掉 closed/labeled/edited 等
-        if (!['opened', 'synchronize'].includes(activity.action)) {
-          logger.info(`[Webhook/PR] 跳过非审阅事件: ${activity.action} (${activity.number})`);
-          continue;
-        }
-
-        const bound = bindActivityToExplicitRefs && currentStore
-          ? bindActivityToExplicitRefs(activity, currentStore)
-          : activity;
-        const linkedTask = bound.taskId && currentStore
-          ? (currentStore.tasks || []).find((t) => t.id === bound.taskId)
-          : null;
-        reviews.push({
-          id: createId('review'),
-          ...await reviewChange({
-            repo: activity.repo,
-            title: activity.title,
-            owner: activity.actor,
-            diff: `${activity.action || ''} ${activity.branch || ''}`,
-            files: activity.files,
-            task: linkedTask || null
-          })
-        });
+        // PR 审阅由 pullPipeline（upsertPullFromWebhook）负责，此处仅记录日志
+        logger.info(`[Webhook/PR] activity 记录: ${activity.action} PR #${activity.number}`);
       }
     }
 
