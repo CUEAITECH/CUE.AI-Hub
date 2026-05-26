@@ -4109,7 +4109,7 @@ function setRoute(route) {
     item.classList.toggle('active', isActive);
     item.setAttribute('aria-current', isActive ? 'page' : 'false');
   });
-  if (route === 'pulls') {
+  if (route === 'pulls' || route === 'viewPulls') {
     fetchAndRenderPulls().catch((err) => toast(err.message));
   }
   if (route === 'reviews') {
