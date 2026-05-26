@@ -8292,6 +8292,53 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   text-align: center;
 }
 
+.pr-review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(43, 88, 118, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #64748b;
+  font-size: 13px;
+}
+
+.pr-review-meta strong {
+  color: #0f172a;
+}
+
+.pr-review-meta span {
+  font-weight: 850;
+}
+
+.pr-review-meta .level-pass {
+  color: #15803d;
+}
+
+.pr-review-meta .level-warning {
+  color: #b45309;
+}
+
+.pr-review-meta .level-block,
+.pr-review-meta .level-escalate,
+.pr-review-meta .danger {
+  color: #dc2626;
+}
+
+.pr-review-meta em,
+.pr-review-meta small {
+  font-style: normal;
+  color: #64748b;
+}
+
+.pr-review-meta a {
+  color: #2563eb;
+  font-weight: 800;
+}
+
 @media (max-width: 760px) {
   .pull-page-hero {
     flex-direction: column;
