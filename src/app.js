@@ -4590,6 +4590,33 @@ function bindEvents() {
     }
   });
 
+  // 任务详情：创建工作 PR 按钮（事件委托，按钮动态生成）
+  document.addEventListener('click', async (event) => {
+    const createPrBtn = event.target.closest('[data-action="create-pr"]');
+    if (!createPrBtn || createPrBtn.disabled) return;
+    const taskId = createPrBtn.dataset.taskId;
+    if (!taskId) return;
+    createPrBtn.disabled = true;
+    const origText = createPrBtn.textContent;
+    createPrBtn.textContent = '创建中...';
+    try {
+      const result = await tasksApi.createPr(taskId);
+      // 刷新任务数据
+      const taskIdx = (state.tasks || []).findIndex((t) => t.id === taskId);
+      if (taskIdx !== -1 && result.task) state.tasks[taskIdx] = result.task;
+      toast(`✅ Draft PR #${result.prNumber} 已创建 · 分支 ${result.branch}`);
+      // 在新标签打开 GitHub PR
+      if (result.htmlUrl) window.open(result.htmlUrl, '_blank', 'noopener');
+      // 重新渲染当前任务详情
+      const task = (state.tasks || []).find((t) => t.id === taskId);
+      if (task) openTaskDetail(taskId);
+    } catch (e) {
+      createPrBtn.disabled = false;
+      createPrBtn.textContent = origText;
+      toast(`创建 PR 失败：${e.message || e}`);
+    }
+  });
+
   // 健康度 modal
   document.querySelector('.dashboard-health').addEventListener('click', openHealthModal);
   document.querySelector('[data-action="close-health-modal"]').addEventListener('click', closeHealthModal);

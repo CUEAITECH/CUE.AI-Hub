@@ -95,6 +95,11 @@ export function renderTaskDetail(state, {
           const linkedPull = (state.pulls || []).find((p) =>
             (p.linkedTaskIds || []).includes(task.id) && p.state === 'open'
           );
+          // 未有关联 PR 时显示「创建工作 PR」按钮
+          if (!linkedPull && task.status !== '已完成') {
+            return `<button class="task-create-pr-btn" data-action="create-pr" data-task-id="${escapeHtml(task.id)}" title="在 GitHub 自动创建 Draft PR，内嵌验收标准 checklist">🔀 创建工作 PR</button>`;
+          }
+          // 已有关联 PR 且满足合并条件时显示合并按钮
           const review = linkedPull?.hubReview || null;
           const humanDecision = review?.humanDecision;
           const humanApproved = (typeof humanDecision === 'object' && humanDecision?.status === 'approved')

@@ -3555,6 +3555,25 @@ select:focus {
   font-weight: 700;
 }
 
+.task-create-pr-btn {
+  border: 1px solid rgba(99, 102, 241, 0.32);
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.task-create-pr-btn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(99, 102, 241, 0.5);
+}
+.task-create-pr-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .task-brief-full {
   display: grid;
   gap: 16px;

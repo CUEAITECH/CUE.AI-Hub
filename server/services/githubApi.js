@@ -342,6 +342,59 @@ export async function mergePR(owner, repo, prNumber, options = {}) {
 }
 
 /**
+ * 从默认分支创建新分支
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string} branchName  新分支名（如 "feat/task_abc123-user-login"）
+ * @returns {Promise<{ ref: string, sha: string }>}
+ */
+export async function createBranch(owner, repo, branchName) {
+  // 1. 获取默认分支的最新 commit SHA
+  const repoInfo = await fetchRepoInfo(owner, repo);
+  const defaultBranch = repoInfo.default_branch || 'main';
+  const refData = await ghFetch(`/repos/${owner}/${repo}/git/ref/heads/${defaultBranch}`);
+  const sha = refData.object?.sha;
+  if (!sha) throw new Error(`无法获取 ${defaultBranch} 分支的 SHA`);
+
+  // 2. 创建新分支
+  const res = await fetch(`${API_BASE}/repos/${owner}/${repo}/git/refs`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha })
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GitHub API ${res.status} (createBranch): ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+/**
+ * 创建 Draft Pull Request
+ * @param {string} owner
+ * @param {string} repo
+ * @param {object} options
+ * @param {string} options.title
+ * @param {string} options.body
+ * @param {string} options.head   源分支
+ * @param {string} options.base   目标分支（默认 main）
+ * @returns {Promise<{ number: number, htmlUrl: string }>}
+ */
+export async function createDraftPR(owner, repo, { title, body, head, base = 'main' }) {
+  const res = await fetch(`${API_BASE}/repos/${owner}/${repo}/pulls`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, body, head, base, draft: true })
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`GitHub API ${res.status} (createDraftPR): ${errBody.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  return { number: data.number, htmlUrl: data.html_url || '' };
+}
+
+/**
  * 获取分支保护规则（用于检查 PR 是否满足 merge 条件）
  * @param {string} owner
  * @param {string} repo

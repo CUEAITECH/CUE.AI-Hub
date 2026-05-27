@@ -22,6 +22,9 @@ export function createTasksApi(client = httpClient) {
         headers: tenantId ? { 'X-Tenant-Id': tenantId } : {},
       });
     },
+    createPr(taskId) {
+      return client.request(`/api/tasks/${encodeURIComponent(taskId)}/create-pr`, { method: 'POST' });
+    },
   };
 }
 
