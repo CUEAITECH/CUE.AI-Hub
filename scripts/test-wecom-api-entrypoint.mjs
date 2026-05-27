@@ -3,18 +3,30 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile('server/index.js', 'utf8');
 
-const wecomAllowIndex = source.indexOf("url.pathname.startsWith('/api/wecom/')");
+const externalAllowIndex = source.indexOf('function isLegacyExternalApiPath');
 const v1DisabledIndex = source.indexOf("v1 API disabled");
 
-assert.ok(wecomAllowIndex > 0, 'server entrypoint must explicitly allow /api/wecom/*');
+assert.ok(externalAllowIndex > 0, 'server entrypoint must define legacy external API allowlist');
 assert.ok(v1DisabledIndex > 0, 'server entrypoint must keep the v1 /api disabled guard');
 assert.ok(
-  wecomAllowIndex < v1DisabledIndex,
-  '/api/wecom/* allowlist must run before the generic v1 /api disabled guard'
+  externalAllowIndex < v1DisabledIndex,
+  'legacy external API allowlist must run before the generic v1 /api disabled guard'
 );
 
-const wecomAllowBlock = source.slice(wecomAllowIndex, v1DisabledIndex);
-assert.match(wecomAllowBlock, /await handleApi\(req, res, url\)/);
-assert.match(wecomAllowBlock, /req\.method === 'OPTIONS'/);
+const allowBlock = source.slice(externalAllowIndex, v1DisabledIndex);
+for (const path of [
+  '/api/health',
+  '/api/config',
+  '/api/openapi.json',
+  '/api/webhooks/github',
+  '/api/webhooks/pr-agent',
+  '/api/webhooks/bypass',
+  '/api/wecom/',
+]) {
+  assert.ok(allowBlock.includes(path), `${path} must remain available for external integrations`);
+}
+assert.match(allowBlock, /await handleApi\(req, res, url\)/);
+assert.match(allowBlock, /req\.method === 'OPTIONS'/);
+assert.doesNotMatch(allowBlock, /\/api\/tasks['"]/);
 
-console.log('WeCom API entrypoint allowlist OK');
+console.log('Legacy external API entrypoint allowlist OK');

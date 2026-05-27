@@ -174,6 +174,18 @@ function requiresApiKey(req, url) {
   return true;
 }
 
+function isLegacyExternalApiPath(pathname) {
+  return (
+    pathname === '/api/health' ||
+    pathname === '/api/config' ||
+    pathname === '/api/openapi.json' ||
+    pathname === '/api/webhooks/github' ||
+    pathname === '/api/webhooks/pr-agent' ||
+    pathname === '/api/webhooks/bypass' ||
+    pathname.startsWith('/api/wecom/')
+  );
+}
+
 const routeModules = [
   createSystemRoutes({
     loadStore,
@@ -424,10 +436,10 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // WeCom API-plugin tools are public machine-to-machine endpoints used by
-    // enterprise WeChat bots. Keep them on the legacy /api path because the
-    // bot platform is configured against those URLs.
-    if (url.pathname.startsWith('/api/wecom/')) {
+    // External systems are already configured against selected legacy /api
+    // endpoints. Keep only those machine-to-machine entrypoints available
+    // while ordinary v1 app APIs remain disabled during the v2 migration.
+    if (isLegacyExternalApiPath(url.pathname)) {
       if (req.method === 'OPTIONS') {
         setCorsHeaders(res);
         res.writeHead(204);
