@@ -92,7 +92,8 @@ export function renderTaskDetail(state, {
           if (task.status === '已完成') return '';
           const me = currentSessionName ? currentSessionName() : '';
           const role = currentSessionRole ? currentSessionRole() : '';
-          const isAdmin = ['admin', 'project_admin'].includes(role);
+          const meUser = (state.users || []).find((u) => u.name === me || u.username === me);
+          const isAdmin = ['admin', 'project_admin'].includes(role) || Boolean(meUser?.isFounder);
           const alreadyMine = task.owner && task.owner !== '待认领' && task.owner === me;
           const memberOptions = (state.members || [])
             .map((m) => `<option value="${escapeHtml(m.name)}"${m.name === task.owner ? ' selected' : ''}>${escapeHtml(m.name)}</option>`)
