@@ -2406,6 +2406,8 @@ function renderTaskDetail() {
     onMarkAssignmentDone: (id) => markAssignmentDone(id).catch((e) => toast(e.message)),
     onMarkTaskDone: (id) => markTaskDone(id).catch((e) => toast(e.message)),
     onRegenerateBrief: (id) => regenerateBrief(id).catch((e) => toast(e.message)),
+    currentSessionName,
+    currentSessionRole,
   });
 }
 
@@ -4587,6 +4589,39 @@ function bindEvents() {
         mergeBtn.textContent = origText;
         toast(`合并失败：${e.message || e}`);
       }
+    }
+  });
+
+  // 任务详情：领取任务（把自己设为负责人）
+  document.addEventListener('click', async (event) => {
+    const btn = event.target.closest('[data-action="claim-task"]');
+    if (!btn || btn.disabled) return;
+    const taskId = btn.dataset.taskId;
+    const taskTitle = btn.dataset.taskTitle;
+    const me = currentSessionName();
+    if (!me) { toast('请先登录'); return; }
+    btn.disabled = true;
+    try {
+      await claimTask(taskId, taskTitle, me);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // 任务详情：指派任务（管理员选择成员）
+  document.addEventListener('click', async (event) => {
+    const btn = event.target.closest('[data-action="assign-task"]');
+    if (!btn || btn.disabled) return;
+    const taskId = btn.dataset.taskId;
+    const taskTitle = btn.dataset.taskTitle;
+    const select = btn.closest('.task-assign-wrap')?.querySelector('.task-assign-select');
+    const owner = select?.value;
+    if (!owner) { toast('请选择成员'); return; }
+    btn.disabled = true;
+    try {
+      await claimTask(taskId, taskTitle, owner);
+    } finally {
+      btn.disabled = false;
     }
   });
 

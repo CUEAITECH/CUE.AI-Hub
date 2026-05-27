@@ -3555,6 +3555,54 @@ select:focus {
   font-weight: 700;
 }
 
+.task-claim-btn {
+  border: 1px solid rgba(59, 130, 246, 0.32);
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #3b82f6;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 12px;
+  transition: background 0.15s;
+}
+.task-claim-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.16);
+}
+.task-owner-mark {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 8px 4px;
+}
+.task-assign-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.task-assign-select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 7px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.task-assign-btn {
+  border: 1px solid rgba(168, 85, 247, 0.32);
+  border-radius: 6px;
+  background: rgba(168, 85, 247, 0.08);
+  color: #a855f7;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 12px;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.task-assign-btn:hover:not(:disabled) {
+  background: rgba(168, 85, 247, 0.16);
+}
+
 .task-create-pr-btn {
   border: 1px solid rgba(99, 102, 241, 0.32);
   border-radius: 6px;

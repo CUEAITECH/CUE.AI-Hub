@@ -16,6 +16,8 @@ export function renderTaskDetail(state, {
   onMarkTaskDone,
   onRegenerateBrief,
   onMergePR,
+  currentSessionName,
+  currentSessionRole,
 }) {
   const title   = document.querySelector('#taskDetailTitle');
   const subtitle = document.querySelector('#taskDetailSubtitle');
@@ -86,6 +88,30 @@ export function renderTaskDetail(state, {
         </div>`;
       })()}
       <div class="task-detail-actions">
+        ${(() => {
+          if (task.status === '已完成') return '';
+          const me = currentSessionName ? currentSessionName() : '';
+          const role = currentSessionRole ? currentSessionRole() : '';
+          const isAdmin = ['admin', 'project_admin'].includes(role);
+          const alreadyMine = task.owner && task.owner !== '待认领' && task.owner === me;
+          const memberOptions = (state.members || [])
+            .map((m) => `<option value="${escapeHtml(m.name)}"${m.name === task.owner ? ' selected' : ''}>${escapeHtml(m.name)}</option>`)
+            .join('');
+          return `
+            ${!alreadyMine ? `<button class="task-claim-btn" data-action="claim-task" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">
+              领取任务
+            </button>` : `<span class="task-owner-mark">✓ 我的任务</span>`}
+            ${isAdmin ? `
+              <div class="task-assign-wrap">
+                <select class="task-assign-select" data-task-id="${escapeHtml(task.id)}">
+                  ${memberOptions}
+                </select>
+                <button class="task-assign-btn" data-action="assign-task" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">
+                  指派任务
+                </button>
+              </div>` : ''}
+          `;
+        })()}
         ${latestAssignment && latestAssignment.status !== '已完成'
           ? `<button class="task-confirm-done-btn" data-assignment-id="${escapeHtml(latestAssignment.id)}">确认任务完成</button>`
           : task.status !== '已完成'
