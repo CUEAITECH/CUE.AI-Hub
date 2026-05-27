@@ -84,6 +84,20 @@ function mapOwner(login = '', name = '', email = '') {
 }
 
 /**
+ * 中文成员名 → GitHub login（从 authorMap 反查首个 ASCII 匹配词）
+ * 例：'田家铭' → 'jiaming'，'罗子宽' → 'ryanlzk'
+ * 找不到时返回 null（调用方决定降级策略）
+ */
+export function ownerToLogin(chineseName = '') {
+  const entry = authorMap.find((item) => item.owner === chineseName);
+  if (!entry) return null;
+  // 从正则 source 里提取第一个纯 ASCII 单词（去掉中文 unicode 范围和特殊字符）
+  const src = entry.pattern.source;
+  const match = src.match(/\b([a-z][a-z0-9]*)\b/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
+/**
  * 从 GitHub 远端拉取项目最近 commits，含 AI Review 所需的 diff
  * 替代 scanLocalGitProject，不依赖本地 clone
  *

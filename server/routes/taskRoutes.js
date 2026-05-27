@@ -29,27 +29,24 @@ ${acLines}
 *由 CUE Project Hub 自动生成 · [查看任务详情](${hubUrl})*`;
 }
 
-// 中文姓名 → 拼音首字母缩写（简单映射，够用于分支名）
-const OWNER_SLUG = {
-  '田家铭': 'jiaming', '胡佳涛': 'jiatao', '罗子宽': 'zikuan', '林世棋': 'shiqi'
-};
-function ownerSlug(owner = '') {
-  if (OWNER_SLUG[owner]) return OWNER_SLUG[owner];
-  // 英文名直接 lowercase + 截断
-  const ascii = owner.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
-  return ascii || 'dev';
-}
-
-// 分支名格式：feat/MMDD-{owner}-{短ID}
+// 分支名格式：feat/MMDD-{githubLogin}-{短ID}
 // 示例：feat/0527-jiaming-fzbsys
-function safeBranchName(taskId, title = '', owner = '') {
+// members：store.members 数组；ownerToLogin：githubApi 导出的反查函数
+function safeBranchName(taskId, ownerName = '', members = [], ownerToLogin = null) {
   // 从 taskId 尾部取 6 位随机后缀（task_xxx_fzbsys → fzbsys）
   const shortId = taskId.split('_').pop()?.slice(0, 6) || taskId.slice(-6);
   // 今天日期 MMDD（上海时区）
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
   const mmdd = String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
-  const person = ownerSlug(owner);
-  return `feat/${mmdd}-${person}-${shortId}`;
+  // 优先：store.members 里的 githubLogin（管理员手动维护）
+  // 降级：ownerToLogin(authorMap 反查)
+  // 再降级：英文名直接 ascii 化
+  const member = members.find((m) => m.name === ownerName);
+  const login = (member?.githubLogin?.trim())
+    || (ownerToLogin && ownerToLogin(ownerName))
+    || ownerName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8)
+    || 'dev';
+  return `feat/${mmdd}-${login}-${shortId}`;
 }
 
 export function createTaskRoutes({
@@ -64,7 +61,8 @@ export function createTaskRoutes({
   createBranch,
   createFileOnBranch,
   createDraftPR,
-  parseRepo
+  parseRepo,
+  ownerToLogin
 }) {
   return async function taskRoutes(req, res, url) {
     if (req.method === 'POST' && url.pathname === '/api/tasks') {
@@ -186,7 +184,7 @@ export function createTaskRoutes({
         return true;
       }
 
-      const branchName = safeBranchName(taskId, task.title, task.owner);
+      const branchName = safeBranchName(taskId, task.owner, store.members || [], ownerToLogin);
       const prTitle = `feat(${taskId}): ${task.title}`;
       const prBody = buildPrBody(task, project.name);
 

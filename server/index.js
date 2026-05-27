@@ -60,7 +60,7 @@ import { reviewChange } from './services/reviewer.js';
 import { buildMetrics, scanRisks } from './services/riskEngine.js';
 import { parseGitHubEvent, verifyGitHubSignature } from './services/githubWebhook.js';
 import { scanLocalGitProject } from './services/localGit.js';
-import { scanGitHubProject, hasGitHubConfig, fetchCommitDetail, mergePR, getBranchProtection, parseRepo, createBranch, createFileOnBranch, createDraftPR } from './services/githubApi.js';
+import { scanGitHubProject, hasGitHubConfig, fetchCommitDetail, mergePR, getBranchProtection, parseRepo, createBranch, createFileOnBranch, createDraftPR, ownerToLogin } from './services/githubApi.js';
 import { syncGitHubProjectIntoStore, githubSyncErrorHint } from './services/githubSync.js';
 import { callClaude, parseJsonOutput } from './services/claude.js';
 import {
@@ -285,7 +285,8 @@ const routeModules = [
     createBranch,
     createFileOnBranch,
     createDraftPR,
-    parseRepo
+    parseRepo,
+    ownerToLogin
   }),
   createReviewRoutes({
     createId,

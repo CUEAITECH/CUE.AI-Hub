@@ -248,6 +248,12 @@ export function migrateStore(store) {
     return p;
   });
 
+  // 迁移：为已有成员补充 githubLogin 字段（默认空字符串，可由管理员在设置中填写）
+  next.members = (next.members || []).map((m) => ({
+    githubLogin: '',
+    ...m
+  }));
+
   next.activities = (next.activities || []).map(({ diff, ...activity }) => ({
     ...activity,
     deliverableId: activity.deliverableId || null,
