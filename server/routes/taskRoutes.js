@@ -29,16 +29,27 @@ ${acLines}
 *由 CUE Project Hub 自动生成 · [查看任务详情](${hubUrl})*`;
 }
 
-// 分支名安全化：只保留字母数字连字符，截断过长部分
-function safeBranchName(taskId, title = '') {
-  const slug = title
-    .toLowerCase()
-    .replace(/[一-鿿]/g, '') // 去掉中文（会导致 GitHub 分支名问题）
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 40);
-  return `feat/${taskId}${slug ? `-${slug}` : ''}`;
+// 中文姓名 → 拼音首字母缩写（简单映射，够用于分支名）
+const OWNER_SLUG = {
+  '田家铭': 'jiaming', '胡佳涛': 'jiatao', '罗子宽': 'zikuan', '林世棋': 'shiqi'
+};
+function ownerSlug(owner = '') {
+  if (OWNER_SLUG[owner]) return OWNER_SLUG[owner];
+  // 英文名直接 lowercase + 截断
+  const ascii = owner.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+  return ascii || 'dev';
+}
+
+// 分支名格式：feat/MMDD-{owner}-{短ID}
+// 示例：feat/0527-jiaming-fzbsys
+function safeBranchName(taskId, title = '', owner = '') {
+  // 从 taskId 尾部取 6 位随机后缀（task_xxx_fzbsys → fzbsys）
+  const shortId = taskId.split('_').pop()?.slice(0, 6) || taskId.slice(-6);
+  // 今天日期 MMDD（上海时区）
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+  const mmdd = String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  const person = ownerSlug(owner);
+  return `feat/${mmdd}-${person}-${shortId}`;
 }
 
 export function createTaskRoutes({
@@ -175,7 +186,7 @@ export function createTaskRoutes({
         return true;
       }
 
-      const branchName = safeBranchName(taskId, task.title);
+      const branchName = safeBranchName(taskId, task.title, task.owner);
       const prTitle = `feat(${taskId}): ${task.title}`;
       const prBody = buildPrBody(task, project.name);
 
