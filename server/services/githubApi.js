@@ -395,6 +395,30 @@ export async function createDraftPR(owner, repo, { title, body, head, base = 'ma
 }
 
 /**
+ * 在指定分支上创建或更新一个文件（用于生成初始 commit）
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string} branch
+ * @param {string} path       文件路径，如 ".hub/task_abc123.md"
+ * @param {string} content    文件内容（UTF-8 字符串，内部自动 base64）
+ * @param {string} message    commit message
+ * @returns {Promise<object>}
+ */
+export async function createFileOnBranch(owner, repo, branch, path, content, message) {
+  const encoded = Buffer.from(content, 'utf8').toString('base64');
+  const res = await fetch(`${API_BASE}/repos/${owner}/${repo}/contents/${path}`, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, content: encoded, branch })
+  });
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`GitHub API ${res.status} (createFileOnBranch): ${errBody.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+/**
  * 获取分支保护规则（用于检查 PR 是否满足 merge 条件）
  * @param {string} owner
  * @param {string} repo

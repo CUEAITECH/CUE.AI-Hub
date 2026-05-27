@@ -51,6 +51,7 @@ export function createTaskRoutes({
   estimateTasksProgress,
   generatePlan,
   createBranch,
+  createFileOnBranch,
   createDraftPR,
   parseRepo
 }) {
@@ -191,7 +192,54 @@ export function createTaskRoutes({
           }
         }
 
-        // 2. 创建 Draft PR
+        // 2. 在新分支上创建任务上下文文件（作为初始 commit，同时供 Cursor/Copilot 读取）
+        if (branchCreated && createFileOnBranch) {
+          const hubUrl = process.env.HUB_URL || 'https://hub.cueai.top';
+          const acceptance = (task.acceptance || '').trim();
+          const acLines = acceptance
+            ? acceptance.split('\n').filter(Boolean)
+              .map((l) => `- ${l.replace(/^[-*\d.)\s]+/, '').trim()}`).join('\n')
+            : '（验收标准待填写）';
+
+          const contextContent = `# 任务上下文 · ${task.title}
+
+> 本文件由 CUE Project Hub 自动生成，供开发者和 AI 编码助手（Cursor / Copilot）参考。
+
+## 基本信息
+
+| 字段 | 值 |
+|------|-----|
+| 任务 ID | \`${taskId}\` |
+| 负责人 | ${task.owner || '待认领'} |
+| 截止日期 | ${task.due || task.dueDate || '未设置'} |
+| 风险等级 | ${task.risk || '未评估'} |
+| Hub 任务链接 | [查看任务](${hubUrl}) |
+
+## 任务描述
+
+${task.description || task.signal || '暂无描述。'}
+
+## 验收标准
+
+${acLines}
+
+## 开发说明
+
+1. 在此分支（\`${branchName}\`）上进行开发
+2. 完成验收标准中的每一项后，在 PR 的 checklist 中勾选对应项
+3. 代码推送后 Hub 会自动触发 AI 代码审阅
+4. 所有 AC 达标后 Hub 会提示可以合并
+`;
+
+          await createFileOnBranch(
+            owner, repo, branchName,
+            `.hub/${taskId}.md`,
+            contextContent,
+            `chore(${taskId}): 初始化任务上下文文件`
+          );
+        }
+
+        // 3. 创建 Draft PR
         const { number: prNumber, htmlUrl } = await createDraftPR(owner, repo, {
           title: prTitle,
           body: prBody,
