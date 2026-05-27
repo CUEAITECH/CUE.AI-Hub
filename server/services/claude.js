@@ -22,6 +22,16 @@ import logger from '../logger.js';
 // ── 模型配置（env 覆盖） ─────────────────────────────────────────
 const DEFAULT_MODEL = process.env.OPENAI_MODEL      || 'gpt-5.5';
 const MINI_MODEL    = process.env.OPENAI_MINI_MODEL || 'gpt-5.4-mini';
+const DEFAULT_COOLDOWNS_MS = {
+  auth: 10 * 60 * 1000,
+  quota: 10 * 60 * 1000,
+  rate_limit: 60 * 1000,
+  server: 30 * 1000,
+  network: 30 * 1000,
+};
+
+let circuitOpenUntil = 0;
+let circuitReason = null;
 
 function getModel(override) { return override || DEFAULT_MODEL; }
 
@@ -39,6 +49,7 @@ async function recordLlmCall({
   latencyMs,
   refType = null,
   refId = null,
+  failureReason = null,
 }) {
   try {
     const { dbWrite } = await import('../db/actor.js');
@@ -84,6 +95,7 @@ async function recordLlmCall({
           refType,
           refId,
           llmCallId: result.lastInsertRowid,
+          failureReason,
         }),
         source: 'llm',
         eventId: `llm:${result.lastInsertRowid}`,
@@ -92,6 +104,84 @@ async function recordLlmCall({
   } catch (err) {
     logger.warn('[LLM] 账本写入失败:', err.message);
   }
+}
+
+async function recordLlmSkipped({
+  purpose = 'general',
+  model,
+  refType = null,
+  refId = null,
+  reason,
+  retryAfterMs,
+}) {
+  try {
+    const { dbWrite } = await import('../db/actor.js');
+    await dbWrite('llm-call:skipped', (db) => {
+      db.prepare(`
+        INSERT INTO events (tenant_id, type, payload_json, source, event_id, processed_at)
+        VALUES (@tenantId, @type, @payloadJson, @source, @eventId, CURRENT_TIMESTAMP)
+      `).run({
+        tenantId: 'default',
+        type: 'llm.call.skipped',
+        payloadJson: JSON.stringify({
+          purpose,
+          model,
+          refType,
+          refId,
+          reason,
+          retryAfterMs,
+        }),
+        source: 'llm',
+        eventId: `llm:skipped:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+      });
+    });
+  } catch (err) {
+    logger.warn('[LLM] skipped event write failed:', err.message);
+  }
+}
+
+function classifyLlmError(err) {
+  const status = Number(err?.status || 0);
+  const message = String(err?.message || '').toLowerCase();
+  if (status === 401) return 'auth';
+  if (status === 403 && /(quota|balance|billing|insufficient|额度|余额|欠费)/i.test(message)) return 'quota';
+  if (status === 403) return 'auth';
+  if (status === 429) return 'rate_limit';
+  if (status >= 500) return 'server';
+  if (err?.name === 'AbortError') return 'aborted';
+  if (/(fetch failed|econnreset|etimedout|enotfound|network|socket)/i.test(message)) return 'network';
+  return 'unknown';
+}
+
+function cooldownMsFor(reason, err) {
+  const retryAfterHeader = err?.headers?.['retry-after'] ?? err?.headers?.get?.('retry-after');
+  const retryAfter = Number(retryAfterHeader || 0);
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return retryAfter * 1000;
+  const envMs = Number(process.env.LLM_FAILURE_COOLDOWN_MS || 0);
+  if (Number.isFinite(envMs) && envMs > 0) return envMs;
+  return DEFAULT_COOLDOWNS_MS[reason] || 0;
+}
+
+function openCircuit(reason, err) {
+  const cooldownMs = cooldownMsFor(reason, err);
+  if (cooldownMs <= 0) return;
+  circuitReason = reason;
+  circuitOpenUntil = Date.now() + cooldownMs;
+  logger.warn(`[LLM] circuit opened for ${reason}; retry after ${Math.ceil(cooldownMs / 1000)}s`);
+}
+
+export function getLlmCircuitState() {
+  const retryAfterMs = Math.max(0, circuitOpenUntil - Date.now());
+  return {
+    open: retryAfterMs > 0,
+    reason: retryAfterMs > 0 ? circuitReason : null,
+    retryAfterMs,
+  };
+}
+
+export function resetLlmCircuitForTests() {
+  circuitOpenUntil = 0;
+  circuitReason = null;
 }
 
 let _client = null;
@@ -141,6 +231,20 @@ export async function callClaude(systemPrompt, userPrompt, options = {}) {
 
   const startedAt = Date.now();
   const model = getModel(options.model);
+  const circuit = getLlmCircuitState();
+  if (circuit.open) {
+    await recordLlmSkipped({
+      purpose: options.purpose,
+      model,
+      refType: options.refType,
+      refId: options.refId,
+      reason: circuit.reason,
+      retryAfterMs: circuit.retryAfterMs,
+    });
+    logger.warn(`[LLM] circuit open (${circuit.reason}), skipped API call and used fallback`);
+    return null;
+  }
+
   try {
     const fetchOptions = options.signal ? { signal: options.signal } : undefined;
 
@@ -176,6 +280,7 @@ export async function callClaude(systemPrompt, userPrompt, options = {}) {
     return response.choices[0]?.message?.content ?? null;
 
   } catch (err) {
+    const failureReason = classifyLlmError(err);
     await recordLlmCall({
       purpose: options.purpose,
       model,
@@ -185,7 +290,9 @@ export async function callClaude(systemPrompt, userPrompt, options = {}) {
       latencyMs: Date.now() - startedAt,
       refType: options.refType,
       refId: options.refId,
+      failureReason,
     });
+    openCircuit(failureReason, err);
     if (err instanceof OpenAI.AuthenticationError || err.status === 401) {
       logger.error('[LLM] API key 无效，将使用规则引擎');
     } else if (err instanceof OpenAI.RateLimitError || err.status === 429) {
