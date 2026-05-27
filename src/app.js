@@ -2604,35 +2604,71 @@ function renderAssignments() {
               </div>
             </div>
             <div class="claim-member-btns">
-              ${(currentUserCanManageAccounts()
-                ? state.members
-                : state.members.filter((m) => m.name === (sessionStorage.getItem('cueHubUser') || ''))
-              ).map((m) => `
-                <button class="claim-member-btn ${claimedOwners.has(m.name) ? 'claimed' : ''}"
-                  data-task-id="${escapeHtml(task.id)}"
-                  data-task-title="${escapeHtml(task.title)}"
-                  data-owner="${escapeHtml(m.name)}"
-                  ${claimedOwners.has(m.name) ? 'disabled title="已认领"' : ''}>
-                  ${escapeHtml(m.name)}${claimedOwners.has(m.name) ? ' ✓' : ''}
-                </button>`).join('')}
+              ${(() => {
+                const me = sessionStorage.getItem('cueHubUser') || '';
+                const meUser = (state.users || []).find((u) => u.name === me || u.username === me);
+                const canAssign = currentUserCanManageAccounts() || Boolean(meUser?.isFounder);
+                const myClaimed = me && claimedOwners.has(me);
+                const memberOptions = (state.members || [])
+                  .map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`)
+                  .join('');
+                return `
+                  ${me ? `<button class="claim-self-btn${myClaimed ? ' claimed' : ''}"
+                    data-task-id="${escapeHtml(task.id)}"
+                    data-task-title="${escapeHtml(task.title)}"
+                    data-owner="${escapeHtml(me)}"
+                    ${myClaimed ? 'disabled title="已认领"' : ''}>
+                    ${myClaimed ? '已认领 ✓' : '领取任务'}
+                  </button>` : ''}
+                  ${canAssign ? `
+                    <div class="assign-inline-wrap">
+                      <select class="assign-inline-select"
+                        data-task-id="${escapeHtml(task.id)}">
+                        ${memberOptions}
+                      </select>
+                      <button class="assign-inline-btn"
+                        data-task-id="${escapeHtml(task.id)}"
+                        data-task-title="${escapeHtml(task.title)}">
+                        指派
+                      </button>
+                    </div>` : ''}
+                `;
+              })()}
             </div>
           </div>
         `;
       }).join('')}`;
 
-      assignableEl.querySelectorAll('.claim-member-btn:not([disabled])').forEach((btn) => {
+      // 领取任务（自己）
+      assignableEl.querySelectorAll('.claim-self-btn:not([disabled])').forEach((btn) => {
         btn.addEventListener('click', () => {
           if (btn.disabled) return;
-          // 立即禁用 + 乐观显示已认领
           btn.disabled = true;
           btn.classList.add('claimed');
-          btn.textContent = `${btn.dataset.owner} ✓`;
+          btn.textContent = '已认领 ✓';
           claimTask(btn.dataset.taskId, btn.dataset.taskTitle, btn.dataset.owner).catch((e) => {
-            // 失败时回滚按钮状态
             btn.disabled = false;
             btn.classList.remove('claimed');
-            btn.textContent = btn.dataset.owner;
+            btn.textContent = '领取任务';
             toast(e.message);
+          });
+        });
+      });
+      // 指派任务（管理员/创始人）
+      assignableEl.querySelectorAll('.assign-inline-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (btn.disabled) return;
+          const wrap = btn.closest('.assign-inline-wrap');
+          const owner = wrap?.querySelector('.assign-inline-select')?.value;
+          if (!owner) { toast('请选择成员'); return; }
+          btn.disabled = true;
+          const origText = btn.textContent;
+          btn.textContent = '指派中…';
+          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, owner).catch((e) => {
+            toast(e.message);
+          }).finally(() => {
+            btn.disabled = false;
+            btn.textContent = origText;
           });
         });
       });

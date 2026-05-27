@@ -5105,6 +5105,59 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   cursor: default;
 }
 
+/* 领取任务 / 指派任务（新版分工领取卡片按钮） */
+.claim-self-btn {
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 20px;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+  color: #3b82f6;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.claim-self-btn:hover:not([disabled]) {
+  background: rgba(59, 130, 246, 0.18);
+}
+.claim-self-btn.claimed {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  border-color: var(--green);
+  color: var(--green);
+  cursor: default;
+}
+.assign-inline-wrap {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.assign-inline-select {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  max-width: 90px;
+}
+.assign-inline-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 20px;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  background: rgba(168, 85, 247, 0.08);
+  color: #a855f7;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.assign-inline-btn:hover:not([disabled]) {
+  background: rgba(168, 85, 247, 0.18);
+}
+
 /* ── Brief 生成中状态 ── */
 .brief-generating {
   display: flex;
