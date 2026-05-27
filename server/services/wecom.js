@@ -64,8 +64,21 @@ const RISK_ALERT_WECOM_TEMPLATE = `# 🚨 CUE 项目风险告警
 
 // ─── 基础发送 ──────────────────────────────────────────────────────────────────
 
-export function isWeComAvailable() {
-  return Boolean(process.env.WECOM_WEBHOOK_URL);
+export function resolveWeComWebhookUrl(channel = 'default') {
+  if (channel === 'attendance') {
+    return {
+      url: process.env.WECOM_ATTENDANCE_WEBHOOK_URL || process.env.WECOM_WEBHOOK_URL || '',
+      channel: process.env.WECOM_ATTENDANCE_WEBHOOK_URL ? 'attendance' : 'default'
+    };
+  }
+  return {
+    url: process.env.WECOM_WEBHOOK_URL || '',
+    channel: 'default'
+  };
+}
+
+export function isWeComAvailable(channel = 'default') {
+  return Boolean(resolveWeComWebhookUrl(channel).url);
 }
 
 /**
@@ -73,8 +86,8 @@ export function isWeComAvailable() {
  * @param {string} content - Markdown 格式内容（企微子集，无表格）
  * @returns {Promise<boolean>} 是否成功
  */
-export async function sendWeComMarkdown(content) {
-  const webhookUrl = process.env.WECOM_WEBHOOK_URL;
+export async function sendWeComMarkdown(content, options = {}) {
+  const { url: webhookUrl } = resolveWeComWebhookUrl(options.channel);
   if (!webhookUrl) return false;
 
   // 企微单条限制 4096 字节，截断时保留链接尾

@@ -84,7 +84,7 @@ export function startScheduler(deps) {
 
     if (isWorkday && sh === 17 && sm === 0 && lastTaskCompletionPromptDate !== today) {
       lastTaskCompletionPromptDate = today;
-      if (isWeComAvailable()) {
+      if (isWeComAvailable('attendance')) {
         await sendWeComMarkdown([
           `## ${today} 今日任务完成确认`,
           '',
@@ -95,7 +95,7 @@ export function startScheduler(deps) {
           `示例：@${attendanceBotName} 林世棋正常完成`,
           '',
           '延迟完成默认要求第二个工作日补齐；如果后续请假，系统会把连续工作日作为一个评分窗口取平均。'
-        ].join('\n')).catch((err) =>
+        ].join('\n'), { channel: 'attendance' }).catch((err) =>
           logger.error('[Scheduler] 任务完成确认推送失败', err.message)
         );
       }
@@ -103,7 +103,7 @@ export function startScheduler(deps) {
 
     if (isWorkday && sh === 18 && sm === 0 && lastMeetingAttendancePromptDate !== today) {
       lastMeetingAttendancePromptDate = today;
-      if (isWeComAvailable()) {
+      if (isWeComAvailable('attendance')) {
         await sendWeComMarkdown([
           `## ${today} 晚会出席确认`,
           '',
@@ -114,7 +114,7 @@ export function startScheduler(deps) {
           `示例：@${attendanceBotName} 林世棋正常出席`,
           '',
           '18:25-18:35 回复按临时请假/迟到处理；18:35 后仍无记录默认缺勤，可由人事管理补录。'
-        ].join('\n')).catch((err) =>
+        ].join('\n'), { channel: 'attendance' }).catch((err) =>
           logger.error('[Scheduler] 晚会出席确认推送失败', err.message)
         );
       }

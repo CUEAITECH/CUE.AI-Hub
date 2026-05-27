@@ -68,7 +68,7 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统。�
 - 晚会作战包、会后总结、人工审阅提醒自动推送
 - 风险摘要可手动触发推送
 - **AI 插件**：企业微信内直接查询任务列表、认领任务、提交站会、更新进度、记录任务完成/晚会出席反馈（通过 OpenAPI spec 自动发现工具）
-- `WECOM_WEBHOOK_URL` 负责出站推送；成员回复要写回 Hub 时，需要由企业微信智能机器人/API 插件调用 `/api/wecom/command` 或 `/api/wecom/attendance`
+- `WECOM_WEBHOOK_URL` 负责通用出站推送；任务完成/晚会出席提醒优先使用 `WECOM_ATTENDANCE_WEBHOOK_URL`，未配置时回退到 `WECOM_WEBHOOK_URL`。成员回复要写回 Hub 时，需要由企业微信智能机器人/API 插件调用 `/api/wecom/command` 或 `/api/wecom/attendance`
 - `WECOM_BOT_NAME`（默认 `CUE项目中枢`）用于项目查询和指挥类指令；`WECOM_ATTENDANCE_BOT_NAME`（默认 `团队考勤`）用于任务完成和晚会出席签到提醒。
 - 考勤反馈支持带 `@机器人` 的原始消息，例如：`@团队考勤 林世棋正常完成`、`@团队考勤 林世棋延迟出席`
 - `/api/wecom/command` 是模块化指令入口，不调用大语言模型。建议在企业微信智能机器人里配置快捷按钮：`每日排名`、`每周排名`、`晚会统计`、`任务完成统计`、`今日考勤`、`菜单`
@@ -112,7 +112,8 @@ CUE项目中枢：保留项目查询、任务、风险和指挥类能力。
 |------|------|
 | `ANTHROPIC_API_KEY` | Claude API Key，缺失时降级为规则引擎 |
 | `GITHUB_TOKEN` | GitHub PAT，缺失时匿名限速 60次/小时 |
-| `WECOM_WEBHOOK_URL` | 企业微信群机器人 Webhook |
+| `WECOM_WEBHOOK_URL` | 企业微信群机器人 Webhook，建议用于每日晚报/通用提醒 |
+| `WECOM_ATTENDANCE_WEBHOOK_URL` | 团队考勤机器人 Webhook，任务完成和晚会出席提醒优先走这里 |
 | `WECOM_BOT_NAME` | 项目中枢/查询机器人名称，默认 `CUE项目中枢` |
 | `WECOM_ATTENDANCE_BOT_NAME` | 考勤签到机器人名称，默认 `团队考勤` |
 | `CUE_API_KEY` | 写接口鉴权（可选，不配置则写接口开放） |
