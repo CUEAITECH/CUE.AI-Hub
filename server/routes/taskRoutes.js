@@ -192,8 +192,9 @@ export function createTaskRoutes({
           }
         }
 
-        // 2. 在新分支上创建任务上下文文件（作为初始 commit，同时供 Cursor/Copilot 读取）
-        if (branchCreated && createFileOnBranch) {
+        // 2. 在分支上写入任务上下文文件（初始 commit，供 Cursor/Copilot 读取）
+        // 不论分支是否新建都尝试写入；若文件已存在（需 SHA）则忽略，说明该分支已有 commit
+        if (createFileOnBranch) {
           const hubUrl = process.env.HUB_URL || 'https://hub.cueai.top';
           const acceptance = (task.acceptance || '').trim();
           const acLines = acceptance
@@ -231,12 +232,17 @@ ${acLines}
 4. 所有 AC 达标后 Hub 会提示可以合并
 `;
 
-          await createFileOnBranch(
-            owner, repo, branchName,
-            `.hub/${taskId}.md`,
-            contextContent,
-            `chore(${taskId}): 初始化任务上下文文件`
-          );
+          try {
+            await createFileOnBranch(
+              owner, repo, branchName,
+              `.hub/${taskId}.md`,
+              contextContent,
+              `chore(${taskId}): 初始化任务上下文文件`
+            );
+          } catch (fileErr) {
+            // 422 = 文件已存在（需要 SHA 更新），说明分支已有 commit，可以继续
+            if (!fileErr.message.includes('422')) throw fileErr;
+          }
         }
 
         // 3. 创建 Draft PR
