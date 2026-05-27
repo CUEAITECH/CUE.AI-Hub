@@ -424,6 +424,21 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    // WeCom API-plugin tools are public machine-to-machine endpoints used by
+    // enterprise WeChat bots. Keep them on the legacy /api path because the
+    // bot platform is configured against those URLs.
+    if (url.pathname.startsWith('/api/wecom/')) {
+      if (req.method === 'OPTIONS') {
+        setCorsHeaders(res);
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+      const handled = await handleApi(req, res, url);
+      if (!handled) sendError(res, 404, 'not found');
+      return;
+    }
+
     // ── [experiment/v2-standalone] v1 /api/* 已禁用 ──────────────
     if (url.pathname.startsWith('/api/')) {
       if (req.method === 'OPTIONS') {
