@@ -49,7 +49,9 @@ async function renderLlmPanel(helpers) {
       ? '今日成本 <span class="obs-source-badge">真实扣费</span>'
       : today.costSource === 'newapi-tokens'
         ? '今日成本 <span class="obs-source-badge obs-source-tokens">真实 tokens</span>'
-        : '今日成本 <span class="obs-source-badge obs-source-est">估算</span>';
+        : d.newApiAvailable && d.newApiError
+          ? `今日成本 <span class="obs-source-badge obs-source-err" title="${escapeHtml(d.newApiError)}">NewAPI ⚠</span>`
+          : '今日成本 <span class="obs-source-badge obs-source-est">估算</span>';
     const callsLabel = (d.byModel || []).length
       ? '今日调用 <span class="obs-source-badge">NewAPI</span>'
       : '今日调用';
@@ -279,12 +281,66 @@ function updateRefreshedAt() {
 // ── 主入口 ───────────────────────────────────────────────────────
 
 /**
+ * 初始化观察台面板的 HTML 结构（动态创建，确保只在观察台显示）
+ */
+function initObservatorPanels() {
+  const container = document.getElementById('obsComponentsContainer');
+  if (!container) return;
+  if (document.getElementById('obsLlmPanel')) return; // 已初始化
+
+  container.innerHTML = `
+    <div class="panel obs-panel" id="obsLlmPanel">
+      <div class="obs-panel-header">
+        <h3 class="obs-panel-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          LLM 调用账本
+        </h3>
+      </div>
+      <div id="obsLlmContent"></div>
+    </div>
+
+    <div class="panel obs-panel" id="obsEventsPanel">
+      <div class="obs-panel-header">
+        <h3 class="obs-panel-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          事件流
+        </h3>
+        <div class="obs-filters" role="search" aria-label="事件过滤">
+          <input type="search" id="obsEventTypeFilter" placeholder="按 type 过滤…"
+                 class="obs-filter-input" aria-label="事件类型过滤" />
+          <select id="obsEventSourceFilter" class="obs-filter-select" aria-label="按来源过滤">
+            <option value="">所有来源</option>
+            <option value="webhook">webhook</option>
+            <option value="llm">llm</option>
+            <option value="ui">ui</option>
+            <option value="agent">agent</option>
+            <option value="scheduler">scheduler</option>
+          </select>
+        </div>
+      </div>
+      <div id="obsEventsContent"></div>
+    </div>
+
+    <div class="panel obs-panel" id="obsSyncPanel">
+      <div class="obs-panel-header">
+        <h3 class="obs-panel-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+          三端同步健康度
+        </h3>
+      </div>
+      <div id="obsSyncContent"></div>
+    </div>
+  `;
+}
+
+/**
  * 渲染全部观察台面板（三面板并发加载）
  *
  * @param {object} _state     - 当前 state（保留供将来 filter 使用）
  * @param {{ observabilityApi: object, escapeHtml: Function }} helpers
  */
 export async function renderObservatory(_state, helpers) {
+  initObservatorPanels();
   await Promise.allSettled([
     renderLlmPanel(helpers),
     renderEventsPanel(helpers),

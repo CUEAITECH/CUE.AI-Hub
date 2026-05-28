@@ -1172,50 +1172,8 @@
             </button>
           </div>
 
-          <!-- LLM 调用账本 -->
-          <div class="panel obs-panel" id="obsLlmPanel">
-            <div class="obs-panel-header">
-              <h3 class="obs-panel-title">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-                LLM 调用账本
-              </h3>
-            </div>
-            <div id="obsLlmContent"></div>
-          </div>
-
-          <!-- 事件流 -->
-          <div class="panel obs-panel" id="obsEventsPanel">
-            <div class="obs-panel-header">
-              <h3 class="obs-panel-title">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                事件流
-              </h3>
-              <div class="obs-filters" role="search" aria-label="事件过滤">
-                <input type="search" id="obsEventTypeFilter" placeholder="按 type 过滤…"
-                       class="obs-filter-input" aria-label="事件类型过滤" />
-                <select id="obsEventSourceFilter" class="obs-filter-select" aria-label="按来源过滤">
-                  <option value="">所有来源</option>
-                  <option value="webhook">webhook</option>
-                  <option value="llm">llm</option>
-                  <option value="ui">ui</option>
-                  <option value="agent">agent</option>
-                  <option value="scheduler">scheduler</option>
-                </select>
-              </div>
-            </div>
-            <div id="obsEventsContent"></div>
-          </div>
-
-          <!-- 三端同步健康度 -->
-          <div class="panel obs-panel" id="obsSyncPanel">
-            <div class="obs-panel-header">
-              <h3 class="obs-panel-title">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
-                三端同步健康度
-              </h3>
-            </div>
-            <div id="obsSyncContent"></div>
-          </div>
+          <!-- 观察台组件（由 renderObservatory 动态渲染） -->
+          <div id="obsComponentsContainer"></div>
         </section>
       </main>
       <!-- PR 详情侧滑 -->

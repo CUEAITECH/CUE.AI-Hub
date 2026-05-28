@@ -8392,19 +8392,6 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 
 /* ── View wrapper ─────────────────────────────────────────────── */
 
-/* 确保观察台组件只在 observatory 页面显示 */
-#obsLlmPanel,
-#obsEventsPanel,
-#obsSyncPanel {
-  display: none !important;
-}
-
-#observatory.view.active #obsLlmPanel,
-#observatory.view.active #obsEventsPanel,
-#observatory.view.active #obsSyncPanel {
-  display: block !important;
-}
-
 #observatory {
   padding: 1.25rem 1.5rem;
   display: flex;
