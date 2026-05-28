@@ -2621,17 +2621,12 @@ function renderAssignments() {
                     ${myClaimed ? '已认领 ✓' : '领取任务'}
                   </button>` : ''}
                   ${canAssign ? `
-                    <div class="assign-inline-wrap">
-                      <select class="assign-inline-select"
-                        data-task-id="${escapeHtml(task.id)}">
-                        ${memberOptions}
-                      </select>
-                      <button class="assign-inline-btn"
-                        data-task-id="${escapeHtml(task.id)}"
-                        data-task-title="${escapeHtml(task.title)}">
-                        指派
-                      </button>
-                    </div>` : ''}
+                    <button class="assign-inline-btn"
+                      data-action="open-assign-modal"
+                      data-task-id="${escapeHtml(task.id)}"
+                      data-task-title="${escapeHtml(task.title)}">
+                      指派
+                    </button>` : ''}
                 `;
               })()}
             </div>
@@ -2651,24 +2646,6 @@ function renderAssignments() {
             btn.classList.remove('claimed');
             btn.textContent = '领取任务';
             toast(e.message);
-          });
-        });
-      });
-      // 指派任务（管理员/创始人）
-      assignableEl.querySelectorAll('.assign-inline-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          if (btn.disabled) return;
-          const wrap = btn.closest('.assign-inline-wrap');
-          const owner = wrap?.querySelector('.assign-inline-select')?.value;
-          if (!owner) { toast('请选择成员'); return; }
-          btn.disabled = true;
-          const origText = btn.textContent;
-          btn.textContent = '指派中…';
-          claimTask(btn.dataset.taskId, btn.dataset.taskTitle, owner).catch((e) => {
-            toast(e.message);
-          }).finally(() => {
-            btn.disabled = false;
-            btn.textContent = origText;
           });
         });
       });
@@ -4644,22 +4621,6 @@ function bindEvents() {
     }
   });
 
-  // 任务详情：指派任务（管理员选择成员）
-  document.addEventListener('click', async (event) => {
-    const btn = event.target.closest('[data-action="assign-task"]');
-    if (!btn || btn.disabled) return;
-    const taskId = btn.dataset.taskId;
-    const taskTitle = btn.dataset.taskTitle;
-    const select = btn.closest('.task-assign-wrap')?.querySelector('.task-assign-select');
-    const owner = select?.value;
-    if (!owner) { toast('请选择成员'); return; }
-    btn.disabled = true;
-    try {
-      await claimTask(taskId, taskTitle, owner);
-    } finally {
-      btn.disabled = false;
-    }
-  });
 
   // 任务详情：创建工作 PR 按钮（事件委托，按钮动态生成）
   document.addEventListener('click', async (event) => {
@@ -4699,6 +4660,63 @@ function bindEvents() {
   document.querySelector('[data-action="close-task-modal"]').addEventListener('click', closeTaskModal);
   document.querySelector('#taskModalBackdrop').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeTaskModal();
+  });
+
+  // ── 指派任务弹窗 ──────────────────────────────────────────────────
+  let _assignModalTaskId = null;
+  let _assignModalTaskTitle = '';
+
+  function openAssignModal(taskId, taskTitle) {
+    _assignModalTaskId = taskId;
+    _assignModalTaskTitle = taskTitle;
+    const backdrop = document.querySelector('#assignModalBackdrop');
+    const nameEl   = document.querySelector('#assignModalTaskName');
+    const select   = document.querySelector('#assignModalMember');
+    if (!backdrop || !select) return;
+    nameEl.textContent = taskTitle || taskId;
+    select.innerHTML = (state.members || [])
+      .map((m) => `<option value="${m.name}">${m.name} · ${m.role || ''}</option>`)
+      .join('');
+    // 预选当前任务负责人
+    const task = (state.tasks || []).find((t) => t.id === taskId);
+    if (task?.owner && task.owner !== '待认领') select.value = task.owner;
+    backdrop.style.display = 'flex';
+  }
+
+  function closeAssignModal() {
+    document.querySelector('#assignModalBackdrop').style.display = 'none';
+    _assignModalTaskId = null;
+  }
+
+  // 打开弹窗（事件委托，两个入口：分工页卡片 + 任务详情）
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="open-assign-modal"]');
+    if (!btn) return;
+    openAssignModal(btn.dataset.taskId, btn.dataset.taskTitle);
+  });
+
+  document.querySelectorAll('[data-action="close-assign-modal"]').forEach((el) => {
+    el.addEventListener('click', closeAssignModal);
+  });
+  document.querySelector('#assignModalBackdrop').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeAssignModal();
+  });
+
+  document.querySelector('#assignModalConfirm').addEventListener('click', async () => {
+    const owner = document.querySelector('#assignModalMember')?.value;
+    if (!owner || !_assignModalTaskId) return;
+    const btn = document.querySelector('#assignModalConfirm');
+    btn.disabled = true;
+    btn.textContent = '指派中…';
+    try {
+      await claimTask(_assignModalTaskId, _assignModalTaskTitle, owner);
+      closeAssignModal();
+    } catch (e) {
+      toast(`指派失败：${e.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '确认指派';
+    }
   });
   document.querySelector('#taskEditForm').addEventListener('submit', (e) => {
     saveTaskEdit(e).catch((err) => toast(err.message));

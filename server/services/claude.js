@@ -35,9 +35,23 @@ let circuitReason = null;
 
 function getModel(override) { return override || DEFAULT_MODEL; }
 
-function estimateCostUsd(model, inputTokens = 0, outputTokens = 0) {
-  // Conservative default used by the observability dashboard until per-model pricing is centralized.
-  return (Number(inputTokens || 0) * 0.000003) + (Number(outputTokens || 0) * 0.000015);
+// ── 模型单价表（$/1M tokens）── 按模型名关键词匹配 ───────────────────
+const MODEL_PRICING = [
+  // mini / 轻量模型（高频低成本）
+  { pattern: /mini/i,          inputPer1M: 0.40,  outputPer1M: 1.60  },
+  // GPT-5.5 / GPT-5 旗舰
+  { pattern: /5\.5|gpt-5(?![\d.])/i, inputPer1M: 2.00,  outputPer1M: 8.00  },
+  // GPT-4o / GPT-4.5
+  { pattern: /4o|4\.5/i,       inputPer1M: 5.00,  outputPer1M: 15.00 },
+  // GPT-4 Turbo
+  { pattern: /4-turbo|4\.1(?!-mini)/i, inputPer1M: 10.00, outputPer1M: 30.00 },
+];
+const DEFAULT_PRICING = { inputPer1M: 3.00, outputPer1M: 15.00 }; // 兜底
+
+function estimateCostUsd(model = '', inputTokens = 0, outputTokens = 0) {
+  const pricing = MODEL_PRICING.find((p) => p.pattern.test(model)) || DEFAULT_PRICING;
+  return (Number(inputTokens || 0) * pricing.inputPer1M / 1_000_000)
+       + (Number(outputTokens || 0) * pricing.outputPer1M / 1_000_000);
 }
 
 async function recordLlmCall({

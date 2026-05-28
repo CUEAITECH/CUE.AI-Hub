@@ -103,14 +103,9 @@ export function renderTaskDetail(state, {
               领取任务
             </button>` : `<span class="task-owner-mark">✓ 我的任务</span>`}
             ${isAdmin ? `
-              <div class="task-assign-wrap">
-                <select class="task-assign-select" data-task-id="${escapeHtml(task.id)}">
-                  ${memberOptions}
-                </select>
-                <button class="task-assign-btn" data-action="assign-task" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">
-                  指派任务
-                </button>
-              </div>` : ''}
+              <button class="task-assign-btn" data-action="open-assign-modal" data-task-id="${escapeHtml(task.id)}" data-task-title="${escapeHtml(task.title)}">
+                指派任务
+              </button>` : ''}
           `;
         })()}
         ${latestAssignment && latestAssignment.status !== '已完成'

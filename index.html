@@ -1370,6 +1370,27 @@
       </div>
     </div>
 
+    <!-- 指派任务弹窗 -->
+    <div class="modal-backdrop" id="assignModalBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="assignModalTitle">
+      <div class="modal" style="max-width:360px">
+        <div class="modal-head">
+          <h2 id="assignModalTitle">指派任务</h2>
+          <button type="button" class="modal-close" data-action="close-assign-modal" aria-label="关闭">✕</button>
+        </div>
+        <div class="modal-body" style="padding:20px 24px">
+          <p id="assignModalTaskName" style="font-weight:600;margin:0 0 16px;color:var(--text)"></p>
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text-dim)">
+            指派给
+            <select id="assignModalMember" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:14px"></select>
+          </label>
+        </div>
+        <div class="modal-foot" style="padding:12px 24px 20px;display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="modal-secondary" data-action="close-assign-modal">取消</button>
+          <button type="button" class="modal-primary" id="assignModalConfirm">确认指派</button>
+        </div>
+      </div>
+    </div>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="loader-bar" id="loaderBar" aria-hidden="true">
       <span class="loader-spinner"></span>
