@@ -8556,6 +8556,19 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   background: rgba(251, 191, 36, 0.15);
   color: #f59e0b;
 }
+.obs-source-tokens {
+  background: rgba(99, 102, 241, 0.15);
+  color: #6366f1;
+}
+.obs-val-dim { color: var(--text-dim); }
+.obs-hub-detail { margin-top: 12px; }
+.obs-hub-summary {
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
 
 .obs-kpi-value {
   font-size: 1.15rem;

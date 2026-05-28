@@ -139,42 +139,51 @@ export async function handle(ctx) {
       return r.total > 0 ? Math.round(r.failed / r.total * 100) : 0;
     })();
 
+    // ── NewAPI：全量真实数据（Hub + PR-Agent + 所有工具）──────────────
+    const { fetchTodayLedger, isNewApiAvailable } = await import('../../services/newApiLedger.js');
+    let newApiLedger = null;
+    if (isNewApiAvailable()) {
+      try { newApiLedger = await fetchTodayLedger(); } catch { /* 降级 */ }
+    }
+
+    if (newApiLedger) {
+      // 完全用 NewAPI 数据，SQLite 仅提供 Hub 内部用途分组（附表）
+      const cacheHitRate = daily.totalCalls > 0
+        ? Math.round(daily.cacheHits / daily.totalCalls * 100) : null;
+      sendV2Json(200, {
+        today: {
+          totalCalls:        newApiLedger.totalCalls,
+          totalInput:        newApiLedger.totalInput,
+          totalOutput:       newApiLedger.totalOutput,
+          failedCalls:       daily.failedCalls,         // NewAPI 不区分失败，用 Hub 本地
+          cacheHitRate:      cacheHitRate != null ? `${cacheHitRate}%` : null,
+          estimatedCostYuan: newApiLedger.costYuan,
+          estimatedCostUsd:  newApiLedger.costUsd,
+          costSource:        newApiLedger.costSource,   // 'newapi-quota' | 'newapi-tokens'
+        },
+        recentFailRatePct: recentFailRate,
+        byModel:    newApiLedger.byModel,   // 按模型真实用量（主表）
+        byPurpose,                          // Hub 内部用途分组（附表）
+      });
+      return true;
+    }
+
+    // ── 降级：仅有 Hub 本地 SQLite 数据 ───────────────────────────────
     const cacheHitRate = daily.totalCalls > 0
       ? Math.round(daily.cacheHits / daily.totalCalls * 100) : null;
-
-    // 优先从 NewAPI 拉取真实账单数据
-    const { fetchTodayLedger, isNewApiAvailable } = await import('../../services/newApiLedger.js');
-    let costYuan, costUsd, byModel = [], costSource = 'estimate';
-    if (isNewApiAvailable()) {
-      try {
-        const ledger = await fetchTodayLedger();
-        if (ledger) {
-          costYuan   = ledger.costYuan;
-          costUsd    = ledger.costUsd;
-          byModel    = ledger.byModel;
-          costSource = 'newapi';
-        }
-      } catch { /* 降级到估算 */ }
-    }
-    if (costSource === 'estimate') {
-      const { estimateCostUsdFlat } = await import('../../services/claude.js').catch(() => ({ estimateCostUsdFlat: null }));
-      const rawUsd = ((daily.totalInput || 0) * 0.000003 + (daily.totalOutput || 0) * 0.000015);
-      costUsd  = parseFloat(rawUsd.toFixed(4));
-      costYuan = parseFloat((rawUsd * 7.2).toFixed(2));
-    }
-
+    const rawUsd = ((daily.totalInput || 0) * 0.000003 + (daily.totalOutput || 0) * 0.000015);
     sendV2Json(200, {
       today: {
-        totalCalls:    daily.totalCalls,
-        failedCalls:   daily.failedCalls,
-        cacheHitRate:  cacheHitRate != null ? `${cacheHitRate}%` : null,
-        estimatedCostYuan: costYuan,
-        estimatedCostUsd:  costUsd,
-        costSource,          // 'newapi' | 'estimate'
+        totalCalls:        daily.totalCalls,
+        failedCalls:       daily.failedCalls,
+        cacheHitRate:      cacheHitRate != null ? `${cacheHitRate}%` : null,
+        estimatedCostYuan: parseFloat((rawUsd * 7.2).toFixed(2)),
+        estimatedCostUsd:  parseFloat(rawUsd.toFixed(4)),
+        costSource:        'estimate',
       },
       recentFailRatePct: recentFailRate,
+      byModel:    [],
       byPurpose,
-      byModel,               // NewAPI 时有值，按模型分组的真实用量
     });
     return true;
   }

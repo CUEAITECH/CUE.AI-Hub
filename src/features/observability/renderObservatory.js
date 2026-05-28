@@ -44,10 +44,29 @@ async function renderLlmPanel(helpers) {
     const d = await observabilityApi.getLlmStats('default');
     const today       = d.today || {};
     const failRatePct = d.recentFailRatePct ?? 0;
-    const costYuan    = today.estimatedCostYuan != null ? `¥${today.estimatedCostYuan.toFixed(2)}` : '—';
-    const costLabel   = today.costSource === 'newapi' ? '今日成本 <span class="obs-source-badge">真实账单</span>' : '今日成本 <span class="obs-source-badge obs-source-est">估算</span>';
-    const cacheRate   = today.cacheHitRate ?? '—';
-    const failClass   = failRatePct > 20 ? 'obs-val-warn' : failRatePct > 5 ? 'obs-val-caution' : 'obs-val-ok';
+    const costYuan  = today.estimatedCostYuan != null ? `¥${today.estimatedCostYuan.toFixed(2)}` : '—';
+    const costLabel = today.costSource === 'newapi-quota'
+      ? '今日成本 <span class="obs-source-badge">真实扣费</span>'
+      : today.costSource === 'newapi-tokens'
+        ? '今日成本 <span class="obs-source-badge obs-source-tokens">真实 tokens</span>'
+        : '今日成本 <span class="obs-source-badge obs-source-est">估算</span>';
+    const callsLabel = (d.byModel || []).length
+      ? '今日调用 <span class="obs-source-badge">NewAPI</span>'
+      : '今日调用';
+    const totalIn  = (today.totalInput  || 0).toLocaleString();
+    const totalOut = (today.totalOutput || 0).toLocaleString();
+    const cacheRate  = today.cacheHitRate ?? '—';
+    const failClass  = failRatePct > 20 ? 'obs-val-warn' : failRatePct > 5 ? 'obs-val-caution' : 'obs-val-ok';
+    const hasNewApi  = (d.byModel || []).length > 0;
+
+    const byModelRows = (d.byModel || []).map(m => `
+      <tr>
+        <td class="obs-tc">${escapeHtml(m.model)}</td>
+        <td class="obs-tc obs-tc-num">${m.calls}</td>
+        <td class="obs-tc obs-tc-num obs-tc-dim">${(m.input || 0).toLocaleString()}</td>
+        <td class="obs-tc obs-tc-num obs-tc-dim">${(m.output || 0).toLocaleString()}</td>
+        <td class="obs-tc obs-tc-num">${m.costYuan != null ? `¥${m.costYuan}` : '—'}</td>
+      </tr>`).join('');
 
     const byPurpRows = (d.byPurpose || []).map(p => `
       <tr>
@@ -60,9 +79,18 @@ async function renderLlmPanel(helpers) {
     llmEl.innerHTML = `
       <div class="obs-kpi-row">
         <div class="obs-kpi">
-          <span class="obs-kpi-label">今日调用</span>
+          <span class="obs-kpi-label">${callsLabel}</span>
           <span class="obs-kpi-value">${today.totalCalls ?? 0}</span>
         </div>
+        ${hasNewApi ? `
+        <div class="obs-kpi">
+          <span class="obs-kpi-label">输入 tokens</span>
+          <span class="obs-kpi-value obs-val-dim">${totalIn}</span>
+        </div>
+        <div class="obs-kpi">
+          <span class="obs-kpi-label">输出 tokens</span>
+          <span class="obs-kpi-value obs-val-dim">${totalOut}</span>
+        </div>` : `
         <div class="obs-kpi">
           <span class="obs-kpi-label">Cache 命中率</span>
           <span class="obs-kpi-value obs-val-ok">${cacheRate}</span>
@@ -70,13 +98,13 @@ async function renderLlmPanel(helpers) {
         <div class="obs-kpi">
           <span class="obs-kpi-label">近5min 失败率</span>
           <span class="obs-kpi-value ${failClass}">${failRatePct}%</span>
-        </div>
+        </div>`}
         <div class="obs-kpi">
           <span class="obs-kpi-label">${costLabel}</span>
           <span class="obs-kpi-value">${costYuan}</span>
         </div>
       </div>
-      ${(d.byModel || []).length ? `
+      ${hasNewApi ? `
       <div class="obs-table-scroll">
         <table class="obs-data-table" aria-label="按模型真实用量（NewAPI）">
           <thead>
@@ -88,18 +116,12 @@ async function renderLlmPanel(helpers) {
               <th class="obs-th obs-th-num">费用</th>
             </tr>
           </thead>
-          <tbody>${(d.byModel || []).map(m => `
-            <tr>
-              <td class="obs-tc">${escapeHtml(m.model)}</td>
-              <td class="obs-tc obs-tc-num">${m.calls}</td>
-              <td class="obs-tc obs-tc-num obs-tc-dim">${(m.input || 0).toLocaleString()}</td>
-              <td class="obs-tc obs-tc-num obs-tc-dim">${(m.output || 0).toLocaleString()}</td>
-              <td class="obs-tc obs-tc-num">¥${((m.quota || 0) / (today.quotaRate || 500000) * 7.2).toFixed(3)}</td>
-            </tr>`).join('')}
-          </tbody>
+          <tbody>${byModelRows}</tbody>
         </table>
       </div>` : ''}
       ${byPurpRows ? `
+      <details class="obs-hub-detail"${hasNewApi ? '' : ' open'}>
+        <summary class="obs-hub-summary">Hub 内部调用（按用途）</summary>
       <div class="obs-table-scroll">
         <table class="obs-data-table" aria-label="按用途 LLM 调用明细">
           <thead>
@@ -112,7 +134,8 @@ async function renderLlmPanel(helpers) {
           </thead>
           <tbody>${byPurpRows}</tbody>
         </table>
-      </div>` : '<p class="obs-empty">今日暂无 LLM 调用记录</p>'}`;
+      </div>
+      </details>` : ''}`;
   } catch (e) {
     llmEl.innerHTML = `
       <div class="obs-error-state">

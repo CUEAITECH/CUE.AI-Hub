@@ -91,8 +91,35 @@ export async function fetchTodayLedger() {
     modelMap[model].quota  += quota;
   }
 
-  const costUsd  = totalQuota / QUOTA_RATE;
-  const costYuan = costUsd * USD_TO_YUAN;
+  // 优先用 quota 换算（若 quota 全为 0 说明未配置扣费，降级用 token×单价估算）
+  const useQuota = totalQuota > 0;
+  let costUsd, byModelArr;
+
+  if (useQuota) {
+    costUsd = totalQuota / QUOTA_RATE;
+    byModelArr = Object.values(modelMap).map((m) => ({
+      ...m,
+      costYuan: parseFloat((m.quota / QUOTA_RATE * USD_TO_YUAN).toFixed(3))
+    }));
+  } else {
+    // quota 未配置 → 用真实 token 数 × 模型单价表
+    const MODEL_PRICING = [
+      { pattern: /mini/i,                      inputPer1M: 0.40,  outputPer1M: 1.60  },
+      { pattern: /5\.5|gpt-5(?![\d.])/i,       inputPer1M: 2.00,  outputPer1M: 8.00  },
+      { pattern: /4o|4\.5/i,                   inputPer1M: 5.00,  outputPer1M: 15.00 },
+      { pattern: /4[-.]?turbo|4\.1(?!-mini)/i, inputPer1M: 10.00, outputPer1M: 30.00 },
+    ];
+    const DEFAULT_P = { inputPer1M: 3.00, outputPer1M: 15.00 };
+    costUsd = 0;
+    byModelArr = Object.values(modelMap).map((m) => {
+      const p = MODEL_PRICING.find((r) => r.pattern.test(m.model)) || DEFAULT_P;
+      const mUsd = m.input * p.inputPer1M / 1_000_000 + m.output * p.outputPer1M / 1_000_000;
+      costUsd += mUsd;
+      return { ...m, costYuan: parseFloat((mUsd * USD_TO_YUAN).toFixed(3)) };
+    });
+  }
+
+  const costYuan = parseFloat((costUsd * USD_TO_YUAN).toFixed(2));
 
   return {
     items:      allItems,
@@ -100,8 +127,9 @@ export async function fetchTodayLedger() {
     totalInput,
     totalOutput,
     totalQuota,
-    costYuan:   parseFloat(costYuan.toFixed(2)),
+    costSource: useQuota ? 'newapi-quota' : 'newapi-tokens',
+    costYuan,
     costUsd:    parseFloat(costUsd.toFixed(4)),
-    byModel:    Object.values(modelMap).sort((a, b) => b.calls - a.calls),
+    byModel:    byModelArr.sort((a, b) => b.calls - a.calls),
   };
 }
