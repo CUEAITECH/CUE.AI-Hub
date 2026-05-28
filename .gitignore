@@ -2,6 +2,9 @@ node_modules/
 .DS_Store
 server/data/db.json
 server/data/db.backup.json
+server/data/v2.db
+server/data/v2.db-shm
+server/data/v2.db-wal
 *.log
 .env
 .claude/

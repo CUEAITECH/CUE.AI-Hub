@@ -142,8 +142,14 @@ export async function handle(ctx) {
     // ── NewAPI：全量真实数据（Hub + PR-Agent + 所有工具）──────────────
     const { fetchTodayLedger, isNewApiAvailable } = await import('../../services/newApiLedger.js');
     let newApiLedger = null;
+    let newApiError  = null;
     if (isNewApiAvailable()) {
-      try { newApiLedger = await fetchTodayLedger(); } catch { /* 降级 */ }
+      try {
+        newApiLedger = await fetchTodayLedger();
+      } catch (e) {
+        newApiError = e.message;
+        console.error('[NewAPI] fetchTodayLedger failed:', e.message);
+      }
     }
 
     if (newApiLedger) {
@@ -184,6 +190,8 @@ export async function handle(ctx) {
       recentFailRatePct: recentFailRate,
       byModel:    [],
       byPurpose,
+      newApiAvailable: isNewApiAvailable(),
+      newApiError:     newApiError || undefined,
     });
     return true;
   }
