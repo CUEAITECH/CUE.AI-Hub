@@ -8392,6 +8392,19 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 
 /* ── View wrapper ─────────────────────────────────────────────── */
 
+/* 确保观察台组件只在 observatory 页面显示 */
+#obsLlmPanel,
+#obsEventsPanel,
+#obsSyncPanel {
+  display: none !important;
+}
+
+#observatory.view.active #obsLlmPanel,
+#observatory.view.active #obsEventsPanel,
+#observatory.view.active #obsSyncPanel {
+  display: block !important;
+}
+
 #observatory {
   padding: 1.25rem 1.5rem;
   display: flex;
@@ -8559,6 +8572,11 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 .obs-source-tokens {
   background: rgba(99, 102, 241, 0.15);
   color: #6366f1;
+}
+.obs-source-err {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  cursor: help;
 }
 .obs-val-dim { color: var(--text-dim); }
 .obs-hub-detail { margin-top: 12px; }
