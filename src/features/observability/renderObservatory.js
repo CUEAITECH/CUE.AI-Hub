@@ -281,14 +281,25 @@ function updateRefreshedAt() {
 // ── 主入口 ───────────────────────────────────────────────────────
 
 /**
- * 初始化观察台面板的 HTML 结构（动态创建，确保只在观察台显示）
+ * 初始化整个观察台的 HTML 结构（动态创建，确保只在观察台显示）
  */
-function initObservatorPanels() {
-  const container = document.getElementById('obsComponentsContainer');
+function initObservatory() {
+  const container = document.getElementById('observatoryContainer');
   if (!container) return;
   if (document.getElementById('obsLlmPanel')) return; // 已初始化
 
   container.innerHTML = `
+    <div class="obs-view-header">
+      <div class="obs-view-title">
+        <h2>管理观察台</h2>
+        <span class="obs-refreshed-at" id="obsRefreshedAt" aria-live="polite"></span>
+      </div>
+      <button class="obs-refresh-btn" type="button" id="observatoryRefreshBtn" aria-label="刷新观察台数据">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        刷新
+      </button>
+    </div>
+
     <div class="panel obs-panel" id="obsLlmPanel">
       <div class="obs-panel-header">
         <h3 class="obs-panel-title">
@@ -340,7 +351,7 @@ function initObservatorPanels() {
  * @param {{ observabilityApi: object, escapeHtml: Function }} helpers
  */
 export async function renderObservatory(_state, helpers) {
-  initObservatorPanels();
+  initObservatory();
   await Promise.allSettled([
     renderLlmPanel(helpers),
     renderEventsPanel(helpers),

@@ -4124,16 +4124,6 @@ function setRoute(route) {
     item.classList.toggle('active', isActive);
     item.setAttribute('aria-current', isActive ? 'page' : 'false');
   });
-
-  // 确保观察台组件只在 observatory 页面显示
-  const obsLlmPanel = document.getElementById('obsLlmPanel');
-  const obsEventsPanel = document.getElementById('obsEventsPanel');
-  const obsSyncPanel = document.getElementById('obsSyncPanel');
-  const isObservatoryRoute = route === 'observatory';
-  if (obsLlmPanel) obsLlmPanel.style.display = isObservatoryRoute ? '' : 'none';
-  if (obsEventsPanel) obsEventsPanel.style.display = isObservatoryRoute ? '' : 'none';
-  if (obsSyncPanel) obsSyncPanel.style.display = isObservatoryRoute ? '' : 'none';
-
   if (route === 'pulls' || route === 'viewPulls') {
     fetchAndRenderPulls().catch((err) => toast(err.message));
   }
