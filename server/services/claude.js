@@ -18,10 +18,11 @@
 import OpenAI from 'openai';
 import { createHash } from 'node:crypto';
 import logger from '../logger.js';
+import { getConfig } from './configStore.js';
 
-// ── 模型配置（env 覆盖） ─────────────────────────────────────────
-const DEFAULT_MODEL = process.env.OPENAI_MODEL      || 'gpt-5.5';
-const MINI_MODEL    = process.env.OPENAI_MINI_MODEL || 'gpt-5.4-mini';
+// ── 模型配置（动态读 configStore，支持前端热更新） ───────────────────
+function getDefaultModel() { return getConfig('openai.model')     || 'gpt-5.5'; }
+function getMiniModel()    { return getConfig('openai.miniModel')  || 'gpt-5.4-mini'; }
 const DEFAULT_COOLDOWNS_MS = {
   auth: 10 * 60 * 1000,
   quota: 10 * 60 * 1000,
@@ -33,7 +34,7 @@ const DEFAULT_COOLDOWNS_MS = {
 let circuitOpenUntil = 0;
 let circuitReason = null;
 
-function getModel(override) { return override || DEFAULT_MODEL; }
+function getModel(override) { return override || getDefaultModel(); }
 
 // ── 模型单价表（$/1M tokens）── 按模型名关键词匹配 ───────────────────
 const MODEL_PRICING = [
@@ -199,19 +200,23 @@ export function resetLlmCircuitForTests() {
 }
 
 let _client = null;
+let _clientFingerprint = null;
 
 function getClient() {
-  if (_client) return _client;
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getConfig('openai.apiKey');
   if (!apiKey) return null;
-  const baseURL = process.env.OPENAI_BASE_URL; // 支持代理（如 Azure、LiteLLM）
-  _client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+  const baseURL = getConfig('openai.baseUrl') || undefined;
+  const fp = `${apiKey}::${baseURL ?? ''}`;
+  if (!_client || _clientFingerprint !== fp) {
+    _client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+    _clientFingerprint = fp;
+  }
   return _client;
 }
 
 /** 是否已配置 OPENAI_API_KEY */
 export function isAvailable() {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return Boolean(getConfig('openai.apiKey'));
 }
 
 /**
@@ -325,7 +330,7 @@ export async function callClaude(systemPrompt, userPrompt, options = {}) {
  * 签名与 callClaude 完全一致，调用方无需关心 model 名称
  */
 export async function callHaiku(systemPrompt, userPrompt, options = {}) {
-  return callClaude(systemPrompt, userPrompt, { ...options, model: MINI_MODEL });
+  return callClaude(systemPrompt, userPrompt, { ...options, model: getMiniModel() });
 }
 
 /**

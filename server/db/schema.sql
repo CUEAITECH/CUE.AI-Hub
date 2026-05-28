@@ -371,6 +371,15 @@ CREATE TABLE IF NOT EXISTS ranker_weights (
 );
 
 -- ------------------------------------------------------------
+-- hub_config（系统配置，前端可更新，DB 优先 > env 变量）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS hub_config (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ------------------------------------------------------------
 -- learning_reports（周度学习报告，Part M.1）
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS learning_reports (

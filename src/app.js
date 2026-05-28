@@ -13,6 +13,8 @@ import { renderTaskDetail as _renderTaskDetail } from './features/work-graph/ren
 import { enrichTaskDetailWithExplanation as _enrichTaskDetailWithExplanation } from './features/work-graph/renderTaskRecommendation.js';
 import { tasksApi } from './api/tasksApi.js';
 import { renderObservatory as _renderObservatory, loadAndRenderSpacePanel as _loadAndRenderSpacePanel } from './features/observability/index.js';
+import { renderSettings as _renderSettings } from './features/settings/index.js';
+import { configApi } from './api/configApi.js';
 
 const state = {
   tasks: [],
@@ -4083,6 +4085,7 @@ function setRoute(route) {
     'pc-profile':    'personal',
     'pc-account':    'personal',
     'account-admin': 'personal',
+    'sys-config':    'personal',
     // ── 旧版路由（路由仍可用，导航归入 legacy） ─────────────
     roadmap:         'legacy',
     'ai-pm':         'legacy',
@@ -4114,6 +4117,7 @@ function setRoute(route) {
     'pc-profile':    'pc-workspace',
     'pc-account':    'pc-workspace',
     'account-admin': 'pc-workspace',
+    'sys-config':    'pc-workspace',
     // 旧版路由：不高亮任何移动端 tab
     roadmap: '', planning: '', standup: '', report: '',
     automation: '', attendance: '', 'ai-pm': '',
@@ -4145,6 +4149,10 @@ function setRoute(route) {
   // V5: 观察台
   if (route === 'observatory') {
     renderObservatory().catch((e) => toast(`观察台加载失败: ${e.message}`));
+  }
+  // 系统设置
+  if (route === 'sys-config') {
+    renderSettingsPage().catch((e) => toast(`系统设置加载失败: ${e.message}`));
   }
 }
 
@@ -4948,6 +4956,11 @@ state.observatory = { llm: null, events: [], syncHealth: null };
 
 function renderObservatory() {
   return _renderObservatory(state, { observabilityApi, escapeHtml });
+}
+
+// ── 系统设置 ──────────────────────────────────────────────────────
+function renderSettingsPage() {
+  return _renderSettings({ configApi, toast });
 }
 
 // 注册观察台路由

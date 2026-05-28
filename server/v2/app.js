@@ -49,6 +49,7 @@ const ROUTE_MODULES = [
   ['/v2/openapi.json', () => import('./routes/gateway.js')],
   ['/v2/events',       () => import('./routes/events.js')],
   ['/v2/tasks',        () => import('./routes/events.js')],
+  ['/v2/config',       () => import('./routes/config.js')],
   ['/v2/health',       () => import('./routes/system.js')],
   ['/v2/info',         () => import('./routes/system.js')],
 ];

@@ -36,6 +36,7 @@ const MODULE_PREFIXES = [
   '/v2/runbooks',
   '/v2/alerts',
   '/v2/observability',
+  '/v2/config',
   '/v2/gateway',
   '/v2/openapi.json',
   '/v2/events',

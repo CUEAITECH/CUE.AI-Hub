@@ -9802,3 +9802,209 @@ select:disabled {
   from { opacity: 0.6; transform: translateY(4px); }
   to   { opacity: 1;   transform: translateY(0);   }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   系统设置页（sys-config）
+   ════════════════════════════════════════════════════════════════ */
+
+.cfg-page {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+
+.cfg-header {
+  margin-bottom: 28px;
+}
+
+.cfg-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+  margin: 0 0 6px;
+}
+
+.cfg-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted, #64748b);
+  margin: 0;
+}
+
+/* ── 分组 ── */
+.cfg-group {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.cfg-group-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #64748b);
+  margin: 0 0 16px;
+}
+
+/* ── 字段 ── */
+.cfg-field {
+  margin-bottom: 16px;
+}
+.cfg-field:last-child {
+  margin-bottom: 0;
+}
+
+.cfg-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.cfg-label-text {
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--text-primary, #0f172a);
+}
+
+/* 来源徽章 */
+.cfg-src {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  line-height: 1.6;
+}
+.cfg-src-db  { background: #dbeafe; color: #1d4ed8; }
+.cfg-src-env { background: #dcfce7; color: #15803d; }
+.cfg-src-def { background: #f1f5f9; color: #64748b; }
+
+.cfg-has-val { font-size: 0.75rem; color: #22c55e; }
+.cfg-no-val  { font-size: 0.75rem; color: #f59e0b; }
+
+.cfg-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  color: var(--text-primary, #0f172a);
+  background: var(--bg, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 7px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cfg-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+  background: #fff;
+}
+
+/* ── 操作按钮 ── */
+.cfg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.cfg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.cfg-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cfg-btn-primary {
+  background: #101010;
+  color: #fff;
+  border-color: #101010;
+}
+.cfg-btn-primary:hover:not(:disabled) {
+  background: #1a1a1a;
+}
+
+.cfg-btn-ghost {
+  background: transparent;
+  color: var(--text-primary, #0f172a);
+  border-color: var(--border, #e2e8f0);
+}
+.cfg-btn-ghost:hover:not(:disabled) {
+  background: var(--bg, #f8fafc);
+}
+
+/* ── 状态提示 ── */
+.cfg-status {
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+.cfg-status-ok  { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.cfg-status-err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.cfg-status-info{ background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+
+/* ── 说明框 ── */
+.cfg-info-box {
+  margin-top: 20px;
+  padding: 14px 16px;
+  background: var(--bg, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.7;
+}
+.cfg-info-box strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-primary, #0f172a);
+}
+.cfg-info-box ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* ── 骨架屏 ── */
+.cfg-skeleton-block {
+  margin-bottom: 12px;
+}
+.cfg-skeleton {
+  height: 36px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: cfg-shimmer 1.4s infinite;
+}
+@keyframes cfg-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── 错误状态 ── */
+.cfg-error {
+  color: #dc2626;
+  padding: 20px 0;
+  font-size: 0.9rem;
+}
+
+/* ── 响应式 ── */
+@media (max-width: 600px) {
+  .cfg-page { padding: 20px 12px 40px; }
+  .cfg-actions { flex-direction: column; }
+  .cfg-btn { width: 100%; justify-content: center; }
+}

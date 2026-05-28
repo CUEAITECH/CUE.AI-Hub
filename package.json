@@ -32,6 +32,7 @@
     "graphology": "^0.26.0",
     "graphology-pagerank": "^1.1.0",
     "kysely": "^0.29.2",
+    "libsodium-wrappers": "^0.8.4",
     "mdast-util-to-string": "^4.0.0",
     "node-cron": "^4.2.1",
     "openai": "^6.39.0",

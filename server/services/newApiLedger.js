@@ -11,24 +11,20 @@
 //   { success: true, data: { items: [...], total: N } }
 //   每条: { id, model_name, prompt_tokens, completion_tokens, quota, created_at, ... }
 
-const QUOTA_RATE = Number(process.env.NEWAPI_QUOTA_RATE || 500000); // 1 USD = 500,000 quota
 const USD_TO_YUAN = 7.2;
 
+import { getConfig } from './configStore.js';
+
+function getQuotaRate() { return Number(getConfig('newapi.quotaRate') || 500000); }
+
 function getBaseUrl() {
-  const explicit = process.env.NEWAPI_BASE_URL;
-  if (explicit) return explicit.replace(/\/+$/, '');
-  // 从 OPENAI_BASE_URL 推导（去掉 /v1 后缀）
-  const openaiBase = process.env.OPENAI_BASE_URL || '';
+  // NewAPI base URL = OpenAI base URL 去掉 /v1 后缀
+  const openaiBase = getConfig('openai.baseUrl') || '';
   return openaiBase.replace(/\/v1\/?$/, '').replace(/\/+$/, '') || null;
 }
 
-function getToken() {
-  return process.env.NEWAPI_TOKEN || null;
-}
-
-function getUserId() {
-  return process.env.NEWAPI_USER_ID || null;
-}
+function getToken()  { return getConfig('newapi.token')  || null; }
+function getUserId() { return getConfig('newapi.userId') || null; }
 
 export function isNewApiAvailable() {
   return Boolean(getToken() && getUserId() && getBaseUrl());
@@ -109,10 +105,11 @@ export async function fetchTodayLedger() {
   let costUsd, byModelArr;
 
   if (useQuota) {
-    costUsd = totalQuota / QUOTA_RATE;
+    const quotaRate = getQuotaRate();
+    costUsd = totalQuota / quotaRate;
     byModelArr = Object.values(modelMap).map((m) => ({
       ...m,
-      costYuan: parseFloat((m.quota / QUOTA_RATE * USD_TO_YUAN).toFixed(3))
+      costYuan: parseFloat((m.quota / quotaRate * USD_TO_YUAN).toFixed(3))
     }));
   } else {
     // quota 未配置 → 用真实 token 数 × 模型单价表
