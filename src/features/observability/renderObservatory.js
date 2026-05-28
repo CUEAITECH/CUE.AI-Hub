@@ -45,6 +45,7 @@ async function renderLlmPanel(helpers) {
     const today       = d.today || {};
     const failRatePct = d.recentFailRatePct ?? 0;
     const costYuan    = today.estimatedCostYuan != null ? `¥${today.estimatedCostYuan.toFixed(2)}` : '—';
+    const costLabel   = today.costSource === 'newapi' ? '今日成本 <span class="obs-source-badge">真实账单</span>' : '今日成本 <span class="obs-source-badge obs-source-est">估算</span>';
     const cacheRate   = today.cacheHitRate ?? '—';
     const failClass   = failRatePct > 20 ? 'obs-val-warn' : failRatePct > 5 ? 'obs-val-caution' : 'obs-val-ok';
 
@@ -71,10 +72,33 @@ async function renderLlmPanel(helpers) {
           <span class="obs-kpi-value ${failClass}">${failRatePct}%</span>
         </div>
         <div class="obs-kpi">
-          <span class="obs-kpi-label">今日成本</span>
+          <span class="obs-kpi-label">${costLabel}</span>
           <span class="obs-kpi-value">${costYuan}</span>
         </div>
       </div>
+      ${(d.byModel || []).length ? `
+      <div class="obs-table-scroll">
+        <table class="obs-data-table" aria-label="按模型真实用量（NewAPI）">
+          <thead>
+            <tr>
+              <th class="obs-th">模型</th>
+              <th class="obs-th obs-th-num">调用</th>
+              <th class="obs-th obs-th-num">输入 tokens</th>
+              <th class="obs-th obs-th-num">输出 tokens</th>
+              <th class="obs-th obs-th-num">费用</th>
+            </tr>
+          </thead>
+          <tbody>${(d.byModel || []).map(m => `
+            <tr>
+              <td class="obs-tc">${escapeHtml(m.model)}</td>
+              <td class="obs-tc obs-tc-num">${m.calls}</td>
+              <td class="obs-tc obs-tc-num obs-tc-dim">${(m.input || 0).toLocaleString()}</td>
+              <td class="obs-tc obs-tc-num obs-tc-dim">${(m.output || 0).toLocaleString()}</td>
+              <td class="obs-tc obs-tc-num">¥${((m.quota || 0) / (today.quotaRate || 500000) * 7.2).toFixed(3)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
       ${byPurpRows ? `
       <div class="obs-table-scroll">
         <table class="obs-data-table" aria-label="按用途 LLM 调用明细">

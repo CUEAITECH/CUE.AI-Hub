@@ -139,21 +139,42 @@ export async function handle(ctx) {
       return r.total > 0 ? Math.round(r.failed / r.total * 100) : 0;
     })();
 
-    const costUsd  = ((daily.totalInput || 0) * 0.000003 + (daily.totalOutput || 0) * 0.000015);
-    const costYuan = costUsd * 7.2;
     const cacheHitRate = daily.totalCalls > 0
-      ? Math.round(daily.cacheHits / daily.totalCalls * 100) : null; // null → 前端显示 '—'
+      ? Math.round(daily.cacheHits / daily.totalCalls * 100) : null;
+
+    // 优先从 NewAPI 拉取真实账单数据
+    const { fetchTodayLedger, isNewApiAvailable } = await import('../../services/newApiLedger.js');
+    let costYuan, costUsd, byModel = [], costSource = 'estimate';
+    if (isNewApiAvailable()) {
+      try {
+        const ledger = await fetchTodayLedger();
+        if (ledger) {
+          costYuan   = ledger.costYuan;
+          costUsd    = ledger.costUsd;
+          byModel    = ledger.byModel;
+          costSource = 'newapi';
+        }
+      } catch { /* 降级到估算 */ }
+    }
+    if (costSource === 'estimate') {
+      const { estimateCostUsdFlat } = await import('../../services/claude.js').catch(() => ({ estimateCostUsdFlat: null }));
+      const rawUsd = ((daily.totalInput || 0) * 0.000003 + (daily.totalOutput || 0) * 0.000015);
+      costUsd  = parseFloat(rawUsd.toFixed(4));
+      costYuan = parseFloat((rawUsd * 7.2).toFixed(2));
+    }
 
     sendV2Json(200, {
       today: {
         totalCalls:    daily.totalCalls,
         failedCalls:   daily.failedCalls,
         cacheHitRate:  cacheHitRate != null ? `${cacheHitRate}%` : null,
-        estimatedCostYuan: parseFloat(costYuan.toFixed(2)),
-        estimatedCostUsd:  parseFloat(costUsd.toFixed(4)),
+        estimatedCostYuan: costYuan,
+        estimatedCostUsd:  costUsd,
+        costSource,          // 'newapi' | 'estimate'
       },
       recentFailRatePct: recentFailRate,
       byPurpose,
+      byModel,               // NewAPI 时有值，按模型分组的真实用量
     });
     return true;
   }
