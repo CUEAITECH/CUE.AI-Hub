@@ -48,7 +48,7 @@ async function handleSyncPrAgent(ctx) {
 
   // 找 PR-Agent 所在的 GitHub 仓库（读 state 里的 projects）
   const { loadStore } = await import('../../store.js');
-  const store = loadStore();
+  const store = await loadStore();
   const project = (store.projects || []).find((p) => p.githubOwner && p.githubRepo);
   if (!project) { sendV2Error(404, 'no github project found in hub'); return true; }
 
