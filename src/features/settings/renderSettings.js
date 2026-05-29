@@ -343,7 +343,7 @@ async function loadGatewayKeys(container, gatewayApi, toast) {
 
 function showNewKeyModal(container, fullKey, keyPrefix) {
   // 移除已有弹窗
-  container.querySelector('#gwNewKeyModal')?.remove();
+  document.querySelector('#gwNewKeyModal')?.remove();
 
   const modal = document.createElement('div');
   modal.id = 'gwNewKeyModal';
@@ -362,7 +362,7 @@ function showNewKeyModal(container, fullKey, keyPrefix) {
       </div>
     </div>`;
 
-  container.appendChild(modal);
+  document.body.appendChild(modal);
 
   modal.querySelector('#gwCopyBtn')?.addEventListener('click', () => {
     navigator.clipboard.writeText(fullKey).then(() => {
