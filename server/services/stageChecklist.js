@@ -123,19 +123,67 @@ function linkReasonMap(links = []) {
 }
 
 function bindingSourceLabel(mode) {
+  if (mode === 'pr') return 'PR / AC';
   if (mode === 'fk') return '显式 FK';
   if (mode === 'hybrid') return 'AI 语义';
   return '关键词兜底';
 }
 
 function bindingStrength(mode) {
+  if (mode === 'pr') return 'strong';
   if (mode === 'fk') return 'strong';
   if (mode === 'hybrid') return 'medium';
   return 'weak';
 }
 
+function pullComplianceStats(pull) {
+  const compliance = pull?.hubReview?.compliance || pull?.prAgentReview?.compliance || null;
+  const done = Array.isArray(compliance?.done) ? compliance.done.length : 0;
+  const notDone = Array.isArray(compliance?.notDone) ? compliance.notDone.length : 0;
+  const needsHumanCheck = Array.isArray(compliance?.needsHumanCheck) ? compliance.needsHumanCheck.length : 0;
+  return { done, notDone, needsHumanCheck, total: done + notDone + needsHumanCheck };
+}
+
+function pullMatchesDeliverable(pull, item, linkedTasks) {
+  const linkedTaskIds = new Set(linkedTasks.map((task) => task.id));
+  if ((pull.linkedTaskIds || []).some((taskId) => linkedTaskIds.has(taskId))) return true;
+  const text = [
+    pull.title,
+    pull.body,
+    pull.headBranch,
+    pull.baseBranch,
+    (pull.files || []).map((file) => file.filename || file).join(' '),
+    (pull.hubReview?.compliance?.done || []).join(' '),
+    (pull.hubReview?.compliance?.notDone || []).join(' '),
+    (pull.hubReview?.compliance?.needsHumanCheck || []).join(' ')
+  ].join(' ');
+  return textIncludesAny(text, [item.id, item.title, item.acceptance, ...(item.keywords || [])]);
+}
+
+function pullEvidenceScore(pulls) {
+  if (!pulls.length) return 0;
+  const merged = pulls.filter((pull) => pull.state === 'merged');
+  const reviewed = pulls.filter((pull) => pull.hubReview || pull.prAgentReview);
+  const acCovered = pulls.filter((pull) => {
+    const stats = pullComplianceStats(pull);
+    return stats.done > 0 && stats.notDone === 0 && stats.needsHumanCheck <= 1;
+  });
+  const pass = pulls.filter((pull) => {
+    const level = pull.hubReview?.level || pull.prAgentReview?.level;
+    return level === 'Pass' || pull.humanDecision === 'Pass';
+  });
+  return Math.min(100, Math.max(
+    merged.length ? 80 : 0,
+    pass.length ? 75 : 0,
+    acCovered.length ? 70 : 0,
+    reviewed.length ? 45 : 0,
+    pulls.length ? 30 : 0
+  ));
+}
+
 function buildBindingExplanation({ mode, fkTasks, fkActivities, fkAssignments, linkedTasks, linkedActivities, linkedAssignments, semantic, item }) {
   const parts = [];
+  if (mode === 'pr') parts.push('PR 已关联该交付项，优先按 AC 对账和合并状态判断进度');
   if (fkTasks.length) parts.push(`${fkTasks.length} 个任务通过 deliverableId 绑定`);
   if (fkActivities.length) parts.push(`${fkActivities.length} 条 commit 通过 taskId/deliverableId 绑定`);
   if (fkAssignments.length) parts.push(`${fkAssignments.length} 条认领通过 taskId/deliverableId 绑定`);
@@ -207,32 +255,38 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
     linkedActivities.some((activity) => review.activityId === activity.id || review.id === `review_${activity.sha}`)
     || linkedTasks.some((task) => textIncludesAny(`${review.title} ${(review.findings || []).join(' ')}`, [task.id, task.title]))
   )));
+  const linkedPulls = uniqueById((store.pulls || []).filter((pull) => pullMatchesDeliverable(pull, item, linkedTasks)));
   const taskProgress = linkedTasks.length
     ? Math.round(linkedTasks.reduce((sum, task) => sum + (Number(task.progress) || 0), 0) / linkedTasks.length)
     : 0;
-  const hasBlockReview = linkedReviews.some((review) => review.level === 'Block' || review.level === 'Escalate');
+  const hasBlockReview = linkedReviews.some((review) => review.level === 'Block' || review.level === 'Escalate')
+    || linkedPulls.some((pull) => pull.hubReview?.level === 'Block' || pull.hubReview?.level === 'Escalate');
   // FK 绑定的证据才触发进度地板（避免关键词兜底虚增到 35%）
   const hasFkEvidence = fkActivities.length > 0 || fkAssignments.length > 0;
-  const progress = Math.max(taskProgress, hasFkEvidence ? 15 : 0);
+  const progress = Math.max(taskProgress, pullEvidenceScore(linkedPulls), hasFkEvidence ? 15 : 0);
   const status = hasBlockReview
     ? '阻塞'
     : linkedTasks.some((task) => task.status === '高风险' || task.risk === '高')
     ? '高风险'
     : progress >= 100
     ? '已完成'
-    : progress >= 60 || linkedActivities.length
+    : progress >= 60 || linkedPulls.length || linkedActivities.length
     ? '推进中'
     : '待补证据';
 
   const gaps = [];
   if (!linkedTasks.length) gaps.push('缺少关联任务');
-  if (!linkedActivities.length) gaps.push('缺少 Git 提交证据');
+  if (!linkedPulls.length) gaps.push('缺少 PR 交付证据');
+  if (linkedPulls.length && !linkedPulls.some((pull) => pull.state === 'merged')) gaps.push('PR 尚未合并验收');
+  if (linkedPulls.some((pull) => pullComplianceStats(pull).notDone > 0)) gaps.push('PR AC 对账仍有缺口');
   if (!linkedAssignments.length) gaps.push('晚会未领取或未登记');
   if (hasBlockReview) gaps.push('存在阻断 Review');
 
   const taskReasons = linkReasonMap((store.semanticLinks || {}).taskStageLinks);
   const activityReasons = linkReasonMap((store.semanticLinks || {}).commitStageLinks);
-  const linkMode = (fkTasks.length || fkActivities.length || fkAssignments.length)
+  const linkMode = linkedPulls.length
+    ? 'pr'
+    : (fkTasks.length || fkActivities.length || fkAssignments.length)
     ? 'fk'
     : (semantic.taskIds.size || semantic.activityIds.size) ? 'hybrid' : 'rules';
 
@@ -253,6 +307,22 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
       aiLink: taskReasons[`${task.id}:${item.id}`]
     })),
     evidence: {
+      pulls: linkedPulls.slice(0, 5).map((pull) => {
+        const stats = pullComplianceStats(pull);
+        return {
+          id: pull.id,
+          number: pull.number,
+          title: pull.title,
+          state: pull.state,
+          author: pull.author,
+          level: pull.hubReview?.level || pull.prAgentReview?.level || '',
+          completionRate: pull.hubReview?.completionRate ?? null,
+          done: stats.done,
+          notDone: stats.notDone,
+          needsHumanCheck: stats.needsHumanCheck,
+          humanDecision: pull.humanDecision || null
+        };
+      }),
       commits: linkedActivities.slice(0, 5).map((activity) => ({
         id: activity.id,
         title: activity.title,
@@ -290,11 +360,13 @@ function scoreChecklistItem(item, tasks, activities, reviews, assignments, store
         linkedTasks,
         linkedActivities,
         linkedAssignments,
+        linkedPulls,
         semantic,
         item
       }),
       counts: {
         tasks: linkedTasks.length,
+        pulls: linkedPulls.length,
         commits: linkedActivities.length,
         reviews: linkedReviews.length,
         assignments: linkedAssignments.length,

@@ -1510,6 +1510,7 @@ function renderRoadmap() {
   detailEl.innerHTML = deliverables.map((item) => {
     const statusClass = roadmapStatusClass(item.status);
     const tasks = item.linkedTasks || [];
+    const pulls = item.evidence?.pulls || [];
     const commits = item.evidence?.commits || [];
     const reviews = item.evidence?.reviews || [];
     const assignments = item.evidence?.assignments || [];
@@ -1530,7 +1531,7 @@ function renderRoadmap() {
             <strong>${escapeHtml(bindingLabel(binding))}</strong>
             <p>${escapeHtml(binding.explanation || '暂无绑定解释')}</p>
           </div>
-          <small>任务 ${bindingCounts.tasks || 0} · Commit ${bindingCounts.commits || 0} · 认领 ${bindingCounts.assignments || 0}</small>
+          <small>任务 ${bindingCounts.tasks || 0} · PR ${bindingCounts.pulls || pulls.length || 0} · Review ${bindingCounts.reviews || 0} · 认领 ${bindingCounts.assignments || 0}</small>
         </div>
         <div class="roadmap-detail-section">
           <strong>任务</strong>
@@ -1539,8 +1540,13 @@ function renderRoadmap() {
           `).join('') : '<p class="muted-line">暂无关联任务</p>'}
         </div>
         <div class="roadmap-detail-section">
-          <strong>证据</strong>
-          <p>Commit ${commits.length} · Review ${reviews.length} · 领取 ${assignments.length}</p>
+          <strong>PR / AC 证据</strong>
+          ${pulls.length ? pulls.map((pull) => `
+            <p>
+              PR #${escapeHtml(pull.number || pull.id)} ${escapeHtml(pull.title || '')}
+              <em>${escapeHtml(pull.state || 'unknown')} · ${escapeHtml(pull.level || '未审阅')} · AC ${Number(pull.done) || 0}/${(Number(pull.done) || 0) + (Number(pull.notDone) || 0) + (Number(pull.needsHumanCheck) || 0)} 完成${pull.humanDecision ? ` · 人工 ${escapeHtml(pull.humanDecision)}` : ''}</em>
+            </p>
+          `).join('') : `<p class="muted-line">暂无关联 PR；Commit ${commits.length} · Review ${reviews.length} · 领取 ${assignments.length}</p>`}
         </div>
         <div class="roadmap-detail-section">
           <strong>下一步</strong>
@@ -2733,16 +2739,22 @@ function renderAiPm() {
       ${renderStageUpdateMeta(item.stageUpdate)}
       <small>${escapeHtml(item.costReason || item.impact || '')}</small>
     </div>
-  `).join('') : '<div class="empty-state">暂无自动调整记录。新 commit 到达后，AI PM 会批量判断并自动记录小调整。</div>';
+  `).join('') : '<div class="empty-state">暂无自动调整记录。新 PR、AC 对账或人工决策变化后，AI PM 会生成可审批的调整建议。</div>';
 
-  const commits = (state.activities || []).filter((activity) => activity.type === 'commit').slice(0, 8);
-  triggerList.innerHTML = commits.length ? commits.map((activity) => `
+  const recentPulls = (state.pulls || []).slice(0, 8);
+  triggerList.innerHTML = recentPulls.length ? recentPulls.map((pull) => {
+    const compliance = pull.hubReview?.compliance || pull.prAgentReview?.compliance || {};
+    const done = Array.isArray(compliance.done) ? compliance.done.length : 0;
+    const notDone = Array.isArray(compliance.notDone) ? compliance.notDone.length : 0;
+    const needsHumanCheck = Array.isArray(compliance.needsHumanCheck) ? compliance.needsHumanCheck.length : 0;
+    return `
     <div class="ai-pm-trigger">
-      <strong>${escapeHtml(activity.owner || activity.actor || '未知')}</strong>
-      <span>${escapeHtml(activity.title || activity.message || activity.id)}</span>
-      <small>${escapeHtml(activity.repo || '')} · ${formatDateTime(activity.createdAt || activity.date)}</small>
+      <strong>PR #${escapeHtml(pull.number || pull.id)}</strong>
+      <span>${escapeHtml(pull.title || '未命名 PR')}</span>
+      <small>${escapeHtml(pull.state || 'unknown')} · ${escapeHtml(pull.hubReview?.level || pull.prAgentReview?.level || '未审阅')} · AC ${done}/${done + notDone + needsHumanCheck} 完成 · ${formatDateTime(pull.updatedAt || pull.createdAt)}</small>
     </div>
-  `).join('') : '<div class="empty-state">等待 GitHub Webhook 或手动同步提交。</div>';
+  `;
+  }).join('') : '<div class="empty-state">等待 GitHub PR 同步或 PR-Agent 回传 AC 对账。</div>';
 
   approvalList.querySelectorAll('[data-action="approve-plan-adjustment"]').forEach((button) => {
     button.addEventListener('click', () => decidePlanAdjustment(button.dataset.adjustId, 'approved').catch((e) => toast(e.message)));
@@ -4077,6 +4089,8 @@ function setRoute(route) {
     'risk-detail':   'overview',
     assignment:      'delivery',
     'task-detail':   'delivery',
+    roadmap:         'delivery',
+    'ai-pm':         'delivery',
     viewPulls:       'delivery',
     pulls:           'delivery',
     reviews:         'delivery',
@@ -4088,8 +4102,6 @@ function setRoute(route) {
     'account-admin': 'personal',
     'sys-config':    'personal',
     // ── 旧版路由（路由仍可用，导航归入 legacy） ─────────────
-    roadmap:         'legacy',
-    'ai-pm':         'legacy',
     planning:        'legacy',
     standup:         'legacy',
     report:          'legacy',
@@ -4120,8 +4132,8 @@ function setRoute(route) {
     'account-admin': 'pc-workspace',
     'sys-config':    'pc-workspace',
     // 旧版路由：不高亮任何移动端 tab
-    roadmap: '', planning: '', standup: '', report: '',
-    automation: '', attendance: '', 'ai-pm': '',
+    planning: '', standup: '', report: '',
+    automation: '', attendance: '',
   };
   const mobileRoute = mobileRouteMap[route] || route;
   document.querySelectorAll('.mobile-app-nav-item').forEach((item) => {

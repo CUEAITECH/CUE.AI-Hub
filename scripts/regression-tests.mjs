@@ -527,6 +527,51 @@ await test('phase2 checklist exposes weak keyword fallback diagnostics', () => {
   assert.equal(alpha.binding.strength, 'weak');
 });
 
+await test('phase2 checklist treats linked PR AC as delivery evidence', () => {
+  const store = {
+    currentStage: legacyStage,
+    deliverables: legacyStage.checklist,
+    tasks: [
+      {
+        id: 'task_alpha_pr',
+        title: 'Alpha API',
+        progress: 25,
+        status: '进行中',
+        deliverableId: 'deliverable_alpha'
+      }
+    ],
+    pulls: [
+      {
+        id: 'pull_alpha_1',
+        number: 42,
+        title: 'Alpha API contract',
+        state: 'merged',
+        author: 'tester',
+        linkedTaskIds: ['task_alpha_pr'],
+        hubReview: {
+          level: 'Pass',
+          humanDecision: 'approved',
+          compliance: {
+            done: ['API returns project roadmap'],
+            notDone: [],
+            needsHumanCheck: []
+          }
+        }
+      }
+    ],
+    activities: [],
+    reviews: []
+  };
+
+  const alpha = buildStageChecklist(store).checklist.find((item) => item.id === 'deliverable_alpha');
+  assert.equal(alpha.linkMode, 'pr');
+  assert.equal(alpha.binding.strength, 'strong');
+  assert.equal(alpha.binding.counts.pulls, 1);
+  assert.equal(alpha.evidence.pulls[0].number, 42);
+  assert.ok(alpha.progress >= 75);
+  assert.ok(!alpha.gaps.includes('缺少 PR 交付证据'));
+});
+
 await test('phase3 progress doc parser reads completion suggestions', () => {
   const items = parseProgressDoc([
     '- ✅ **后端模块化重构**（成员A）',

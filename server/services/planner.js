@@ -225,10 +225,41 @@ export async function estimateTasksProgress(store) {
   return Array.isArray(parsed) ? parsed : [];
 }
 
-// ─── Commit 触发计划调整建议 ──────────────────────────────────────────────────
+// ─── PR / AC / commit 触发计划调整建议 ─────────────────────────────────────────
+
+function getComplianceCounts(trigger) {
+  const compliance = trigger?.hubReview?.compliance || trigger?.prAgentReview?.compliance || trigger?.compliance || {};
+  return {
+    done: Array.isArray(compliance.done) ? compliance.done.length : 0,
+    notDone: Array.isArray(compliance.notDone) ? compliance.notDone.length : 0,
+    needsHumanCheck: Array.isArray(compliance.needsHumanCheck) ? compliance.needsHumanCheck.length : 0
+  };
+}
+
+function isPullTrigger(trigger) {
+  return trigger?.type === 'pull'
+    || trigger?.pullId
+    || trigger?.number
+    || trigger?.hubReview
+    || trigger?.prAgentReview;
+}
+
+function summarizePlanTrigger(trigger) {
+  if (isPullTrigger(trigger)) {
+    const counts = getComplianceCounts(trigger);
+    const level = trigger?.hubReview?.level || trigger?.prAgentReview?.level || trigger?.level || '未审阅';
+    return `- PR #${trigger.number || trigger.id} [${trigger.state || 'unknown'}] ${trigger.title || ''}; Hub ${level}; AC done=${counts.done}, notDone=${counts.notDone}, humanCheck=${counts.needsHumanCheck}`;
+  }
+  return `- ${trigger.owner || trigger.actor || 'unknown'}: ${trigger.title || trigger.message || trigger.id} (${trigger.repo || ''})`;
+}
+
+function getPlanTriggerKind(activities = []) {
+  return activities.some(isPullTrigger) ? 'PR / AC' : 'commit';
+}
 
 export async function generatePlanAdjustment(activities, store) {
-  const SYSTEM = `你是 CUE Project Hub 的 AI PM。根据最新 GitHub commit 和当前任务状态，判断是否需要调整开发计划。
+  const triggerKind = getPlanTriggerKind(activities);
+  const SYSTEM = `你是 CUE Project Hub 的 AI PM。根据最新 GitHub PR / AC / commit 信号和当前任务状态，判断是否需要调整开发计划。
 必须输出 JSON，不要输出 Markdown。格式：
 {
   "needed": true,
@@ -255,12 +286,12 @@ export async function generatePlanAdjustment(activities, store) {
 - 不需要调整时输出 {"needed": false}。`;
   const activeTasks = (store.tasks || []).filter((t) => t.status !== '已完成').slice(0, 10);
   const stage = normalizeStageName(store.currentStage || {});
-  const commitSummary = activities.map((a) => `- ${a.owner}: ${a.title} (${a.repo || ''})`).join('\n');
+  const commitSummary = activities.map(summarizePlanTrigger).join('\n');
   const taskSummary = activeTasks.map((t) => `- [${t.status}] ${t.title}（${t.owner}）进度${t.progress}%`).join('\n');
   const stageSummary = `当前阶段：${stage.name}；总览短名：${stage.shortName}；目标日期：${stage.targetDate || '待确认'}；状态：${stage.status || '进行中'}；进度：${Number(stage.progress) || 0}%`;
   const phases = store.currentStage?.phases || [];
   const phaseLine = phases.length ? `当前阶段划分：${phases.map((p) => `${p.id}（${p.title}）`).join('、')}` : '';
-  const text = await callClaude(SYSTEM, `${stageSummary}${phaseLine ? '\n' + phaseLine : ''}\n\n最新提交：\n${commitSummary}\n\n当前任务：\n${taskSummary}`);
+  const text = await callClaude(SYSTEM, `${stageSummary}${phaseLine ? '\n' + phaseLine : ''}\n\n最新${triggerKind}信号：\n${commitSummary}\n\n当前任务：\n${taskSummary}`);
   const parsed = parseJsonOutput(text);
   if (parsed && parsed.needed === false) return null;
   const scope = ['major', 'minor', 'progress'].includes(parsed?.scope) ? parsed.scope : inferAdjustmentScope(text, activities);
@@ -269,12 +300,12 @@ export async function generatePlanAdjustment(activities, store) {
     scope,
     mode: scope === 'major' ? 'approval' : 'auto',
     status: scope === 'major' ? 'pending_approval' : 'auto_applied',
-    summary: parsed?.summary || (scope === 'progress' ? '同步 commit 进度信号' : '根据 commit 调整开发计划'),
+    summary: parsed?.summary || (scope === 'progress' ? `同步 ${triggerKind} 进度信号` : `根据 ${triggerKind} 调整开发计划`),
     suggestion: parsed?.suggestion || text || '',
     impact: parsed?.impact || summarizeAdjustmentImpact(scope, activities),
     requiresApprovalReason: parsed?.requiresApprovalReason || (scope === 'major' ? '涉及阶段目标、负责人或排期变化，需要人工确认。' : ''),
     stageUpdate,
-    costReason: `本轮 ${activities.length} 条新 commit 触发一次 AI PM 判断，避免无新提交重复调用。`
+    costReason: `本轮 ${activities.length} 条 ${triggerKind} 信号触发一次 AI PM 判断，避免无新证据重复调用。`
   };
 }
 
@@ -345,6 +376,7 @@ export function normalizePlanStageUpdate(stageUpdate, scope, activities = []) {
 
 export function inferStageShortNameFromActivities(activities = []) {
   const text = activities.map((activity) => `${activity.title || ''} ${(activity.files || []).join(' ')}`).join(' ').toLowerCase();
+  if (/pr|pull|acceptance|ac|验收|合并|merge/.test(text)) return 'PR 验收闭环';
   if (/trtc|asr|session|usersig|课堂/.test(text)) return 'MVP / TRTC 联调';
   if (/review|block|escalate|审阅/.test(text)) return 'AI Review 闭环';
   if (/standup|meeting|晚会|分工/.test(text)) return '晚会分工闭环';
@@ -387,7 +419,7 @@ export function buildPlanAdjustmentRecord(adjustment, activities, source) {
   return {
     id: createId('adjust'),
     date: todayText(),
-    trigger: activities.map((activity) => activity.title).join('; '),
+    trigger: activities.map((activity) => isPullTrigger(activity) ? `PR #${activity.number || activity.id} ${activity.title || ''}` : activity.title).join('; '),
     triggerCount: activities.length,
     source,
     ...adjustment,
@@ -415,12 +447,14 @@ export async function persistPlanAdjustment(adjustment, activities, source) {
 export function inferAdjustmentScope(text, activities = []) {
   const raw = `${text || ''} ${activities.map((a) => a.title || '').join(' ')}`;
   if (/延期|里程碑|阶段目标|转派|负责人|排期|范围|降级|上线|发布|阻塞/i.test(raw)) return 'major';
+  if (/进度|完成|提交|同步|证据|验收|合并|AC|PR/i.test(raw)) return 'progress';
   if (/进度|完成|提交|同步|证据/i.test(raw)) return 'progress';
   return 'minor';
 }
 
 export function summarizeAdjustmentImpact(scope, activities = []) {
+  const triggerKind = getPlanTriggerKind(activities);
   if (scope === 'major') return '可能影响阶段目标、负责人或排期。';
-  if (scope === 'progress') return '只更新任务进度信号和 commit 证据。';
-  return `影响 ${activities.length || 1} 条 commit 对应的当天跟进项。`;
+  if (scope === 'progress') return `只更新任务进度信号和 ${triggerKind} 证据。`;
+  return `影响 ${activities.length || 1} 条 ${triggerKind} 对应的当天跟进项。`;
 }

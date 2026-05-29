@@ -19,7 +19,7 @@ const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const css  = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 // ── 1. v2 核心路由在 HTML 中存在 ──────────────────────────────────────────
-const v2Routes = ['overview', 'assignment', 'viewPulls', 'reviews', 'observatory', 'meeting'];
+const v2Routes = ['overview', 'assignment', 'roadmap', 'ai-pm', 'viewPulls', 'reviews', 'observatory', 'meeting'];
 for (const route of v2Routes) {
   assert.ok(
     html.includes(`data-route="${route}"`),
@@ -29,7 +29,7 @@ for (const route of v2Routes) {
 console.log('✓ v2 核心路由 data-route 完整性 OK');
 
 // ── 2. 旧版路由仍然可访问 ────────────────────────────────────────────────
-const legacyRoutes = ['roadmap', 'ai-pm', 'planning', 'standup', 'report', 'automation', 'attendance'];
+const legacyRoutes = ['planning', 'standup', 'report', 'automation', 'attendance'];
 for (const route of legacyRoutes) {
   assert.ok(
     html.includes(`data-route="${route}"`),
@@ -37,6 +37,19 @@ for (const route of legacyRoutes) {
   );
 }
 console.log('✓ 旧版路由仍可访问（data-route 存在）OK');
+
+const deliverySubGroup = html.match(/<div class="header-sub-group" data-sub="delivery">([\s\S]*?)<\/div>/);
+assert.ok(deliverySubGroup, 'delivery sub navigation must exist');
+for (const route of ['roadmap', 'ai-pm']) {
+  assert.ok(
+    deliverySubGroup[0].includes(`data-route="${route}"`),
+    `${route} must be restored under delivery navigation`,
+  );
+}
+const legacySubGroup = html.match(/<div class="header-sub-group" data-sub="legacy">([\s\S]*?)<\/div>/);
+assert.ok(legacySubGroup, 'legacy sub navigation must exist');
+assert.ok(!legacySubGroup[0].includes('data-route="roadmap"'), 'roadmap must not remain hidden under legacy navigation');
+assert.ok(!legacySubGroup[0].includes('data-route="ai-pm"'), 'ai-pm must not remain hidden under legacy navigation');
 
 // ── 3. 移动端导航 5 个条目 ───────────────────────────────────────────────
 const mobileNavSection = html.match(/class="mobile-app-nav"[^>]*>([\s\S]*?)<\/nav>/);
