@@ -121,21 +121,21 @@ export async function handle(ctx) {
         SUM(output_tokens) as totalOutput,
         SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END) as cacheHits,
         SUM(CASE WHEN output_tokens IS NULL OR output_tokens = 0 THEN 1 ELSE 0 END) as failedCalls
-      FROM llm_calls WHERE ts >= ?
-    `).get(toSqliteTs(todayStart));
+      FROM llm_calls WHERE ts >= ? AND tenant_id = ?
+    `).get(toSqliteTs(todayStart), tenantId);
 
     const byPurpose = db.prepare(`
       SELECT purpose, COUNT(*) as calls, SUM(input_tokens) as input, SUM(output_tokens) as output
-      FROM llm_calls WHERE ts >= ?
+      FROM llm_calls WHERE ts >= ? AND tenant_id = ?
       GROUP BY purpose ORDER BY calls DESC LIMIT 10
-    `).all(toSqliteTs(todayStart));
+    `).all(toSqliteTs(todayStart), tenantId);
 
     const recentFailRate = (() => {
       const r = db.prepare(`
         SELECT COUNT(*) as total,
           SUM(CASE WHEN output_tokens IS NULL OR output_tokens = 0 THEN 1 ELSE 0 END) as failed
-        FROM llm_calls WHERE ts >= ?
-      `).get(fiveMinAgo);
+        FROM llm_calls WHERE ts >= ? AND tenant_id = ?
+      `).get(fiveMinAgo, tenantId);
       return r.total > 0 ? Math.round(r.failed / r.total * 100) : 0;
     })();
 

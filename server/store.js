@@ -421,11 +421,44 @@ export function migrateStore(store) {
       : task.acceptance
   }));
 
+  // 多租户迁移：对所有数组集合补全 tenantId: 'default'
+  const TENANT_STAMP_ARRAYS = [
+    'tasks', 'members', 'reviews', 'activities', 'standups', 'assignments',
+    'attendanceRecords', 'alerts', 'projects', 'planAdjustments', 'roadmapReviews',
+    'riskAnalyses', 'deliverables', 'phases', 'users', 'aiPromptTraces', 'pulls', 'bypasses',
+  ];
+  for (const key of TENANT_STAMP_ARRAYS) {
+    if (Array.isArray(next[key])) {
+      next[key] = next[key].map((rec) =>
+        rec && typeof rec === 'object' && !rec.tenantId
+          ? { ...rec, tenantId: 'default' }
+          : rec
+      );
+    }
+  }
+
   return rebindStoreExplicitRefs(next);
 }
 
-export async function loadStore() {
-  if (cache) return cache;
+function filterStoreByTenant(store, tenantId) {
+  const FILTERABLE = [
+    'tasks', 'members', 'reviews', 'activities', 'standups', 'assignments',
+    'attendanceRecords', 'alerts', 'projects', 'planAdjustments', 'roadmapReviews',
+    'riskAnalyses', 'deliverables', 'phases', 'users', 'aiPromptTraces', 'pulls', 'bypasses',
+  ];
+  const filtered = { ...store };
+  for (const key of FILTERABLE) {
+    if (Array.isArray(filtered[key])) {
+      filtered[key] = filtered[key].filter(
+        (r) => !r.tenantId || r.tenantId === tenantId
+      );
+    }
+  }
+  return filtered;
+}
+
+export async function loadStore(tenantId) {
+  if (cache) return tenantId && tenantId !== 'default' ? filterStoreByTenant(cache, tenantId) : cache;
 
   let shouldWrite = false;
   try {
@@ -443,7 +476,7 @@ export async function loadStore() {
     await writeJson(dbPath, cache);
   }
 
-  return cache;
+  return tenantId && tenantId !== 'default' ? filterStoreByTenant(cache, tenantId) : cache;
 }
 
 export async function saveStore(nextStore) {

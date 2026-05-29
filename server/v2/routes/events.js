@@ -24,11 +24,11 @@ export async function handle(ctx) {
     const interval = setInterval(() => {
       try {
         const query = typeFilter
-          ? `SELECT id, type, payload_json, source, created_at FROM events WHERE id > ? AND type = ? ORDER BY id ASC LIMIT 50`
-          : `SELECT id, type, payload_json, source, created_at FROM events WHERE id > ? ORDER BY id ASC LIMIT 50`;
+          ? `SELECT id, type, payload_json, source, created_at FROM events WHERE id > ? AND tenant_id = ? AND type = ? ORDER BY id ASC LIMIT 50`
+          : `SELECT id, type, payload_json, source, created_at FROM events WHERE id > ? AND tenant_id = ? ORDER BY id ASC LIMIT 50`;
         const rows = typeFilter
-          ? db.prepare(query).all(lastId, typeFilter)
-          : db.prepare(query).all(lastId);
+          ? db.prepare(query).all(lastId, tenantId, typeFilter)
+          : db.prepare(query).all(lastId, tenantId);
 
         for (const row of rows) {
           const data = JSON.stringify({

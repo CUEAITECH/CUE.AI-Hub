@@ -180,8 +180,16 @@ export async function handleV2(req, res, url, fastifyCtx = {}) {
           return _prevWH(code, merged, ...rest);
         };
       }
+    } else if (path.startsWith('/v2/gateway/')) {
+      // Gateway 管理端点：所有方法（含 GET）都要求有效 session 或 cue_ key
+      // （cue_ key 已在上方分支处理，走到这里说明没有有效 API Key）
+      if (!session) {
+        const sendErr = sendV2ErrorFn(res);
+        sendErr(401, 'gateway management requires a valid session — please log in');
+        return true;
+      }
     } else if (!readOnlySession) {
-      // Legacy CUE_API_KEY（向下兼容 v1）
+      // Legacy CUE_API_KEY（向下兼容 v1，非 gateway 路径）
       const cueApiKey = process.env.CUE_API_KEY;
       if (cueApiKey) {
         const provided = req.headers?.['x-cue-api-key'];
