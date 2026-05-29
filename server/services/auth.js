@@ -93,11 +93,14 @@ export function findUserForProject(users = [], identifier = '', projectId = '') 
 
 export function createSessionToken(user, projectId, now = Date.now()) {
   const payload = {
-    sub: user.id,
+    sub:      user.id,
     username: user.username,
-    role: roleForProject(user, projectId),
+    role:     roleForProject(user, projectId),
     projectId,
-    exp: now + DEFAULT_SESSION_TTL_MS
+    // tenantId と projectId は現在同義（1プロジェクト = 1テナント）。
+    // 両方を明示することで、将来的な分離が容易になる。
+    tenantId: projectId || 'default',
+    exp:      now + DEFAULT_SESSION_TTL_MS,
   };
   const encoded = base64UrlEncode(JSON.stringify(payload));
   const signature = createHmac('sha256', sessionSecret()).update(encoded).digest('base64url');
