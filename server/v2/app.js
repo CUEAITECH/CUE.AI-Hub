@@ -180,20 +180,23 @@ export async function handleV2(req, res, url, fastifyCtx = {}) {
           return _prevWH(code, merged, ...rest);
         };
       }
+    } else if (path.startsWith('/v2/gateway/')) {
+      // Gateway 管理端点：所有方法（含 GET）都要求有效 session 或 cue_ key
+      // （cue_ key 已在上方分支处理，走到这里说明没有有效 API Key）
+      if (!session) {
+        const sendErr = sendV2ErrorFn(res);
+        sendErr(401, 'gateway management requires a valid session — please log in');
+        return true;
+      }
     } else if (!readOnlySession) {
-      // Gateway 管理端点：有效 session 可执行写操作（管理员通过浏览器管理 API 密钥）
-      const isGatewayMgmt = path.startsWith('/v2/gateway/');
-      const sessionOk = session && isGatewayMgmt;
-      if (!sessionOk) {
-        // Legacy CUE_API_KEY（向下兼容 v1）
-        const cueApiKey = process.env.CUE_API_KEY;
-        if (cueApiKey) {
-          const provided = req.headers?.['x-cue-api-key'];
-          if (provided !== cueApiKey) {
-            const sendErr = sendV2ErrorFn(res);
-            sendErr(401, 'invalid API key — use Authorization: Bearer cue_xxx or X-CUE-API-Key');
-            return true;
-          }
+      // Legacy CUE_API_KEY（向下兼容 v1，非 gateway 路径）
+      const cueApiKey = process.env.CUE_API_KEY;
+      if (cueApiKey) {
+        const provided = req.headers?.['x-cue-api-key'];
+        if (provided !== cueApiKey) {
+          const sendErr = sendV2ErrorFn(res);
+          sendErr(401, 'invalid API key — use Authorization: Bearer cue_xxx or X-CUE-API-Key');
+          return true;
         }
       }
     }
