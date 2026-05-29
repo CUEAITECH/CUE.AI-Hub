@@ -554,13 +554,23 @@ async function showOrgSelector(orgs, user) {
   for (const org of orgs) {
     const btn = document.createElement('button');
     btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:1px solid var(--border,#2a2a3a);border-radius:8px;background:var(--surface-hover,#252535);color:var(--text,#e0e0e0);cursor:pointer;text-align:left;transition:border-color .15s;';
-    btn.innerHTML = `
-      <span style="flex:1;">
-        <strong style="display:block;font-size:.95rem;">${org.name}</strong>
-        ${org.summary ? `<small style="color:var(--text-muted,#888);font-size:.78rem;">${org.summary}</small>` : ''}
-      </span>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
-    `;
+
+    // 用 DOM 节点而非 innerHTML，避免组织名/简介中的 HTML 注入
+    const info = document.createElement('span');
+    info.style.flex = '1';
+    const strong = document.createElement('strong');
+    strong.style.cssText = 'display:block;font-size:.95rem;';
+    strong.textContent = org.name;          // textContent 自动转义
+    info.appendChild(strong);
+    if (org.summary) {
+      const small = document.createElement('small');
+      small.style.cssText = 'color:var(--text-muted,#888);font-size:.78rem;';
+      small.textContent = org.summary;      // textContent 自动转义
+      info.appendChild(small);
+    }
+    btn.appendChild(info);
+    btn.insertAdjacentHTML('beforeend', '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>');
+
     btn.addEventListener('mouseenter', () => btn.style.borderColor = 'var(--blue,#4c9df1)');
     btn.addEventListener('mouseleave', () => btn.style.borderColor = 'var(--border,#2a2a3a)');
     btn.addEventListener('click', async () => {

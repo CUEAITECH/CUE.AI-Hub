@@ -249,7 +249,10 @@ export function createSystemRoutes({
           const u = draft.users[idx];
           draft.users[idx] = {
             ...u,
-            projectIds:   [...new Set([...(u.projectIds || []).filter((id) => id !== '*'), orgId])],
+            // 保留通配符 '*'（全局用户不应因创建新组织而丢失对所有已有组织的访问权）
+            projectIds:   (u.projectIds || []).includes('*')
+              ? u.projectIds   // wildcard 已涵盖所有 org，无需追加
+              : [...new Set([...(u.projectIds || []), orgId])],
             projectRoles: { ...(u.projectRoles || {}), [orgId]: 'project_admin' },
             updatedAt:    now,
           };
