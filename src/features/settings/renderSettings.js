@@ -101,6 +101,28 @@ function buildHtml(config) {
         </div>
       </form>
 
+      <section class="cfg-group" id="cfgOrgSection">
+        <h3 class="cfg-group-title">组织管理</h3>
+        <p class="cfg-gateway-desc">查看并管理你所在的组织，邀请成员加入当前组织。</p>
+        <div id="cfgOrgList" class="cfg-gateway-list"><p class="cfg-gateway-empty">加载中…</p></div>
+        <form id="cfgInviteForm" class="cfg-gateway-create" autocomplete="off" style="margin-top:12px;">
+          <h4 style="margin:0 0 10px;font-size:.88rem;color:var(--text-muted);">邀请成员到当前组织</h4>
+          <div class="cfg-field">
+            <label class="cfg-label"><span class="cfg-label-text">用户名 / 邮箱 / 手机号</span></label>
+            <input class="cfg-input" id="inviteIdentifier" type="text" placeholder="输入已注册的用户名、邮箱或手机号" autocomplete="off" />
+          </div>
+          <div class="cfg-field">
+            <label class="cfg-label"><span class="cfg-label-text">角色</span></label>
+            <select class="cfg-input" id="inviteRole">
+              <option value="developer">开发者</option>
+              <option value="hr_manager">HR 管理员</option>
+              <option value="project_admin">组织管理员</option>
+            </select>
+          </div>
+          <button type="submit" class="cfg-btn cfg-btn-primary" id="inviteBtn">邀请加入</button>
+        </form>
+      </section>
+
       <section class="cfg-group cfg-group-gateway" id="cfgGatewaySection">
         <h3 class="cfg-group-title">API 访问密钥</h3>
         <p class="cfg-gateway-desc">生成密钥后可在外部系统中以 <code>Authorization: Bearer cue_xxx</code> 头调用本 API。密钥仅在创建时完整显示一次。</p>
@@ -139,10 +161,12 @@ function buildHtml(config) {
 /**
  * @param {object} helpers
  * @param {import('../../api/configApi.js').createConfigApi} helpers.configApi
+ * @param {import('../../api/authApi.js').createAuthApi}   helpers.authApi
  * @param {function} helpers.toast
+ * @param {function} [helpers.getCurrentOrgId] - 返回当前登录的 orgId
  */
 export async function renderSettings(helpers) {
-  const { configApi, gatewayApi, toast } = helpers;
+  const { configApi, gatewayApi, authApi, toast, getCurrentOrgId } = helpers;
   const container = document.getElementById('sys-config');
   if (!container) return;
 
@@ -162,13 +186,18 @@ export async function renderSettings(helpers) {
 
   container.innerHTML = buildHtml(config);
   bindEvents(container, helpers);
+  // 加载组织成员列表
+  if (authApi) {
+    loadOrgMembers(container, authApi, getCurrentOrgId?.() || '', toast);
+  }
   // 加载 API 密钥列表（如果 gatewayApi 可用）
   if (gatewayApi) {
     loadGatewayKeys(container, gatewayApi, toast);
   }
 }
 
-function bindEvents(container, { configApi, gatewayApi, toast }) {
+function bindEvents(container, helpers) {
+  const { configApi, gatewayApi, toast } = helpers;
   // 保存
   const form = container.querySelector('#cfgForm');
   form?.addEventListener('submit', async (e) => {
@@ -237,6 +266,32 @@ function bindEvents(container, { configApi, gatewayApi, toast }) {
     await reloadConfig(container, { configApi, gatewayApi, toast });
   });
 
+  // 组织管理：邀请成员
+  const inviteForm = container.querySelector('#cfgInviteForm');
+  inviteForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn        = container.querySelector('#inviteBtn');
+    const identifier = container.querySelector('#inviteIdentifier')?.value?.trim() || '';
+    const role       = container.querySelector('#inviteRole')?.value || 'developer';
+    const orgId      = helpers?.getCurrentOrgId?.() || '';
+    if (!identifier) { toast('请填写用户名、邮箱或手机号'); return; }
+    if (!orgId)      { toast('请先选择要管理的组织'); return; }
+    btn.disabled = true;
+    btn.textContent = '邀请中…';
+    try {
+      await helpers.authApi.inviteMember(orgId, { username: identifier, role });
+      toast(`已邀请 ${identifier} 加入组织`);
+      container.querySelector('#inviteIdentifier').value = '';
+      // 刷新成员列表
+      loadOrgMembers(container, helpers.authApi, orgId, toast);
+    } catch (err) {
+      toast(`邀请失败：${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '邀请加入';
+    }
+  });
+
   // API 密钥：创建
   const gwForm = container.querySelector('#cfgGatewayForm');
   gwForm?.addEventListener('submit', async (e) => {
@@ -288,6 +343,44 @@ function showStatus(container, type, html) {
   // 5 秒后自动隐藏 ok 状态
   if (type === 'ok') {
     setTimeout(() => { el.hidden = true; }, 5000);
+  }
+}
+
+// ── 组织成员列表 ──────────────────────────────────────────────────
+async function loadOrgMembers(container, authApi, orgId, toast) {
+  const listEl = container.querySelector('#cfgOrgList');
+  if (!listEl) return;
+  try {
+    const res  = await authApi.listOrgs();
+    const orgs = res.orgs || [];
+    if (!orgs.length) {
+      listEl.innerHTML = '<p class="cfg-gateway-empty">你目前没有加入任何组织。</p>';
+      return;
+    }
+    const roleLabel = (role) => ({ admin: '系统管理员', project_admin: '组织管理员', hr_manager: 'HR', developer: '开发者' }[role] || role);
+    listEl.innerHTML = `
+      <table class="cfg-key-table" style="width:100%;border-collapse:collapse;font-size:.85rem;">
+        <thead>
+          <tr style="color:var(--text-muted);text-align:left;">
+            <th style="padding:6px 8px;border-bottom:1px solid var(--border);">组织名称</th>
+            <th style="padding:6px 8px;border-bottom:1px solid var(--border);">ID</th>
+            <th style="padding:6px 8px;border-bottom:1px solid var(--border);">简介</th>
+            <th style="padding:6px 8px;border-bottom:1px solid var(--border);">当前</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${orgs.map((org) => `
+            <tr>
+              <td style="padding:6px 8px;">${escHtml(org.name)}</td>
+              <td style="padding:6px 8px;color:var(--text-muted);font-family:monospace;font-size:.78rem;">${escHtml(org.id)}</td>
+              <td style="padding:6px 8px;color:var(--text-muted);">${escHtml(org.summary || '—')}</td>
+              <td style="padding:6px 8px;">${org.id === orgId ? '✓' : ''}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    listEl.innerHTML = `<p class="cfg-gateway-empty" style="color:var(--red);">加载组织列表失败：${escHtml(err.message)}</p>`;
   }
 }
 

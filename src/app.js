@@ -5094,7 +5094,7 @@ function renderObservatory() {
 
 // ── 系统设置 ──────────────────────────────────────────────────────
 function renderSettingsPage() {
-  return _renderSettings({ configApi, gatewayApi, toast });
+  return _renderSettings({ configApi, gatewayApi, authApi, toast, getCurrentOrgId: getCurrentProjectId });
 }
 
 // 注册观察台路由
