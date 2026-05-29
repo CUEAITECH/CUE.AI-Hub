@@ -22,7 +22,6 @@ import {
   gatewayAuth,
   extractApiKey,
   auditLog,
-  ensureGatewayTables,
 } from '../middleware/apiGateway.js';
 import { getSessionToken, verifySessionToken } from '../services/auth.js';
 import logger from '../logger.js';
@@ -97,9 +96,7 @@ function sendV2ErrorFn(res) {
  * - 直接调用路径（server/index.js bypass）：流式读取并 JSON.parse
  */
 async function readBody(req, parsedBody) {
-  // Fastify 已解析（parsedBody 由 fastifyApp.js 传入，避免重复消费流）
   if (parsedBody !== undefined) return parsedBody;
-  // 直接调用路径：流式读取
   return new Promise((resolve, reject) => {
     const chunks = [];
     req.on('data', c => chunks.push(c));
@@ -113,6 +110,103 @@ async function readBody(req, parsedBody) {
     });
     req.on('error', reject);
   });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// resolveAuthContext — 单一权威鉴权函数
+//
+// 规则（优先级从高到低）：
+//   1. cue_ API key  → DB 校验，tenantId 从密钥记录读取（最可信）
+//   2. Session + gateway 路径 → 需 admin/project_admin 角色，tenantId 从 JWT 读取
+//   3. Session + 只读请求（GET/HEAD） → 直接放行，tenantId 从 JWT 读取
+//   4. Legacy CUE_API_KEY 环境变量 → 写操作 + 无 session 时校验（向下兼容 v1）
+//   5. 其余 → 放行，tenantId 降级为请求头或 'default'
+//
+// 返回值（ok=true）：
+//   { ok: true, tenantId, userId, role, keyPrefix, rateLimitInfo? }
+// 返回值（ok=false）：
+//   { ok: false, errorCode, errorMessage, rateLimitInfo? }
+//
+// 注意：tenantId 和 projectId 在当前架构中是同义词（1项目 = 1租户）。
+// JWT 同时存储两者（见 auth.js createSessionToken），这里统一读取 tenantId。
+// ─────────────────────────────────────────────────────────────────
+const GATEWAY_ADMIN_ROLES = new Set(['admin', 'project_admin']);
+
+async function resolveAuthContext(req, path, method) {
+  const rawKey = extractApiKey(req);
+  const session = verifySessionToken(getSessionToken(req));
+
+  // ── 1. cue_ API key（优先级最高，DB 校验，不可伪造）──────────────
+  if (rawKey?.startsWith('cue_')) {
+    const auth = await gatewayAuth(req);
+    if (!auth.ok) {
+      return {
+        ok: false,
+        errorCode:    auth.errorCode,
+        errorMessage: auth.errorMessage,
+        rateLimitInfo: auth.rateLimitInfo,
+      };
+    }
+    return {
+      ok:           true,
+      tenantId:     auth.tenantId,
+      userId:       null,
+      role:         null,
+      keyPrefix:    auth.keyPrefix,
+      rateLimitInfo: auth.rateLimitInfo,
+    };
+  }
+
+  // ── 2. Session + gateway 管理端点 ──────────────────────────────────
+  // gateway 路径必须有 session，legacy key 不可访问（防止 env key 泄漏后被滥用）
+  if (path.startsWith('/v2/gateway/')) {
+    if (!session) {
+      return { ok: false, errorCode: 401, errorMessage: 'gateway management requires a valid session — please log in' };
+    }
+    if (!GATEWAY_ADMIN_ROLES.has(session.role)) {
+      return { ok: false, errorCode: 403, errorMessage: 'gateway management requires admin or project_admin role' };
+    }
+    // 从 JWT 读 tenantId，忽略请求头（防止 project_admin 伪造 X-Tenant-Id 跨租户操作）
+    // admin → 'default'（系统级）；project_admin → 自己的 tenant
+    const tenantId = session.role === 'admin'
+      ? 'default'
+      : (session.tenantId || session.projectId || 'default');
+    return { ok: true, tenantId, userId: session.sub, role: session.role, keyPrefix: null };
+  }
+
+  // ── 3. Session + 只读请求（GET/HEAD）──────────────────────────────
+  const isReadOnly = method === 'GET' || method === 'HEAD';
+  if (session && isReadOnly) {
+    const tenantId = session.tenantId || session.projectId || 'default';
+    return { ok: true, tenantId, userId: session.sub, role: session.role, keyPrefix: null };
+  }
+
+  // ── 4. Legacy CUE_API_KEY（向下兼容 v1）──────────────────────────
+  // 适用范围：无 session 的任意请求 + session 的写操作
+  const cueApiKey = process.env.CUE_API_KEY;
+  if (cueApiKey) {
+    const provided = req.headers?.['x-cue-api-key'];
+    if (provided !== cueApiKey) {
+      return {
+        ok: false,
+        errorCode:    401,
+        errorMessage: 'invalid API key — use Authorization: Bearer cue_xxx or X-CUE-API-Key',
+      };
+    }
+  }
+
+  // ── 5. 放行（session 写操作通过 legacy 校验 / 无 env key / 匿名）──
+  // tenantId 优先级：JWT session > 请求头（用户可控，仅作提示） > 'default'
+  const tenantId = (session && (session.tenantId || session.projectId))
+    || req.headers['x-tenant-id']
+    || 'default';
+  return {
+    ok:       true,
+    tenantId,
+    userId:   session?.sub  ?? null,
+    role:     session?.role ?? null,
+    keyPrefix: null,
+  };
 }
 
 /**
@@ -143,75 +237,51 @@ export async function handleV2(req, res, url, fastifyCtx = {}) {
   const _origWriteHead = res.writeHead.bind(res);
   res.writeHead = (code, ...rest) => { _capturedStatus = code; return _origWriteHead(code, ...rest); };
 
-  // ── API Gateway 鉴权 ──────────────────────────────────────────────
-  let tenantId = req.headers['x-tenant-id'] || 'default';
-  let _authKeyPrefix = null;
+  // ── 鉴权：统一通过 resolveAuthContext 处理 ────────────────────────
+  let tenantId     = 'default';
+  let _keyPrefix   = null;
 
   if (!V2_AUTH_EXEMPT.has(path)) {
-    const rawKey = extractApiKey(req);
-    const session = verifySessionToken(getSessionToken(req));
-    const readOnlySession = session && (method === 'GET' || method === 'HEAD');
+    const authCtx = await resolveAuthContext(req, path, method);
 
-    if (rawKey?.startsWith('cue_')) {
-      // V2 API Key — 完整 gateway 校验（rate limit + 多租户隔离 + 审计）
-      const auth = await gatewayAuth(req, tenantId !== 'default' ? tenantId : undefined);
-      if (!auth.ok) {
-        const headers = { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*' };
-        if (auth.errorCode === 429 && auth.rateLimitInfo) {
-          headers['x-ratelimit-limit']     = String(auth.rateLimitInfo.limit);
-          headers['x-ratelimit-remaining'] = '0';
-          headers['x-ratelimit-reset']     = String(Math.ceil(auth.rateLimitInfo.resetAt / 1000));
-        }
-        res.writeHead(auth.errorCode, headers);
-        res.end(JSON.stringify({ error: auth.errorMessage }));
-        return true;
+    if (!authCtx.ok) {
+      const headers = { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*' };
+      if (authCtx.errorCode === 429 && authCtx.rateLimitInfo) {
+        headers['x-ratelimit-limit']     = String(authCtx.rateLimitInfo.limit);
+        headers['x-ratelimit-remaining'] = '0';
+        headers['x-ratelimit-reset']     = String(Math.ceil(authCtx.rateLimitInfo.resetAt / 1000));
       }
-      tenantId = auth.tenantId;
-      _authKeyPrefix = auth.keyPrefix;
+      res.writeHead(authCtx.errorCode, headers);
+      res.end(JSON.stringify({ error: authCtx.errorMessage }));
+      return true;
+    }
 
-      if (auth.rateLimitInfo) {
-        const rl = auth.rateLimitInfo;
-        const _prevWH = res.writeHead.bind(res);
-        res.writeHead = (code, hdrs, ...rest) => {
-          const merged = typeof hdrs === 'object' ? hdrs : {};
-          merged['x-ratelimit-limit']     = String(rl.limit);
-          merged['x-ratelimit-remaining'] = String(rl.remaining);
-          merged['x-ratelimit-reset']     = String(Math.ceil(rl.resetAt / 1000));
-          return _prevWH(code, merged, ...rest);
-        };
-      }
-    } else if (path.startsWith('/v2/gateway/')) {
-      // Gateway 管理端点：所有方法（含 GET）都要求有效 session 或 cue_ key
-      // （cue_ key 已在上方分支处理，走到这里说明没有有效 API Key）
-      if (!session) {
-        const sendErr = sendV2ErrorFn(res);
-        sendErr(401, 'gateway management requires a valid session — please log in');
-        return true;
-      }
-    } else if (!readOnlySession) {
-      // Legacy CUE_API_KEY（向下兼容 v1，非 gateway 路径）
-      const cueApiKey = process.env.CUE_API_KEY;
-      if (cueApiKey) {
-        const provided = req.headers?.['x-cue-api-key'];
-        if (provided !== cueApiKey) {
-          const sendErr = sendV2ErrorFn(res);
-          sendErr(401, 'invalid API key — use Authorization: Bearer cue_xxx or X-CUE-API-Key');
-          return true;
-        }
-      }
+    tenantId   = authCtx.tenantId;
+    _keyPrefix = authCtx.keyPrefix;
+
+    // 成功通过 cue_ key 时：在后续响应头中注入 rate limit 信息
+    if (authCtx.rateLimitInfo) {
+      const rl = authCtx.rateLimitInfo;
+      const _prevWH = res.writeHead.bind(res);
+      res.writeHead = (code, hdrs, ...rest) => {
+        const merged = typeof hdrs === 'object' ? hdrs : {};
+        merged['x-ratelimit-limit']     = String(rl.limit);
+        merged['x-ratelimit-remaining'] = String(rl.remaining);
+        merged['x-ratelimit-reset']     = String(Math.ceil(rl.resetAt / 1000));
+        return _prevWH(code, merged, ...rest);
+      };
     }
   }
 
   // ── 构建路由上下文（传给各路由模块）────────────────────────────
   const { parsedBody } = fastifyCtx;
-  const sendV2Json = sendV2JsonFn(res);
+  const sendV2Json  = sendV2JsonFn(res);
   const sendV2Error = sendV2ErrorFn(res);
   const ctx = {
-    method, path, url, tenantId,
+    method, path, url,
+    tenantId,   // 已解析（来自 DB/JWT/header，顺序见 resolveAuthContext）
     req, res,
-    // parsedBody 由 Fastify 的自定义 content-type parser 传入（见 fastifyApp.js）
-    // 避免重复消费流；直接调用路径时 parsedBody=undefined，回退到流式读取
-    readBody: () => readBody(req, parsedBody),
+    readBody:   () => readBody(req, parsedBody),
     sendV2Json,
     sendV2Error,
   };
@@ -244,10 +314,10 @@ export async function handleV2(req, res, url, fastifyCtx = {}) {
 
   } finally {
     // ── 审计日志（fire and forget，仅 cue_ key 请求）──────────────
-    if (_authKeyPrefix) {
+    if (_keyPrefix) {
       auditLog({
         tenantId,
-        keyPrefix: _authKeyPrefix,
+        keyPrefix:  _keyPrefix,
         method,
         path,
         statusCode: _capturedStatus,
