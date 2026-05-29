@@ -41,14 +41,14 @@ async function handlePost(ctx) {
 
 // ── 3. POST /v2/config/sync-pr-agent ────────────────────────────────────────
 async function handleSyncPrAgent(ctx) {
-  const { sendV2Json, sendV2Error } = ctx;
+  const { tenantId, sendV2Json, sendV2Error } = ctx;
 
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
   if (!GITHUB_TOKEN) { sendV2Error(503, 'GITHUB_TOKEN not configured'); return true; }
 
   // 找 PR-Agent 所在的 GitHub 仓库（读 state 里的 projects）
   const { loadStore } = await import('../../store.js');
-  const store = await loadStore();
+  const store = await loadStore(tenantId);
   const project = (store.projects || []).find((p) => p.githubOwner && p.githubRepo);
   if (!project) { sendV2Error(404, 'no github project found in hub'); return true; }
 
