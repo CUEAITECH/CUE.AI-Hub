@@ -181,11 +181,18 @@ export async function handleV2(req, res, url, fastifyCtx = {}) {
         };
       }
     } else if (path.startsWith('/v2/gateway/')) {
-      // Gateway 管理端点：所有方法（含 GET）都要求有效 session 或 cue_ key
-      // （cue_ key 已在上方分支处理，走到这里说明没有有效 API Key）
+      // Gateway 管理端点：要求有效 session 且角色为 admin 或 project_admin
+      // role 已由 createSessionToken 签入 JWT payload，verifySessionToken 直接返回
+      const GATEWAY_ADMIN_ROLES = new Set(['admin', 'project_admin']);
+      const isGatewayAdmin = session && GATEWAY_ADMIN_ROLES.has(session.role);
       if (!session) {
         const sendErr = sendV2ErrorFn(res);
         sendErr(401, 'gateway management requires a valid session — please log in');
+        return true;
+      }
+      if (!isGatewayAdmin) {
+        const sendErr = sendV2ErrorFn(res);
+        sendErr(403, 'gateway management requires admin or project_admin role');
         return true;
       }
     } else if (!readOnlySession) {
