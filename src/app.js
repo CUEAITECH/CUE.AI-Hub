@@ -15,6 +15,7 @@ import { tasksApi } from './api/tasksApi.js';
 import { renderObservatory as _renderObservatory, loadAndRenderSpacePanel as _loadAndRenderSpacePanel } from './features/observability/index.js';
 import { renderSettings as _renderSettings } from './features/settings/index.js';
 import { configApi } from './api/configApi.js';
+import { gatewayApi } from './api/gatewayApi.js';
 
 const state = {
   tasks: [],
@@ -4960,7 +4961,7 @@ function renderObservatory() {
 
 // ── 系统设置 ──────────────────────────────────────────────────────
 function renderSettingsPage() {
-  return _renderSettings({ configApi, toast });
+  return _renderSettings({ configApi, gatewayApi, toast });
 }
 
 // 注册观察台路由

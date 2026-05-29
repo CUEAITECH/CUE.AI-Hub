@@ -101,6 +101,25 @@ function buildHtml(config) {
         </div>
       </form>
 
+      <section class="cfg-group cfg-group-gateway" id="cfgGatewaySection">
+        <h3 class="cfg-group-title">API 访问密钥</h3>
+        <p class="cfg-gateway-desc">生成密钥后可在外部系统中以 <code>Authorization: Bearer cue_xxx</code> 头调用本 API。密钥仅在创建时完整显示一次。</p>
+        <div id="cfgGatewayList" class="cfg-gateway-list">
+          <p class="cfg-gateway-empty">加载中…</p>
+        </div>
+        <form id="cfgGatewayForm" class="cfg-gateway-create" autocomplete="off">
+          <div class="cfg-field">
+            <label class="cfg-label"><span class="cfg-label-text">密钥名称</span></label>
+            <input class="cfg-input" id="gwKeyName" type="text" placeholder="用途描述，例如：production-server" autocomplete="off" />
+          </div>
+          <div class="cfg-field">
+            <label class="cfg-label"><span class="cfg-label-text">速率限制（次/分钟）</span></label>
+            <input class="cfg-input" id="gwRateLimit" type="number" value="100" min="1" max="10000" autocomplete="off" />
+          </div>
+          <button type="submit" class="cfg-btn cfg-btn-primary" id="gwCreateBtn">生成新 API Key</button>
+        </form>
+      </section>
+
       <div id="cfgStatus" class="cfg-status" hidden></div>
 
       <div class="cfg-info-box">
@@ -123,7 +142,7 @@ function buildHtml(config) {
  * @param {function} helpers.toast
  */
 export async function renderSettings(helpers) {
-  const { configApi, toast } = helpers;
+  const { configApi, gatewayApi, toast } = helpers;
   const container = document.getElementById('sys-config');
   if (!container) return;
 
@@ -143,9 +162,13 @@ export async function renderSettings(helpers) {
 
   container.innerHTML = buildHtml(config);
   bindEvents(container, helpers);
+  // 加载 API 密钥列表（如果 gatewayApi 可用）
+  if (gatewayApi) {
+    loadGatewayKeys(container, gatewayApi, toast);
+  }
 }
 
-function bindEvents(container, { configApi, toast }) {
+function bindEvents(container, { configApi, gatewayApi, toast }) {
   // 保存
   const form = container.querySelector('#cfgForm');
   form?.addEventListener('submit', async (e) => {
@@ -176,7 +199,7 @@ function bindEvents(container, { configApi, toast }) {
       showStatus(container, 'ok', `已保存：${res.updated?.join('、') || '配置'}。`);
       toast('配置已保存');
       // 重新加载最新值
-      await reloadConfig(container, { configApi, toast });
+      await reloadConfig(container, { configApi, gatewayApi, toast });
     } catch (err) {
       showStatus(container, 'err', `保存失败：${err.message}`);
       toast(`保存失败: ${err.message}`);
@@ -211,17 +234,46 @@ function bindEvents(container, { configApi, toast }) {
 
   // 重新加载
   container.querySelector('#cfgReloadBtn')?.addEventListener('click', async () => {
-    await reloadConfig(container, { configApi, toast });
+    await reloadConfig(container, { configApi, gatewayApi, toast });
+  });
+
+  // API 密钥：创建
+  const gwForm = container.querySelector('#cfgGatewayForm');
+  gwForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = container.querySelector('#gwCreateBtn');
+    btn.disabled = true;
+    btn.textContent = '生成中…';
+    try {
+      const name      = container.querySelector('#gwKeyName')?.value?.trim() || undefined;
+      const rateLimit = parseInt(container.querySelector('#gwRateLimit')?.value || '100', 10);
+      const res = await gatewayApi.createKey({ name, rateLimit });
+      // 一次性展示完整密钥
+      showNewKeyModal(container, res.key, res.keyPrefix);
+      // 刷新列表
+      await loadGatewayKeys(container, gatewayApi, toast);
+      // 重置表单
+      container.querySelector('#gwKeyName').value = '';
+    } catch (err) {
+      showStatus(container, 'err', `生成密钥失败：${escHtml(err.message)}`);
+      toast(`生成密钥失败: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '生成新 API Key';
+    }
   });
 }
 
-async function reloadConfig(container, { configApi, toast }) {
+async function reloadConfig(container, { configApi, gatewayApi, toast }) {
   try {
     const res = await configApi.getConfig();
     const config = res.config || {};
     // 重新渲染内容
     container.innerHTML = buildHtml(config);
-    bindEvents(container, { configApi, toast });
+    bindEvents(container, { configApi, gatewayApi, toast });
+    if (gatewayApi) {
+      loadGatewayKeys(container, gatewayApi, toast);
+    }
   } catch (err) {
     toast(`重新加载失败: ${err.message}`);
   }
@@ -237,4 +289,98 @@ function showStatus(container, type, html) {
   if (type === 'ok') {
     setTimeout(() => { el.hidden = true; }, 5000);
   }
+}
+
+async function loadGatewayKeys(container, gatewayApi, toast) {
+  const listEl = container.querySelector('#cfgGatewayList');
+  if (!listEl) return;
+  try {
+    const res = await gatewayApi.listKeys();
+    const keys = res.keys || [];
+    if (!keys.length) {
+      listEl.innerHTML = '<p class="cfg-gateway-empty">暂无 API Key，点击下方按钮生成。</p>';
+      return;
+    }
+    listEl.innerHTML = `
+      <table class="cfg-gateway-table">
+        <thead><tr>
+          <th>名称</th><th>前缀</th><th>权限</th><th>速率限制</th><th>最后使用</th><th>操作</th>
+        </tr></thead>
+        <tbody>
+          ${keys.map((k) => `
+            <tr data-key-id="${k.id}">
+              <td>${escHtml(k.name || '—')}</td>
+              <td><code>${escHtml(k.key_prefix)}</code></td>
+              <td>${escHtml((k.scopes || []).join(', '))}</td>
+              <td>${escHtml(String(k.rate_limit))}/min</td>
+              <td>${k.last_used ? escHtml(k.last_used.slice(0, 16).replace('T', ' ')) : '从未'}</td>
+              <td><button class="cfg-btn cfg-btn-danger cfg-btn-sm gw-revoke-btn" data-id="${k.id}">撤销</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+    // 绑定撤销按钮
+    listEl.querySelectorAll('.gw-revoke-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('确认撤销此 API Key？撤销后无法恢复。')) return;
+        btn.disabled = true;
+        btn.textContent = '撤销中…';
+        try {
+          await gatewayApi.revokeKey(btn.dataset.id);
+          await loadGatewayKeys(container, gatewayApi, toast);
+          toast('API Key 已撤销');
+        } catch (err) {
+          toast(`撤销失败: ${err.message}`);
+          btn.disabled = false;
+          btn.textContent = '撤销';
+        }
+      });
+    });
+  } catch (err) {
+    listEl.innerHTML = `<p class="cfg-gateway-empty cfg-error">加载密钥列表失败：${escHtml(err.message)}</p>`;
+  }
+}
+
+function showNewKeyModal(container, fullKey, keyPrefix) {
+  // 移除已有弹窗
+  container.querySelector('#gwNewKeyModal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'gwNewKeyModal';
+  modal.className = 'cfg-modal-overlay';
+  modal.innerHTML = `
+    <div class="cfg-modal">
+      <h3 class="cfg-modal-title">🔑 新 API Key 已生成</h3>
+      <p class="cfg-modal-warn">⚠️ 请立即复制并安全保存。此密钥不会再次显示。</p>
+      <div class="cfg-key-display">
+        <code id="gwNewKeyText">${escHtml(fullKey)}</code>
+        <button class="cfg-btn cfg-btn-ghost cfg-btn-sm" id="gwCopyBtn">复制</button>
+      </div>
+      <p class="cfg-modal-note">前缀：<code>${escHtml(keyPrefix)}</code>（列表中显示的标识）</p>
+      <div class="cfg-modal-actions">
+        <button class="cfg-btn cfg-btn-primary" id="gwModalClose">已复制，关闭</button>
+      </div>
+    </div>`;
+
+  container.appendChild(modal);
+
+  modal.querySelector('#gwCopyBtn')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(fullKey).then(() => {
+      const btn = modal.querySelector('#gwCopyBtn');
+      if (btn) { btn.textContent = '已复制 ✓'; }
+    }).catch(() => {
+      // 降级：选中文字
+      const code = modal.querySelector('#gwNewKeyText');
+      if (code) {
+        const range = document.createRange();
+        range.selectNode(code);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+      }
+    });
+  });
+
+  modal.querySelector('#gwModalClose')?.addEventListener('click', () => modal.remove());
+  // 点击遮罩关闭
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
