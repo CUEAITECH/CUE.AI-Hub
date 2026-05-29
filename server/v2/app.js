@@ -195,6 +195,11 @@ export async function handleV2(req, res, url, fastifyCtx = {}) {
         sendErr(403, 'gateway management requires admin or project_admin role');
         return true;
       }
+      // 关键：用 session 携带的身份覆盖请求头中用户可控的 tenantId，
+      // 防止 project_admin(A) 发送 X-Tenant-Id: B 后操作 B 的密钥。
+      // - admin 角色：tenantId 保持 'default'（系统级管理员管理默认租户）
+      // - project_admin：tenantId 锁定为 session.projectId（只能管理自己的项目）
+      tenantId = session.role === 'admin' ? 'default' : (session.projectId || 'default');
     } else if (!readOnlySession) {
       // Legacy CUE_API_KEY（向下兼容 v1，非 gateway 路径）
       const cueApiKey = process.env.CUE_API_KEY;
