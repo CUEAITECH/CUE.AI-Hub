@@ -260,47 +260,104 @@ function syncCurrentProject(projectId = '') {
   if (state.currentProjectId) localStorage.setItem('cue_currentProjectId', state.currentProjectId);
 }
 
+// 从组织名派生头像颜色（固定色板，同一个名字永远同一个颜色）
+const WS_COLORS = ['#5e6ad2','#26b5ce','#4cb782','#f2994a','#e05c5c','#9b59b6','#e67e22','#1abc9c'];
+function orgAvatarColor(name = '') {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return WS_COLORS[Math.abs(h) % WS_COLORS.length];
+}
+function orgAvatarInitial(name = '') {
+  return (name.trim()[0] || '?').toUpperCase();
+}
+
 function renderProjectSwitcher() {
   const projects = state.projects || [];
   const currentId = getCurrentProjectId();
-  const current = projects.find((p) => p.id === currentId);
+  const current   = projects.find((p) => p.id === currentId);
 
-  // Update button label
-  const nameEl = document.querySelector('#topbarProjectName');
+  // 更新按钮头像和名称
+  const avatarEl = document.querySelector('#topbarOrgAvatar');
+  const nameEl   = document.querySelector('#topbarProjectName');
+  if (avatarEl) {
+    avatarEl.textContent        = orgAvatarInitial(current?.name || currentId);
+    avatarEl.style.background   = orgAvatarColor(current?.name || currentId);
+  }
   if (nameEl) nameEl.textContent = current?.name || currentId || '选择组织';
 
-  // Populate dropdown list
+  // 填充下拉
   const dropdown = document.querySelector('#topbarProjectDropdown');
-  if (dropdown) {
-    const orgItems = projects.map((p) => `
-      <button type="button" class="topbar-project-option${p.id === currentId ? ' active' : ''}" data-project-id="${escapeHtml(p.id)}">
-        <span>${escapeHtml(p.name || p.id)}</span>
-        ${p.id === currentId ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>' : ''}
-      </button>
-    `).join('');
-    dropdown.innerHTML = `
-      ${orgItems}
-      <div class="topbar-project-divider" style="height:1px;background:var(--border,#2a2a3a);margin:6px 0;"></div>
-      <button type="button" class="topbar-project-option" id="topbarCreateOrgBtn">
-        <span style="color:var(--text-muted,#888);">+ 创建新组织</span>
-      </button>
-    `;
-    dropdown.querySelectorAll('.topbar-project-option').forEach((btn) => {
-      const pid = btn.dataset.projectId;
-      if (pid) {
-        btn.addEventListener('click', () => {
-          if (pid !== getCurrentProjectId()) {
-            closeProjectDropdown();
-            switchToProject(pid);
-          }
-        });
-      }
+  if (!dropdown) return;
+
+  dropdown.innerHTML = '';
+
+  // ── 组织列表
+  for (const p of projects) {
+    const isActive = p.id === currentId;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `ws-item${isActive ? ' active' : ''}`;
+
+    const av = document.createElement('span');
+    av.className         = 'ws-avatar';
+    av.textContent       = orgAvatarInitial(p.name);
+    av.style.background  = orgAvatarColor(p.name);
+    av.style.width       = '18px';
+    av.style.height      = '18px';
+    av.style.fontSize    = '9px';
+    av.style.borderRadius = '5px';
+
+    const nm = document.createElement('span');
+    nm.className   = 'ws-item-name';
+    nm.textContent = p.name || p.id;
+
+    const ck = document.createElement('svg');
+    ck.className = 'ws-item-check';
+    ck.setAttribute('width', '13'); ck.setAttribute('height', '13');
+    ck.setAttribute('viewBox', '0 0 24 24'); ck.setAttribute('fill', 'none');
+    ck.setAttribute('stroke', 'currentColor'); ck.setAttribute('stroke-width', '2.5');
+    ck.innerHTML = '<path d="M20 6L9 17l-5-5"/>';
+
+    btn.append(av, nm, ck);
+    btn.addEventListener('click', () => {
+      if (!isActive) { closeProjectDropdown(); switchToProject(p.id); }
     });
-    dropdown.querySelector('#topbarCreateOrgBtn')?.addEventListener('click', () => {
-      closeProjectDropdown();
-      showCreateOrgDialog();
-    });
+    dropdown.appendChild(btn);
   }
+
+  // ── 分隔线
+  const div1 = document.createElement('div');
+  div1.className = 'ws-divider';
+  dropdown.appendChild(div1);
+
+  // ── 邀请成员（复制邀请链接）
+  const inviteBtn = document.createElement('button');
+  inviteBtn.type = 'button';
+  inviteBtn.className = 'ws-action';
+  inviteBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg><span>邀请成员</span>`;
+  inviteBtn.addEventListener('click', () => { closeProjectDropdown(); showInviteLinkDialog(); });
+  dropdown.appendChild(inviteBtn);
+
+  // ── 组织设置
+  const settingsBtn = document.createElement('button');
+  settingsBtn.type = 'button';
+  settingsBtn.className = 'ws-action';
+  settingsBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>组织设置</span>`;
+  settingsBtn.addEventListener('click', () => { closeProjectDropdown(); setRoute('sys-config'); });
+  dropdown.appendChild(settingsBtn);
+
+  // ── 分隔线
+  const div2 = document.createElement('div');
+  div2.className = 'ws-divider';
+  dropdown.appendChild(div2);
+
+  // ── 创建新组织
+  const createBtn = document.createElement('button');
+  createBtn.type = 'button';
+  createBtn.className = 'ws-action';
+  createBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>创建新组织</span>`;
+  createBtn.addEventListener('click', () => { closeProjectDropdown(); showCreateOrgDialog(); });
+  dropdown.appendChild(createBtn);
 }
 
 function getApiScopeLabel() {
@@ -591,6 +648,62 @@ async function showOrgSelector(orgs, user) {
 }
 
 /** 弹出创建组织对话框 */
+/** 邀请成员：生成可分享的邀请链接（orgId 编码为 base64，接受方点链接后选择登录/注册进入组织） */
+function showInviteLinkDialog() {
+  document.querySelector('#inviteLinkDialog')?.remove();
+  const orgId   = getCurrentProjectId();
+  const orgName = state.currentProject?.name || orgId;
+  const token   = btoa(JSON.stringify({ orgId, ts: Date.now() }));
+  const link    = `${location.origin}${location.pathname}?invite=${encodeURIComponent(token)}`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'inviteLinkDialog';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:min(420px,92vw);box-shadow:0 8px 32px rgba(15,23,42,.15);';
+
+  const titleEl = document.createElement('h3');
+  titleEl.style.cssText = 'margin:0 0 6px;font-size:1rem;';
+  titleEl.textContent = `邀请成员加入「${orgName}」`;
+
+  const desc = document.createElement('p');
+  desc.style.cssText = 'margin:0 0 16px;font-size:.83rem;color:var(--muted);';
+  desc.textContent = '将以下链接发送给对方，对方点击后登录即可加入此组织。';
+
+  const linkRow = document.createElement('div');
+  linkRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
+
+  const input = document.createElement('input');
+  input.readOnly = true;
+  input.value = link;
+  input.style.cssText = 'flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2);color:var(--text);font-size:.8rem;font-family:monospace;min-width:0;';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.textContent = '复制';
+  copyBtn.style.cssText = 'padding:8px 14px;border:none;border-radius:7px;background:var(--blue);color:#fff;font-size:.85rem;font-weight:600;cursor:pointer;flex-shrink:0;';
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(link).then(() => {
+      copyBtn.textContent = '已复制 ✓';
+      setTimeout(() => { copyBtn.textContent = '复制'; }, 2000);
+    });
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.textContent = '关闭';
+  closeBtn.style.cssText = 'margin-top:16px;width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--muted);font-size:.85rem;cursor:pointer;';
+  closeBtn.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  linkRow.append(input, copyBtn);
+  card.append(titleEl, desc, linkRow, closeBtn);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  input.select();
+}
+
 async function showCreateOrgDialog() {
   document.querySelector('#createOrgDialog')?.remove();
   const overlay = document.createElement('div');
@@ -632,10 +745,23 @@ async function showCreateOrgDialog() {
 
 /** 登录成功的最终步骤：保存 token、同步状态、加载数据 */
 async function finalizeLogin(payload, username) {
-  const orgId = payload.orgId || payload.projectId || '';
+  let orgId = payload.orgId || payload.projectId || '';
   sessionStorage.setItem('cueHubSessionToken', payload.token || '');
   sessionStorage.setItem('cueHubAuthenticated', 'true');
   syncSessionUser(payload.user || { name: username, role: 'developer' });
+
+  // 如果是通过邀请链接进来的，登录后自动切换到目标组织
+  const inviteOrgId = sessionStorage.getItem('cueHubInviteOrgId');
+  if (inviteOrgId && inviteOrgId !== orgId) {
+    sessionStorage.removeItem('cueHubInviteOrgId');
+    const switchPayload = await authApi.selectOrg(inviteOrgId).catch(() => null);
+    if (switchPayload?.token) {
+      sessionStorage.setItem('cueHubSessionToken', switchPayload.token);
+      orgId = inviteOrgId;
+      toast(`已加入组织：${switchPayload.org?.name || inviteOrgId}`);
+    }
+  }
+
   syncCurrentProject(orgId);
   setAuthVisible(true);
   await loadState();
@@ -5122,6 +5248,34 @@ document.addEventListener('DOMContentLoaded', () => {
 async function initApp() {
   setAuthVisible(state.isAuthenticated);
   await loadLoginProjects();
+
+  // 处理邀请链接：?invite=<base64token>
+  // 已登录 → 直接调用 select-org 进入目标组织
+  // 未登录 → 显示登录页并在登录后自动加入
+  const inviteParam = new URLSearchParams(location.search).get('invite');
+  if (inviteParam) {
+    try {
+      const { orgId } = JSON.parse(atob(inviteParam));
+      if (orgId) {
+        // 清除 URL 中的参数，避免刷新重复触发
+        history.replaceState(null, '', location.pathname);
+        if (state.isAuthenticated) {
+          const payload = await authApi.selectOrg(orgId).catch(() => null);
+          if (payload?.token) {
+            sessionStorage.setItem('cueHubSessionToken', payload.token);
+            syncSessionUser(payload.user || {});
+            syncCurrentProject(orgId);
+            toast(`已切换到组织：${payload.org?.name || orgId}`);
+          }
+        } else {
+          // 未登录：保存目标 orgId，登录后 finalizeLogin 会用它
+          sessionStorage.setItem('cueHubInviteOrgId', orgId);
+          toast(`请登录后自动加入组织`);
+        }
+      }
+    } catch { /* 无效邀请链接，忽略 */ }
+  }
+
   if (!state.isAuthenticated) return;
   await loadState();
 }
