@@ -75,6 +75,24 @@ export function isProjectFounder(user = {}, project = {}) {
   return Boolean(user?.id && project?.founderId && user.id === project.founderId);
 }
 
+/**
+ * 全局查找用户（不限项目/组织）
+ * 用于 GitHub 式登录：用户先凭账号登录，再选择要进入的组织。
+ */
+export function findUserGlobally(users = [], identifier = '') {
+  const normalized = String(identifier || '').trim();
+  if (!normalized) return null;
+  const asPhone = normalizePhone(normalized);
+  const asEmail = normalizeEmail(normalized);
+  return users.find((user) => {
+    if (user.active === false) return false;
+    if (user.username === normalized) return true;
+    if (asPhone && user.phone && user.phone === asPhone) return true;
+    if (asEmail && user.email && user.email === asEmail) return true;
+    return false;
+  }) || null;
+}
+
 export function findUserForProject(users = [], identifier = '', projectId = '') {
   const normalized = String(identifier || '').trim();
   if (!normalized) return null;

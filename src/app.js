@@ -267,25 +267,38 @@ function renderProjectSwitcher() {
 
   // Update button label
   const nameEl = document.querySelector('#topbarProjectName');
-  if (nameEl) nameEl.textContent = current?.name || currentId || '选择项目';
+  if (nameEl) nameEl.textContent = current?.name || currentId || '选择组织';
 
   // Populate dropdown list
   const dropdown = document.querySelector('#topbarProjectDropdown');
   if (dropdown) {
-    dropdown.innerHTML = projects.map((p) => `
+    const orgItems = projects.map((p) => `
       <button type="button" class="topbar-project-option${p.id === currentId ? ' active' : ''}" data-project-id="${escapeHtml(p.id)}">
         <span>${escapeHtml(p.name || p.id)}</span>
         ${p.id === currentId ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>' : ''}
       </button>
     `).join('');
+    dropdown.innerHTML = `
+      ${orgItems}
+      <div class="topbar-project-divider" style="height:1px;background:var(--border,#2a2a3a);margin:6px 0;"></div>
+      <button type="button" class="topbar-project-option" id="topbarCreateOrgBtn">
+        <span style="color:var(--text-muted,#888);">+ 创建新组织</span>
+      </button>
+    `;
     dropdown.querySelectorAll('.topbar-project-option').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const pid = btn.dataset.projectId;
-        if (pid && pid !== getCurrentProjectId()) {
-          closeProjectDropdown();
-          switchToProject(pid);
-        }
-      });
+      const pid = btn.dataset.projectId;
+      if (pid) {
+        btn.addEventListener('click', () => {
+          if (pid !== getCurrentProjectId()) {
+            closeProjectDropdown();
+            switchToProject(pid);
+          }
+        });
+      }
+    });
+    dropdown.querySelector('#topbarCreateOrgBtn')?.addEventListener('click', () => {
+      closeProjectDropdown();
+      showCreateOrgDialog();
     });
   }
 }
@@ -440,13 +453,11 @@ function setLoginMode(mode) {
 }
 
 async function sendLoginPhoneCode() {
-  const projectId = getCurrentProjectId();
   const phone = document.querySelector('#loginUsername')?.value.trim() || '';
-  if (!projectId) { toast('请选择项目'); return; }
   if (!phone) { setText('#loginHint', '请先输入已绑定手机号。'); return; }
   const payload = await api('/api/auth/phone-code', {
     method: 'POST',
-    body: JSON.stringify({ phone, projectId, purpose: 'login' })
+    body: JSON.stringify({ phone, purpose: 'login' })
   });
   const suffix = payload.devCode ? ` 验证码：${payload.devCode}` : '';
   setText('#loginHint', `验证码已发送，10 分钟内有效。${suffix}`);
@@ -454,11 +465,9 @@ async function sendLoginPhoneCode() {
 }
 
 async function sendLoginEmailCode() {
-  const projectId = getCurrentProjectId();
   const email = document.querySelector('#loginUsername')?.value.trim() || '';
-  if (!projectId) { toast('请选择项目'); return; }
   if (!email) { setText('#loginHint', '请先输入已绑定邮箱。'); return; }
-  const payload = await authApi.sendEmailCode({ email, projectId, purpose: 'login' });
+  const payload = await authApi.sendEmailCode({ email, purpose: 'login' });
   const suffix = payload.devCode ? ` 验证码：${payload.devCode}` : '';
   setText('#loginHint', `验证码已发送到邮箱，10 分钟内有效。${suffix}`);
   toast('邮箱验证码已发送');
@@ -500,19 +509,134 @@ async function loadLoginProjects() {
 
 async function login(event) {
   event.preventDefault();
-  const projectId = getCurrentProjectId();
-  const username = document.querySelector('#loginUsername')?.value.trim() || '';
-  const password = document.querySelector('#loginPassword')?.value || '';
+  const username  = document.querySelector('#loginUsername')?.value.trim() || '';
+  const password  = document.querySelector('#loginPassword')?.value || '';
   const emailCode = document.querySelector('#loginEmailCode')?.value.trim() || '';
-  if (!projectId) { toast('请选择项目'); return; }
   if (loginMode === 'email' && !emailCode) { setText('#loginHint', '请输入邮箱验证码。'); return; }
+
   const payload = loginMode === 'email'
-    ? await authApi.loginEmailCode({ username, emailCode, projectId })
-    : await authApi.loginPassword({ username, password, projectId });
+    ? await authApi.loginEmailCode({ username, emailCode })
+    : await authApi.loginPassword({ username, password });
+
+  // 服务器要求用户选择要进入的组织（多组织账号）
+  if (payload.requiresOrgSelection && Array.isArray(payload.orgs)) {
+    // 先存临时 token（无 orgId），然后弹出组织选择器
+    sessionStorage.setItem('cueHubSessionToken', payload.token || '');
+    await showOrgSelector(payload.orgs, payload.user);
+    return;
+  }
+
+  // 单组织或指定了 orgId：直接进入
+  await finalizeLogin(payload, username);
+}
+
+/** 弹出组织选择器，用户选中后签发含 orgId 的新 token */
+async function showOrgSelector(orgs, user) {
+  // 移除旧的选择器（防止重复）
+  document.querySelector('#orgSelectorOverlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'orgSelectorOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--surface,#1e1e2e);border-radius:12px;padding:28px 24px;width:min(400px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.4);';
+  card.innerHTML = `
+    <p style="color:var(--text-muted,#aaa);font-size:.8rem;margin:0 0 4px">欢迎回来，${user?.name || user?.username || '用户'}</p>
+    <h3 style="margin:0 0 16px;font-size:1.1rem;color:var(--text,#e0e0e0)">选择要进入的组织</h3>
+    <div id="orgList" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;margin-bottom:20px;"></div>
+    <button id="createOrgInSelector" style="width:100%;padding:10px;border:1px dashed var(--border,#333);border-radius:8px;background:transparent;color:var(--text-muted,#aaa);cursor:pointer;font-size:.9rem;">
+      + 创建新组织
+    </button>
+  `;
+
+  const list = card.querySelector('#orgList');
+  for (const org of orgs) {
+    const btn = document.createElement('button');
+    btn.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:1px solid var(--border,#2a2a3a);border-radius:8px;background:var(--surface-hover,#252535);color:var(--text,#e0e0e0);cursor:pointer;text-align:left;transition:border-color .15s;';
+
+    // 用 DOM 节点而非 innerHTML，避免组织名/简介中的 HTML 注入
+    const info = document.createElement('span');
+    info.style.flex = '1';
+    const strong = document.createElement('strong');
+    strong.style.cssText = 'display:block;font-size:.95rem;';
+    strong.textContent = org.name;          // textContent 自动转义
+    info.appendChild(strong);
+    if (org.summary) {
+      const small = document.createElement('small');
+      small.style.cssText = 'color:var(--text-muted,#888);font-size:.78rem;';
+      small.textContent = org.summary;      // textContent 自动转义
+      info.appendChild(small);
+    }
+    btn.appendChild(info);
+    btn.insertAdjacentHTML('beforeend', '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>');
+
+    btn.addEventListener('mouseenter', () => btn.style.borderColor = 'var(--blue,#4c9df1)');
+    btn.addEventListener('mouseleave', () => btn.style.borderColor = 'var(--border,#2a2a3a)');
+    btn.addEventListener('click', async () => {
+      overlay.remove();
+      const selectPayload = await authApi.selectOrg(org.id);
+      await finalizeLogin(selectPayload, user?.username || '');
+    });
+    list.appendChild(btn);
+  }
+
+  card.querySelector('#createOrgInSelector').addEventListener('click', () => {
+    overlay.remove();
+    showCreateOrgDialog();
+  });
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
+/** 弹出创建组织对话框 */
+async function showCreateOrgDialog() {
+  document.querySelector('#createOrgDialog')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'createOrgDialog';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--surface,#1e1e2e);border-radius:12px;padding:28px 24px;width:min(400px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.4);';
+  card.innerHTML = `
+    <h3 style="margin:0 0 20px;font-size:1.1rem;color:var(--text,#e0e0e0)">创建新组织</h3>
+    <label style="display:block;margin-bottom:12px;">
+      <span style="font-size:.82rem;color:var(--text-muted,#aaa);display:block;margin-bottom:4px;">组织名称 *</span>
+      <input id="newOrgName" type="text" placeholder="例如：Cue.AI Team" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border,#2a2a3a);border-radius:8px;background:var(--input-bg,#13131f);color:var(--text,#e0e0e0);font-size:.9rem;" />
+    </label>
+    <label style="display:block;margin-bottom:20px;">
+      <span style="font-size:.82rem;color:var(--text-muted,#aaa);display:block;margin-bottom:4px;">简介（可选）</span>
+      <input id="newOrgSummary" type="text" placeholder="这个组织是做什么的" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border,#2a2a3a);border-radius:8px;background:var(--input-bg,#13131f);color:var(--text,#e0e0e0);font-size:.9rem;" />
+    </label>
+    <div style="display:flex;gap:10px;">
+      <button id="cancelCreateOrg" style="flex:1;padding:10px;border:1px solid var(--border,#2a2a3a);border-radius:8px;background:transparent;color:var(--text-muted,#aaa);cursor:pointer;">取消</button>
+      <button id="confirmCreateOrg" style="flex:2;padding:10px;border:none;border-radius:8px;background:var(--blue,#4c9df1);color:#fff;cursor:pointer;font-weight:600;">创建组织</button>
+    </div>
+    <p id="createOrgError" style="color:var(--red,#f47c7c);font-size:.82rem;margin:10px 0 0;min-height:1em;"></p>
+  `;
+
+  card.querySelector('#cancelCreateOrg').addEventListener('click', () => overlay.remove());
+  card.querySelector('#confirmCreateOrg').addEventListener('click', async () => {
+    const name    = card.querySelector('#newOrgName').value.trim();
+    const summary = card.querySelector('#newOrgSummary').value.trim();
+    if (!name) { card.querySelector('#createOrgError').textContent = '组织名称不能为空'; return; }
+    const payload = await authApi.createOrg({ name, summary });
+    overlay.remove();
+    await finalizeLogin(payload, '');
+  });
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
+/** 登录成功的最终步骤：保存 token、同步状态、加载数据 */
+async function finalizeLogin(payload, username) {
+  const orgId = payload.orgId || payload.projectId || '';
   sessionStorage.setItem('cueHubSessionToken', payload.token || '');
   sessionStorage.setItem('cueHubAuthenticated', 'true');
   syncSessionUser(payload.user || { name: username, role: 'developer' });
-  syncCurrentProject(projectId);
+  syncCurrentProject(orgId);
   setAuthVisible(true);
   await loadState();
   const routeAfterLogin = sessionStorage.getItem('cueHubPostLoginRoute') || '';
@@ -1033,10 +1157,17 @@ function renderPcProfile() {
 // 向后兼容：旧路由 personal-center 重定向到工作台
 function renderPersonalCenter() { setRoute('pc-workspace'); }
 
-function switchToProject(projectId) {
-  if (!projectId || projectId === getCurrentProjectId()) return;
-  syncCurrentProject(projectId);
-  loadState().then(() => {
+function switchToProject(orgId) {
+  if (!orgId || orgId === getCurrentProjectId()) return;
+  // 用 select-org 获取含新 orgId 的 session token，保持鉴权信息与组织一致
+  authApi.selectOrg(orgId).then((payload) => {
+    if (payload?.token) {
+      sessionStorage.setItem('cueHubSessionToken', payload.token);
+      syncSessionUser(payload.user || {});
+    }
+    syncCurrentProject(orgId);
+    return loadState();
+  }).then(() => {
     if (document.querySelector('#personal-center')?.classList.contains('active')) {
       renderPersonalCenter();
     }
@@ -4973,7 +5104,7 @@ function renderObservatory() {
 
 // ── 系统设置 ──────────────────────────────────────────────────────
 function renderSettingsPage() {
-  return _renderSettings({ configApi, gatewayApi, toast });
+  return _renderSettings({ configApi, gatewayApi, authApi, toast, getCurrentOrgId: getCurrentProjectId });
 }
 
 // 注册观察台路由
