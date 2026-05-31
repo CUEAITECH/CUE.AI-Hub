@@ -631,66 +631,83 @@ body.authenticated .auth-shell {
   font-size: 13px;
 }
 
-/* 顶栏项目切换器（自定义 dropdown） */
-.topbar-project-wrap {
+/* ── Linear 风格 Workspace 切换器 ─────────────────────────────── */
+.ws-switcher-wrap {
   position: relative;
   flex: 0 0 auto;
 }
 
-.topbar-project-btn {
+.ws-switcher-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px 5px 8px;
-  border: 1px solid var(--line);
+  gap: 7px;
+  padding: 4px 8px 4px 5px;
+  border: none;
   border-radius: 8px;
-  background: var(--panel-2);
+  background: transparent;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  transition: background 0.12s;
   white-space: nowrap;
-  max-width: 160px;
+  max-width: 200px;
+}
+.ws-switcher-btn:hover { background: var(--panel-2); }
+.ws-switcher-wrap.open .ws-switcher-btn { background: var(--panel-2); }
+
+/* 组织头像：彩色方块 + 首字母（Linear 同款） */
+.ws-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  letter-spacing: 0;
+  background: var(--blue, #5e6ad2);
+  user-select: none;
 }
 
-.topbar-project-btn:hover {
-  border-color: var(--blue);
-  background: var(--panel);
-  box-shadow: 0 0 0 3px var(--accent-subtle);
-}
-
-.topbar-project-icon { color: var(--muted); flex-shrink: 0; }
-.topbar-project-chevron { color: var(--dim); flex-shrink: 0; transition: transform 0.18s ease; }
-.topbar-project-wrap.open .topbar-project-chevron { transform: rotate(180deg); }
-
-#topbarProjectName {
+.ws-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.topbar-project-dropdown {
+.ws-chevron {
+  color: var(--dim);
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+.ws-switcher-wrap.open .ws-chevron { transform: rotate(180deg); }
+
+/* 下拉面板 */
+.ws-dropdown {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  min-width: 160px;
+  min-width: 220px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.13);
   padding: 6px;
   z-index: 200;
 }
 
-.topbar-project-option {
+/* 组织列表项 */
+.ws-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 9px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 7px 9px;
   border: none;
   border-radius: 7px;
   background: transparent;
@@ -699,11 +716,43 @@ body.authenticated .auth-shell {
   font-weight: 500;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s;
+  transition: background 0.1s;
+}
+.ws-item:hover { background: var(--panel-2); }
+.ws-item.active { background: var(--accent-subtle); }
+.ws-item .ws-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ws-item .ws-item-check {
+  color: var(--blue);
+  opacity: 0;
+  flex-shrink: 0;
+}
+.ws-item.active .ws-item-check { opacity: 1; }
+
+/* 分隔线 */
+.ws-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 5px 0;
 }
 
-.topbar-project-option:hover { background: var(--panel-2); }
-.topbar-project-option.active { color: var(--blue); background: var(--accent-subtle); }
+/* 操作行（邀请、设置、创建） */
+.ws-action {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+.ws-action:hover { background: var(--panel-2); color: var(--text); }
+.ws-action svg { flex-shrink: 0; }
 
 /* 一级导航 */
 .nav {
