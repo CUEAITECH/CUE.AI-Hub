@@ -27,7 +27,7 @@ export function createAuthApi(client = httpClient) {
       });
     },
 
-    // ── 组织相关
+    // ── 组织（租户）相关
     listOrgs() {
       return client.request('/api/auth/orgs');
     },
@@ -37,16 +37,33 @@ export function createAuthApi(client = httpClient) {
         body: JSON.stringify({ orgId }),
       });
     },
-    createOrg({ name, summary = '', githubOwner = '', repository = '' } = {}) {
+    createOrg({ name, summary = '' } = {}) {
       return client.request('/api/orgs', {
         method: 'POST',
-        body: JSON.stringify({ name, summary, githubOwner, repository }),
+        body: JSON.stringify({ name, summary }),
       });
     },
     inviteMember(orgId, { username, email, phone, role = 'developer' } = {}) {
       return client.request(`/api/orgs/${encodeURIComponent(orgId)}/invite`, {
         method: 'POST',
         body: JSON.stringify({ username, email, phone, role }),
+      });
+    },
+
+    // ── 项目（组织下的 GitHub 仓库）相关
+    listOrgProjects(orgId) {
+      return client.request(`/api/orgs/${encodeURIComponent(orgId)}/projects`);
+    },
+    createProject(orgId, { name, summary = '', githubOwner = '', repository = '', branch = '' } = {}) {
+      return client.request(`/api/orgs/${encodeURIComponent(orgId)}/projects`, {
+        method: 'POST',
+        body: JSON.stringify({ name, summary, githubOwner, repository, branch }),
+      });
+    },
+    selectProject(projectId) {
+      return client.request('/api/auth/select-project', {
+        method: 'POST',
+        body: JSON.stringify({ projectId }),
       });
     },
 

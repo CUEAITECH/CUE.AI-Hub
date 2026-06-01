@@ -680,6 +680,22 @@ body.authenticated .auth-shell {
   text-overflow: ellipsis;
 }
 
+/* 组织 / 项目 之间的分隔符 */
+.ws-sep {
+  color: var(--dim);
+  font-size: 14px;
+  flex: 0 0 auto;
+  user-select: none;
+  opacity: 0.5;
+}
+
+/* 项目切换器按钮（无头像，纯文字） */
+.ws-switcher-btn-project {
+  font-weight: 500;
+  color: var(--muted);
+}
+.ws-switcher-btn-project:hover { color: var(--text); }
+
 .ws-chevron {
   color: var(--dim);
   flex-shrink: 0;
