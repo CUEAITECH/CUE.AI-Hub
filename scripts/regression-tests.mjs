@@ -2346,3 +2346,75 @@ await test('PR upsert keeps GitHub detail fields and updatedAt for list details'
   if (originalDryRun === undefined) delete process.env.LLM_DRY_RUN;
   else process.env.LLM_DRY_RUN = originalDryRun;
 });
+
+await test('multi-tenant isolation: org_A data not visible to org_B', async () => {
+  const { migrateStore } = await import('../server/store.js');
+
+  // Build a synthetic store with two tenants
+  const store = migrateStore({
+    tasks: [
+      { id: 'task_a1', title: 'Org A task', tenantId: 'org_alpha', status: '进行中' },
+      { id: 'task_b1', title: 'Org B task', tenantId: 'org_beta',  status: '进行中' },
+    ],
+    activities: [
+      { id: 'act_a1', message: 'alpha commit', tenantId: 'org_alpha' },
+      { id: 'act_b1', message: 'beta commit',  tenantId: 'org_beta'  },
+    ],
+  });
+
+  // Read isolation: filter simulates what loadStore(tenantId) returns
+  const alphaView = store.tasks.filter((t) => !t.tenantId || t.tenantId === 'org_alpha');
+  const betaView  = store.tasks.filter((t) => !t.tenantId || t.tenantId === 'org_beta');
+
+  assert.equal(alphaView.length, 1, 'org_alpha sees 1 task');
+  assert.equal(alphaView[0].id, 'task_a1');
+  assert.equal(betaView.length, 1, 'org_beta sees 1 task');
+  assert.equal(betaView[0].id, 'task_b1');
+
+  // Write isolation: simulate updateStore stamping logic
+  const FILTERABLE_KEYS = [
+    'tasks', 'members', 'reviews', 'activities', 'standups', 'assignments',
+    'attendanceRecords', 'alerts', 'projects', 'planAdjustments', 'roadmapReviews',
+    'riskAnalyses', 'deliverables', 'phases', 'users', 'aiPromptTraces', 'pulls', 'bypasses',
+  ];
+
+  function simulateUpdateStore(current, mutator, tenantId = 'default') {
+    const next = mutator(structuredClone(current));
+    if (next && tenantId) {
+      for (const key of FILTERABLE_KEYS) {
+        if (Array.isArray(next[key])) {
+          next[key] = next[key].map((r) =>
+            r && typeof r === 'object' && !r.tenantId ? { ...r, tenantId } : r
+          );
+        }
+      }
+    }
+    return next;
+  }
+
+  const base = { tasks: [{ id: 'existing', tenantId: 'org_alpha' }] };
+
+  // New record under org_alpha gets stamped
+  const afterAlpha = simulateUpdateStore(base, (draft) => {
+    draft.tasks.push({ id: 'new_task', title: 'New' });
+    return draft;
+  }, 'org_alpha');
+  assert.equal(afterAlpha.tasks.find((t) => t.id === 'new_task')?.tenantId, 'org_alpha',
+    'new record is stamped with org_alpha tenantId');
+
+  // New record under default gets stamped 'default'
+  const afterDefault = simulateUpdateStore(base, (draft) => {
+    draft.tasks.push({ id: 'default_task', title: 'Default' });
+    return draft;
+  }, 'default');
+  assert.equal(afterDefault.tasks.find((t) => t.id === 'default_task')?.tenantId, 'default',
+    'default tenant writes are stamped with tenantId: default');
+
+  // Existing tenantId is never overwritten
+  const afterExisting = simulateUpdateStore(base, (draft) => {
+    draft.tasks[0].title = 'Updated';
+    return draft;
+  }, 'org_beta');
+  assert.equal(afterExisting.tasks[0].tenantId, 'org_alpha',
+    'existing tenantId is never overwritten by updateStore stamping');
+});

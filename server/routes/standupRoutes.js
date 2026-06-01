@@ -1,3 +1,4 @@
+import { getTenantId } from '../services/auth.js';
 export function createStandupRoutes({
   loadStore,
   updateStore,
@@ -14,7 +15,7 @@ export function createStandupRoutes({
 
   return async function standupRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/standups') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const date = getDateParam(url);
       sendJson(res, 200, {
         date,
@@ -46,7 +47,7 @@ export function createStandupRoutes({
           draft.standups = [standup, ...(draft.standups || [])].slice(0, 500);
         }
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 201, {
         standup,
         standups: (nextStore.standups || []).filter((item) => item.date === standup.date)
@@ -55,7 +56,7 @@ export function createStandupRoutes({
     }
 
     if (req.method === 'POST' && url.pathname === '/api/standups/summarize') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const today = todayText();
       const todayStandups = (store.standups || []).filter((standup) => standup.date === today);
       if (!todayStandups.length) {
@@ -83,7 +84,7 @@ export function createStandupRoutes({
         draft.standupSummaries = draft.standupSummaries || {};
         draft.standupSummaries[today] = { summary, generatedAt: new Date().toISOString() };
         return draft;
-      });
+      }, getTenantId(req));
 
       if (isWeComAvailable()) {
         await sendWeComMarkdown(`# ${today} 站会汇总\n\n${summary}`);

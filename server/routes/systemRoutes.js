@@ -3,6 +3,7 @@ import {
   findUserForProject,
   findUserGlobally,
   getSessionToken,
+  getTenantId,
   hashPassword,
   issueEmailCode,
   issuePhoneCode,
@@ -98,7 +99,7 @@ export function createSystemRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/auth/me') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const projectId = String(url.searchParams.get('projectId') || (store.projects || [])[0]?.id || 'cue_ai_classroom').trim();
       const session = verifySessionToken(getSessionToken(req));
       if (!session) {
@@ -123,7 +124,7 @@ export function createSystemRoutes({
       const phoneCode = String(json?.phoneCode || json?.code || '').trim();
       // orgId / projectId：两者等价（projectId 保留向下兼容）
       const orgId     = String(json?.orgId || json?.projectId || '').trim();
-      const store     = await loadStore();
+      const store     = await loadStore('default');
 
       // ── 1. 验证凭证，找到用户（全局查找，无需预先指定组织）──────
       let user = null;
@@ -190,7 +191,7 @@ export function createSystemRoutes({
 
     // ── 组织列表（已登录用户查询自己的组织）────────────────────────
     if (req.method === 'GET' && url.pathname === '/api/auth/orgs') {
-      const store   = await loadStore();
+      const store   = await loadStore(getTenantId(req));
       const session = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
       const user = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
@@ -205,7 +206,7 @@ export function createSystemRoutes({
     // ── 列出某组织下的项目（GitHub 仓库）──────────────────────────
     if (req.method === 'GET' && url.pathname.match(/^\/api\/orgs\/([^/]+)\/projects$/)) {
       const orgId   = url.pathname.match(/^\/api\/orgs\/([^/]+)\/projects$/)[1];
-      const store   = await loadStore();
+      const store   = await loadStore(getTenantId(req));
       const session = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
       const user = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
@@ -226,7 +227,7 @@ export function createSystemRoutes({
       const { json } = await readBody(req);
       const session = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const user  = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
       if (!user || !userCanManageOrg(user, orgId)) {
         sendJson(res, 403, { ok: false, error: 'only org admins can create projects' }); return true;
@@ -272,7 +273,7 @@ export function createSystemRoutes({
           };
         }
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 201, { ok: true, project: newProject });
       return true;
     }
@@ -281,7 +282,7 @@ export function createSystemRoutes({
     if (req.method === 'POST' && url.pathname === '/api/auth/select-org') {
       const { json } = await readBody(req);
       const orgId   = String(json?.orgId || '').trim();
-      const store   = await loadStore();
+      const store   = await loadStore(getTenantId(req));
       const session = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
       const user = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
@@ -310,7 +311,7 @@ export function createSystemRoutes({
     if (req.method === 'POST' && url.pathname === '/api/auth/select-project') {
       const { json } = await readBody(req);
       const projectId = String(json?.projectId || '').trim();
-      const store     = await loadStore();
+      const store     = await loadStore(getTenantId(req));
       const session   = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
       const user = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
@@ -339,7 +340,7 @@ export function createSystemRoutes({
       const { json } = await readBody(req);
       const session = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const user  = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
       if (!user)  { sendJson(res, 401, { ok: false, error: 'session user not found' }); return true; }
       const name = String(json?.name || '').trim();
@@ -371,7 +372,7 @@ export function createSystemRoutes({
           };
         }
         return draft;
-      });
+      }, getTenantId(req));
       const updatedUser = {
         ...user,
         orgIds: [...(user.orgIds || []), orgId],
@@ -396,7 +397,7 @@ export function createSystemRoutes({
       const { json }    = await readBody(req);
       const session     = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
-      const store   = await loadStore();
+      const store   = await loadStore(getTenantId(req));
       const caller  = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
       if (!caller)  { sendJson(res, 401, { ok: false, error: 'session user not found' }); return true; }
       // 只有组织管理员可以邀请成员
@@ -429,7 +430,7 @@ export function createSystemRoutes({
         };
         draft.users[idx] = updatedUser;
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, { ok: true, user: sanitizeUserForOrg(updatedUser, targetOrgId, org) });
       return true;
     }
@@ -442,7 +443,7 @@ export function createSystemRoutes({
         sendJson(res, 400, { ok: false, error: 'invalid email address' });
         return true;
       }
-      const store = await loadStore();
+      const store = await loadStore('default');
       if (purpose === 'login') {
         // 全局查找：无需预先知道 projectId
         const user = findUserGlobally(store.users || [], email);
@@ -497,7 +498,7 @@ export function createSystemRoutes({
         sendJson(res, 400, { ok: false, error: 'invalid phone number' });
         return true;
       }
-      const store = await loadStore();
+      const store = await loadStore('default');
       if (purpose === 'login') {
         // 全局查找：无需预先知道 projectId
         const user = findUserGlobally(store.users || [], phone);
@@ -539,7 +540,7 @@ export function createSystemRoutes({
 
     if (req.method === 'GET' && url.pathname === '/api/auth/users') {
       const projectId = url.searchParams.get('projectId') || '';
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const targetProjectId = projectId || (store.projects || [])[0]?.id || 'cue_ai_classroom';
       const sessionUser = getProjectSessionUser(req, store.users || [], targetProjectId);
       if (!sessionUser) {
@@ -573,7 +574,7 @@ export function createSystemRoutes({
         return true;
       }
 
-      const before = await loadStore();
+      const before = await loadStore('default');
       const tokenAdmin = getProjectSessionUser(req, before.users || [], projectId);
       const credentialAdmin = (() => {
         const adminUsername = String(json?.adminUsername || '').trim();
@@ -643,7 +644,8 @@ export function createSystemRoutes({
         };
         draft.users.push(createdUser);
         return draft;
-      });
+      // credential-admin 请求无 session，tenantId 应取项目所属组织而非请求 session
+      }, tokenAdmin ? getTenantId(req) : derivedOrgId);
       const project = (before.projects || []).find((p) => p.id === projectId) || null;
       sendJson(res, existingUser ? 200 : 201, { ok: true, user: sanitizeUserForProject(createdUser, projectId, project) });
       return true;
@@ -662,7 +664,7 @@ export function createSystemRoutes({
         return true;
       }
 
-      const before = await loadStore();
+      const before = await loadStore(getTenantId(req));
       const adminUser = getProjectSessionUser(req, before.users || [], projectId);
       if (!adminUser) {
         sendJson(res, 403, { ok: false, error: 'forbidden' });
@@ -729,7 +731,7 @@ export function createSystemRoutes({
         };
         draft.users[index] = updatedUser;
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, { ok: true, user: sanitizeUserForProject(updatedUser, projectId, project) });
       return true;
     }
@@ -743,7 +745,7 @@ export function createSystemRoutes({
       const session = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
       const { json } = await readBody(req);
-      const before = await loadStore();
+      const before = await loadStore(getTenantId(req));
       const me = (before.users || []).find((u) => u.id === session.sub && u.active !== false);
       if (!me) { sendJson(res, 401, { ok: false, error: 'session user not found' }); return true; }
 
@@ -830,7 +832,7 @@ export function createSystemRoutes({
         };
         draft.users[idx] = updated;
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, {
         ok: true,
         user: sanitizeUser(updated),
@@ -840,7 +842,7 @@ export function createSystemRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/state') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const requestedProjectId = url.searchParams.get('projectId') || '';
       const projectIds = (store.projects || []).map((project) => project.id);
       const projectId = requestedProjectId
@@ -891,7 +893,7 @@ export function createSystemRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/tasks') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const status = url.searchParams.get('status');
       const tasks = status ? store.tasks.filter((task) => task.status === status) : store.tasks;
       sendJson(res, 200, { tasks });
@@ -899,7 +901,7 @@ export function createSystemRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/members') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       sendJson(res, 200, { members: store.members });
       return true;
     }

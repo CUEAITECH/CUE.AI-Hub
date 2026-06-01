@@ -38,7 +38,7 @@ export function createWebhookRoutes({
         sendError(res, 400, 'missing repo or pr_number');
         return true;
       }
-      const currentStore = await loadStore();
+      const currentStore = await loadStore('default');
       const pull = handlePrAgentSink
         ? await handlePrAgentSink(json, currentStore, updateStore)
         : null;
@@ -83,7 +83,7 @@ export function createWebhookRoutes({
           draft.bypasses = draft.bypasses.slice(0, 100);
         }
         return draft;
-      });
+      }, 'default');
       sendJson(res, 202, { received: true, deadline });
       return true;
     }
@@ -118,7 +118,7 @@ export function createWebhookRoutes({
 
     // PR 事件的审阅已由 upsertPullFromWebhook（上方）通过真实 diff 处理，
     // 不再在此用伪 diff 创建 Pass 级审阅（Pass 会被队列过滤，徒增噪声）。
-    const currentStore = loadStore ? await loadStore() : null;
+    const currentStore = loadStore ? await loadStore('default') : null;
     for (const activity of activities) {
       if (activity.type === 'pull_request') {
         // PR 审阅由 pullPipeline（upsertPullFromWebhook）负责，此处仅记录日志
@@ -134,7 +134,7 @@ export function createWebhookRoutes({
       store.activities = [...boundActivities, ...(store.activities || [])].slice(0, 500);
       store.reviews = [...reviews, ...(store.reviews || [])].slice(0, 200);
       return store;
-    });
+    }, 'default');
 
     if (boundActivities.length > 0) {
       // 用 webhook 中第一个 activity 的 repo 当 key（一次 webhook 通常是一个 repo）

@@ -1,3 +1,5 @@
+import { getTenantId } from '../services/auth.js';
+
 export function createPlanningRoutes({
   loadStore,
   saveStore,
@@ -16,7 +18,7 @@ export function createPlanningRoutes({
 }) {
   return async function planningRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/stage/checklist') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const requestedProjectId = url.searchParams.get('projectId') || '';
       const projectIds = (store.projects || []).map((project) => project.id);
       const projectId = requestedProjectId
@@ -65,7 +67,7 @@ export function createPlanningRoutes({
           });
         }
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, {
         stageChecklist: buildStageChecklist(next),
         deliverableProgress: aggregateDeliverableProgress(next)
@@ -75,7 +77,7 @@ export function createPlanningRoutes({
 
     if (req.method === 'POST' && url.pathname === '/api/ai/refresh-analysis') {
       await refreshAnalysisIntoStore();
-      const nextStore = await loadStore();
+      const nextStore = await loadStore(getTenantId(req));
       const alerts = scanRisks(nextStore);
       sendJson(res, 200, {
         semanticLinks: nextStore.semanticLinks,
@@ -258,7 +260,7 @@ export function createPlanningRoutes({
         });
         draft._cleanupLog = { removed, fixedOwners, survivors: survivors.length, fuzzyRemoved, unboundCrossDomain, resetOwners, at: new Date().toISOString() };
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, {
         ok: true,
         ...(next._cleanupLog || {}),
@@ -345,7 +347,7 @@ export function createPlanningRoutes({
         }
         draft._resetLog = { strippedTasks, purgedStale, at: new Date().toISOString() };
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, {
         ok: true,
         message: `路径图已重置。剥离 ${next._resetLog?.strippedTasks || 0} 个旧绑定，清理 ${next._resetLog?.purgedStale || 0} 个过时文档任务（已完成/有证据/已认领的全部保留）。`,
@@ -358,7 +360,7 @@ export function createPlanningRoutes({
     }
 
     if (req.method === 'POST' && url.pathname === '/api/risks/scan') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const alerts = scanRisks(store);
       const nextStore = await saveStore({ ...store, alerts });
       sendJson(res, 200, { alerts, metrics: buildMetrics(nextStore, alerts) });
@@ -366,7 +368,7 @@ export function createPlanningRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/plan-adjustments') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const adjustments = (store.planAdjustments || []).slice(0, 20);
       sendJson(res, 200, { adjustments });
       return true;
@@ -374,7 +376,7 @@ export function createPlanningRoutes({
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/plan-adjustments/') && url.pathname.endsWith('/alternatives')) {
       const id = decodeURIComponent(url.pathname.split('/')[3] || '');
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const item = (store.planAdjustments || []).find((adjustment) => adjustment.id === id);
       if (!item) { sendError(res, 404, 'not found'); return true; }
       if (item.alternatives?.length) {
@@ -386,7 +388,7 @@ export function createPlanningRoutes({
         const index = (draft.planAdjustments || []).findIndex((adjustment) => adjustment.id === id);
         if (index >= 0) draft.planAdjustments[index].alternatives = alternatives;
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, { alternatives });
       return true;
     }
@@ -424,7 +426,7 @@ export function createPlanningRoutes({
         }
         nextDraft.planAdjustments[index] = nextAdjustment;
         return nextDraft;
-      });
+      }, getTenantId(req));
       const adjustment = (nextStore.planAdjustments || []).find((item) => item.id === id);
       if (!adjustment) {
         sendError(res, 404, 'plan adjustment not found');

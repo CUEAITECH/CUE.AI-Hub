@@ -1,3 +1,4 @@
+import { getTenantId } from '../services/auth.js';
 import { bindAssignmentToExplicitRefs } from '../services/bindingEngine.js';
 import {
   buildDailyScores,
@@ -374,8 +375,8 @@ export function createWeComRoutes({
   normalizeTask,
   generateAssignmentBrief
 }) {
-  async function recordWeComAttendance(json = {}, url) {
-    const store = await loadStore();
+  async function recordWeComAttendance(json = {}, url, req) {
+    const store = await loadStore(getTenantId(req));
     const { projectId } = resolveProjectContext(store, url, json);
     const text = String(json?.text || json?.content || json?.message || '').trim();
     const structured = pickStructuredAttendance(json);
@@ -421,7 +422,7 @@ export function createWeComRoutes({
       draft.attendanceRecords.unshift(record);
       draft.attendanceRecords = draft.attendanceRecords.slice(0, 2000);
       return draft;
-    });
+    }, getTenantId(req));
     return {
       projectId,
       record,
@@ -447,7 +448,7 @@ export function createWeComRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/wecom/summary') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const { projectId } = resolveProjectContext(store, url);
       const scopedStore = scopeStoreToProject(store, projectId);
       const alerts = scanRisks(scopedStore);
@@ -462,7 +463,7 @@ export function createWeComRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/wecom/risks') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const { projectId } = resolveProjectContext(store, url);
       const scopedStore = scopeStoreToProject(store, projectId);
       const alerts = scanRisks(scopedStore);
@@ -479,7 +480,7 @@ export function createWeComRoutes({
     if (url.pathname === '/api/wecom/ranking' && (req.method === 'GET' || req.method === 'POST')) {
       const { json = {} } = req.method === 'POST' ? await readBody(req) : {};
       logWeComToolHit(url.pathname, json);
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const { projectId } = resolveProjectContext(store, url, json);
       const type = resolveRankingType(json?.type || url.searchParams.get('type') || 'daily') || 'daily';
       const date = String(json?.date || url.searchParams.get('date') || '').trim();
@@ -495,7 +496,7 @@ export function createWeComRoutes({
       const { json } = await readBody(req);
       logWeComToolHit(url.pathname, json);
       const text = String(json?.text || json?.content || json?.message || '').trim();
-      const attendance = await recordWeComAttendance(json, url);
+      const attendance = await recordWeComAttendance(json, url, req);
       if (attendance) {
         sendJson(res, 200, attendance);
         return true;
@@ -507,7 +508,7 @@ export function createWeComRoutes({
         return true;
       }
       if (['meeting_stats', 'task_completion_stats', 'attendance_stats'].includes(command)) {
-        const store = await loadStore();
+        const store = await loadStore(getTenantId(req));
         const { projectId } = resolveProjectContext(store, url, json);
         const date = String(json?.date || url.searchParams.get('date') || todayText()).trim();
         const kind = command === 'meeting_stats'
@@ -524,7 +525,7 @@ export function createWeComRoutes({
       }
       const type = resolveRankingType(text);
       if (type) {
-        const store = await loadStore();
+        const store = await loadStore(getTenantId(req));
         const { projectId } = resolveProjectContext(store, url, json);
         const date = String(json?.date || '').trim();
         const payload = buildWeComScoreRanking(store, { projectId, type, date, todayText });
@@ -543,7 +544,7 @@ export function createWeComRoutes({
     if (req.method === 'POST' && url.pathname === '/api/wecom/attendance') {
       const { json } = await readBody(req);
       logWeComToolHit(url.pathname, json);
-      const attendance = await recordWeComAttendance(json, url);
+      const attendance = await recordWeComAttendance(json, url, req);
       if (!attendance) {
         sendJson(res, 200, {
           result: '未识别考勤格式。请发送：姓名正常完成 / 姓名延迟完成 / 姓名正常出席 / 姓名延迟出席 / 姓名临时请假 / 姓名缺勤'
@@ -555,7 +556,7 @@ export function createWeComRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/wecom/tasks') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const { projectId } = resolveProjectContext(store, url);
       const scopedStore = scopeStoreToProject(store, projectId);
       const today = todayText();
@@ -588,7 +589,7 @@ export function createWeComRoutes({
         sendJson(res, 200, { result: '❌ 请提供认领人姓名和任务关键词，例如：owner=田家铭 taskKeyword=TRTC' });
         return true;
       }
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const { projectId } = resolveProjectContext(store, url, json);
       const scopedStore = scopeStoreToProject(store, projectId);
       const task = (scopedStore.tasks || []).find((item) =>
@@ -626,7 +627,7 @@ export function createWeComRoutes({
         );
         draft.assignments.unshift(assignment);
         return draft;
-      });
+      }, getTenantId(req));
       generateAssignmentBrief({ task, owner, note: '', store })
         .then((brief) => updateStore((draft) => {
           const idx = (draft.assignments || []).findIndex((item) => item.id === assignment.id);
@@ -635,7 +636,7 @@ export function createWeComRoutes({
             draft.assignments[idx].briefGeneratedBy = brief.generatedBy;
           }
           return draft;
-        }))
+        }, getTenantId(req)))
         .catch((err) => logger.error('[Brief/WeComClaim]', err.message));
       sendJson(res, 200, { result: `✅ ${owner} 已认领「${task.title}」，任务细则正在生成，稍后可在 Hub 查看。` });
       return true;
@@ -648,7 +649,7 @@ export function createWeComRoutes({
         sendJson(res, 200, { result: '❌ 请提供成员姓名（owner 字段）' });
         return true;
       }
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const { projectId } = resolveProjectContext(store, url, json);
       const standup = normalizeStandup({
         owner,
@@ -664,7 +665,7 @@ export function createWeComRoutes({
         draft.standups.unshift(standup);
         draft.standups = draft.standups.slice(0, 500);
         return draft;
-      });
+      }, getTenantId(req));
       const blockerLine = standup.blockers && standup.blockers !== '无' ? `\n⚠️ 阻塞：${standup.blockers}` : '';
       sendJson(res, 200, { result: `✅ ${owner} 站会已提交（${standup.date}）\n昨日：${standup.yesterday || '未填写'}\n今日：${standup.today || '未填写'}${blockerLine}` });
       return true;
@@ -679,7 +680,7 @@ export function createWeComRoutes({
         sendJson(res, 200, { result: '❌ 请提供任务关键词（taskKeyword）和进度（progress 0-100）或状态（status）' });
         return true;
       }
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const { projectId } = resolveProjectContext(store, url, json);
       const scopedStore = scopeStoreToProject(store, projectId);
       const task = (scopedStore.tasks || []).find((item) => item.title.toLowerCase().includes(keyword.toLowerCase()));
@@ -695,7 +696,7 @@ export function createWeComRoutes({
           draft.tasks[idx] = normalizeTask({ ...draft.tasks[idx], progress: newProgress, status: newStatus, progressSource: 'manual' });
         }
         return draft;
-      });
+      }, getTenantId(req));
       const parts = [];
       if (progress >= 0 && progress <= 100) parts.push(`进度 → ${newProgress}%`);
       if (status) parts.push(`状态 → ${newStatus}`);

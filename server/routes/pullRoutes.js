@@ -1,3 +1,4 @@
+import { getTenantId } from '../services/auth.js';
 export function createPullRoutes({
   loadStore,
   updateStore,
@@ -46,7 +47,7 @@ export function createPullRoutes({
   return async function pullRoutes(req, res, url) {
     // GET /api/pulls  — 列表（支持 ?projectId=&state=&author= 筛选）
     if (req.method === 'GET' && url.pathname === '/api/pulls') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       let pulls = store.pulls || [];
       const { projectId, state, author } = Object.fromEntries(url.searchParams);
       if (projectId) pulls = pulls.filter((p) => p.projectId === projectId);
@@ -59,7 +60,7 @@ export function createPullRoutes({
     // GET /api/pulls/:id
     if (req.method === 'GET' && url.pathname.match(/^\/api\/pulls\/[^/]+$/)) {
       const id = decodeURIComponent(url.pathname.split('/').pop());
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const pull = (store.pulls || []).find((p) => p.id === id);
       if (!pull) { sendError(res, 404, 'pull not found'); return true; }
       sendJson(res, 200, { pull });
@@ -87,7 +88,7 @@ export function createPullRoutes({
         };
         draft.pulls[idx] = updated;
         return draft;
-      });
+      }, getTenantId(req));
 
       if (!updated) { sendError(res, 404, 'pull not found'); return true; }
       sendJson(res, 200, { pull: updated });
@@ -98,7 +99,7 @@ export function createPullRoutes({
     if (req.method === 'POST' && url.pathname.match(/^\/api\/pulls\/[^/]+\/merge$/)) {
       const id = decodeURIComponent(url.pathname.split('/').slice(-2, -1)[0]);
       const { json } = await readBody(req);
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
 
       const pull = (store.pulls || []).find((p) => p.id === id);
       if (!pull) { sendError(res, 404, 'pull not found'); return true; }
@@ -156,7 +157,7 @@ export function createPullRoutes({
           }
         }
         return draft;
-      });
+      }, getTenantId(req));
 
       // 企微推送
       if (isWeComAvailable && isWeComAvailable()) {
@@ -172,7 +173,7 @@ export function createPullRoutes({
     // POST /api/pulls/:id/auto-merge-check — 检查是否满足自动合并条件（autonomousMode 任务专用）
     if (req.method === 'POST' && url.pathname.match(/^\/api\/pulls\/[^/]+\/auto-merge-check$/)) {
       const id = decodeURIComponent(url.pathname.split('/').slice(-2, -1)[0]);
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
 
       const pull = (store.pulls || []).find((p) => p.id === id);
       if (!pull) { sendError(res, 404, 'pull not found'); return true; }

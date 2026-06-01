@@ -297,6 +297,17 @@ export function getUserFromRequest(req, store) {
   return users.find((u) => u.id === payload.sub) || null;
 }
 
+/**
+ * Extract the tenant (org) id from the session token in the request.
+ * Returns 'default' when the request has no valid session (anonymous, webhooks, cron).
+ */
+export function getTenantId(req) {
+  const token = getSessionToken(req);
+  if (!token) return 'default';
+  const payload = verifySessionToken(token);
+  return payload?.tenantId || payload?.orgId || 'default';
+}
+
 export function normalizeUserRecord(user, now = new Date().toISOString()) {
   const projectIds = Array.isArray(user.projectIds) && user.projectIds.length ? user.projectIds : ['cue_ai_classroom'];
   const role = user.role || 'developer';
