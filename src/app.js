@@ -931,8 +931,9 @@ function syncSessionUser(user = {}) {
   if (user.projectRole || user.role) {
     sessionStorage.setItem('cueHubUserRole', user.projectRole || user.role);
   }
-  // 更新侧边栏底部用户信息
+  // 更新侧边栏底部用户信息 + 权限可见性
   renderSidebarUser();
+  updateSidebarAuthItems();
 }
 
 function renderSidebarUser() {
@@ -1016,6 +1017,39 @@ function initSidebarUserMenu() {
   document.querySelector('#sbUserBtn')?.addEventListener('click', () => {
     setRoute('pc-profile');
   });
+}
+
+// 折叠/展开侧边栏
+function initSidebarCollapse() {
+  const btn     = document.querySelector('#sbCollapseBtn');
+  const sidebar = document.querySelector('#sidebar');
+  if (!btn || !sidebar) return;
+  const icon = document.querySelector('#sbCollapseIcon');
+  const applyState = (collapsed) => {
+    sidebar.classList.toggle('sb-collapsed', collapsed);
+    if (icon) {
+      icon.innerHTML = collapsed
+        ? '<path d="m9 18 6-6-6-6"/>'   // > 展开
+        : '<path d="m15 18-6-6 6-6"/>'; // < 收起
+    }
+    btn.setAttribute('aria-label', collapsed ? '展开侧边栏' : '折叠侧边栏');
+    btn.setAttribute('title',      collapsed ? '展开侧边栏' : '折叠侧边栏');
+  };
+  if (localStorage.getItem('cue_sb_collapsed') === 'true') applyState(true);
+  btn.addEventListener('click', () => {
+    const next = !sidebar.classList.contains('sb-collapsed');
+    applyState(next);
+    localStorage.setItem('cue_sb_collapsed', String(next));
+  });
+}
+
+// 根据当前用户角色显示/隐藏受权限控制的侧栏项
+// 账号管理 = 组织级操作，仅 admin/project_admin/hr_manager 可见
+function updateSidebarAuthItems() {
+  const role      = currentSessionRole();
+  const canManage = ['admin', 'project_admin', 'hr_manager'].includes(role);
+  const adminBtn  = document.querySelector('#sbAccountAdmin');
+  if (adminBtn) adminBtn.hidden = !canManage;
 }
 
 async function refreshSessionUserRole() {
@@ -5499,9 +5533,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 侧边栏初始化（一次性，DOM 就绪后立即执行）
   initSidebarGroups();
+  initSidebarCollapse();
   initSidebarMobileToggle();
   initSidebarUserMenu();
   renderSidebarUser();
+  updateSidebarAuthItems();
 });
 
 async function initApp() {
