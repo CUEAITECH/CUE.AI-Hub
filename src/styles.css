@@ -7704,7 +7704,7 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
     left: 10px;
     z-index: 120;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 4px;
     padding: 7px 7px;
     padding-bottom: calc(8px + env(safe-area-inset-bottom));
