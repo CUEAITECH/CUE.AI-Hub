@@ -306,6 +306,46 @@ await test('attendance parser recognizes task and meeting bot replies', async ()
   assert.equal(meeting.status, 'temp_leave');
 });
 
+await test('org/project split migration creates default org, stamps project orgId, derives user org roles', () => {
+  const migrated = migrateStore({
+    projects: [
+      { id: 'cue_ai_classroom', name: 'Cue.AI', githubOwner: 'CUEAITECH', repository: 'Cue.AI' },
+      { id: 'cue_ai_hub', name: 'CUE.AI Hub', githubOwner: 'CUEAITECH', repository: 'CUE.AI-Hub' },
+    ],
+    users: [
+      { id: 'user_admin', username: 'admin', role: 'admin', projectIds: ['*'], projectRoles: { '*': 'admin' } },
+      { id: 'user_pa', username: 'pa', role: 'developer', projectIds: ['cue_ai_classroom'], projectRoles: { cue_ai_classroom: 'project_admin' } },
+    ],
+    tasks: [{ id: 'task_split', title: 'split task', projectId: 'cue_ai_classroom', state: 'pending' }],
+  });
+
+  // 默认组织存在，id='default'，创始人为系统管理员
+  const defaultOrg = migrated.organizations.find((o) => o.id === 'default');
+  assert.ok(defaultOrg, 'default organization should exist');
+  assert.equal(defaultOrg.founderId, 'user_admin');
+
+  // 每个 project 归属到默认组织
+  assert.equal(migrated.projects.find((p) => p.id === 'cue_ai_classroom').orgId, 'default');
+  assert.equal(migrated.projects.find((p) => p.id === 'cue_ai_hub').orgId, 'default');
+
+  // 用户组织成员关系：admin → admin，project_admin 用户 → project_admin
+  const admin = migrated.users.find((u) => u.id === 'user_admin');
+  assert.deepEqual(admin.orgIds, ['default']);
+  assert.equal(admin.orgRoles.default, 'admin');
+  const pa = migrated.users.find((u) => u.id === 'user_pa');
+  assert.equal(pa.orgRoles.default, 'project_admin');
+
+  // 零数据迁移：task 的 tenantId='default'(=org)，projectId 保持不变(=project)
+  const task = migrated.tasks.find((t) => t.id === 'task_split');
+  assert.equal(task.tenantId, 'default');
+  assert.equal(task.projectId, 'cue_ai_classroom');
+
+  // 幂等：再次迁移不重复创建组织、不改变已有归属
+  const again = migrateStore(migrated);
+  assert.equal(again.organizations.filter((o) => o.id === 'default').length, 1);
+  assert.equal(again.projects.find((p) => p.id === 'cue_ai_classroom').orgId, 'default');
+});
+
 await test('phase0 compatibility keeps buildStageChecklist reading currentStage checklist', () => {
   const store = migrateStore({
     currentStage: legacyStage,
@@ -849,6 +889,64 @@ await test('phase4 auth route validates hub login credentials', async () => {
   else process.env.HUB_LOGIN_USER = originalUser;
   if (originalPassword === undefined) delete process.env.HUB_LOGIN_PASSWORD;
   else process.env.HUB_LOGIN_PASSWORD = originalPassword;
+});
+
+await test('org/project two-level: login returns orgs+projects, create project, select project', async () => {
+  let store = migrateStore({
+    projects: [
+      { id: 'cue_ai_classroom', name: 'Cue.AI', githubOwner: 'CUEAITECH', repository: 'Cue.AI' },
+    ],
+    users: [
+      { id: 'user_admin', username: 'boss', name: 'Boss', role: 'admin', projectIds: ['*'], projectRoles: { '*': 'admin' }, passwordHash: 'plain:pw' },
+    ],
+  });
+  // 用明文密码桩：verifyPassword 对非 scrypt 值走 timingSafeTextEqual
+  store.users = store.users.map((u) => (u.id === 'user_admin' ? { ...u, passwordHash: 'pw' } : u));
+
+  let requestJson = {};
+  let payload = null;
+  let status = null;
+  const { createSessionToken } = await import('../server/services/auth.js');
+  const token = createSessionToken(store.users[0], '', 'default');
+  const route = createSystemRoutes({
+    loadStore: async () => store,
+    updateStore: async (mut) => { store = mut(structuredClone(store)) || store; return store; },
+    readBody: async () => ({ json: requestJson }),
+    scanRisks: () => [], normalizeStageName: (s) => s, buildMetrics: () => ({}),
+    buildStageChecklist, aggregateDeliverableProgress, buildOpenApiSpec: () => ({}),
+    sendJson: (_res, s, p) => { status = s; payload = p; },
+    port: 0, cueApiKey: '', isWeComAvailable: () => false, meetingHour: 18, hubUrl: ''
+  });
+  const authReq = { method: 'POST', headers: { 'x-cue-session-token': token } };
+
+  // 登录：单组织 'default' 自动选中，返回 orgId + 默认 projectId + projects 列表
+  requestJson = { username: 'boss', password: 'pw' };
+  await route({ method: 'POST', headers: {} }, {}, new URL('http://localhost/api/auth/login'));
+  assert.equal(status, 200);
+  assert.equal(payload.orgId, 'default');
+  assert.equal(payload.projectId, 'cue_ai_classroom');
+  assert.ok(payload.projects.some((p) => p.id === 'cue_ai_classroom'));
+  assert.ok(payload.orgs.some((o) => o.id === 'default'));
+
+  // 在默认组织下创建第二个项目（仓库）
+  requestJson = { name: 'Hub', githubOwner: 'CUEAITECH', repository: 'CUE.AI-Hub' };
+  await route(authReq, {}, new URL('http://localhost/api/orgs/default/projects'));
+  assert.equal(status, 201);
+  assert.equal(payload.project.orgId, 'default');
+  assert.equal(payload.project.githubFullRepo, 'CUEAITECH/CUE.AI-Hub');
+  const newProjectId = payload.project.id;
+
+  // 列出组织项目：现在应有 2 个
+  await route({ method: 'GET', headers: { 'x-cue-session-token': token } }, {}, new URL('http://localhost/api/orgs/default/projects'));
+  assert.equal(status, 200);
+  assert.equal(payload.projects.length, 2);
+
+  // 切换到新项目：token 更新 projectId，orgId 不变
+  requestJson = { projectId: newProjectId };
+  await route(authReq, {}, new URL('http://localhost/api/auth/select-project'));
+  assert.equal(status, 200);
+  assert.equal(payload.orgId, 'default');
+  assert.equal(payload.projectId, newProjectId);
 });
 
 await test('phase4 auth route lets project admin register project developer accounts', async () => {

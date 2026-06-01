@@ -69,6 +69,26 @@ export function userCanManageProject(user = {}, projectId = '') {
   return userCanAccessProject(user, projectId);
 }
 
+// ── 组织（租户）级访问与角色 ──────────────────────────────────────
+// Organization 是租户边界（tenant_id），Project 是其下的 GitHub 仓库。
+export function userCanAccessOrg(user = {}, orgId = '') {
+  const orgIds = Array.isArray(user.orgIds) ? user.orgIds : [];
+  // 兼容未迁移用户：projectIds 含 '*' 视为可访问任意组织
+  if (orgIds.includes('*') || orgIds.includes(orgId)) return true;
+  return Array.isArray(user.projectIds) && user.projectIds.includes('*');
+}
+
+export function orgRoleForUser(user = {}, orgId = '') {
+  if (user.role === 'admin') return 'admin';
+  const orgRoles = user.orgRoles && typeof user.orgRoles === 'object' ? user.orgRoles : {};
+  return orgRoles[orgId] || orgRoles['*'] || user.role || 'developer';
+}
+
+export function userCanManageOrg(user = {}, orgId = '') {
+  if (!userCanAccessOrg(user, orgId)) return false;
+  return ['admin', 'project_admin'].includes(orgRoleForUser(user, orgId));
+}
+
 // 项目创始人：项目创建者，自动是项目管理员，角色不可被他人降级、账号不可被他人停用
 // 唯一变更途径：本人主动调用「转移创始人」接口
 export function isProjectFounder(user = {}, project = {}) {
@@ -109,15 +129,14 @@ export function findUserForProject(users = [], identifier = '', projectId = '') 
   }) || null;
 }
 
-export function createSessionToken(user, projectId, now = Date.now()) {
+export function createSessionToken(user, projectId, orgId = 'default', now = Date.now()) {
   const payload = {
     sub:      user.id,
     username: user.username,
     role:     roleForProject(user, projectId),
-    projectId,
-    // tenantId と projectId は現在同義（1プロジェクト = 1テナント）。
-    // 両方を明示することで、将来的な分離が容易になる。
-    tenantId: projectId || 'default',
+    orgId,            // 组织 = 租户边界
+    projectId,        // 当前选中的项目（组织下的 GitHub 仓库）
+    tenantId: orgId,  // 隔离边界 = orgId（不再是 projectId）
     exp:      now + DEFAULT_SESSION_TTL_MS,
   };
   const encoded = base64UrlEncode(JSON.stringify(payload));

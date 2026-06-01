@@ -166,18 +166,18 @@ async function resolveAuthContext(req, path, method) {
     if (!GATEWAY_ADMIN_ROLES.has(session.role)) {
       return { ok: false, errorCode: 403, errorMessage: 'gateway management requires admin or project_admin role' };
     }
-    // 从 JWT 读 tenantId，忽略请求头（防止 project_admin 伪造 X-Tenant-Id 跨租户操作）
-    // admin → 'default'（系统级）；project_admin → 自己的 tenant
+    // 从 JWT 读 tenantId(=orgId)，忽略请求头（防止 project_admin 伪造 X-Tenant-Id 跨租户操作）
+    // admin → 'default'（系统级）；其余 → 自己的组织（orgId）
     const tenantId = session.role === 'admin'
       ? 'default'
-      : (session.tenantId || session.projectId || 'default');
+      : (session.orgId || session.tenantId || 'default');
     return { ok: true, tenantId, userId: session.sub, role: session.role, keyPrefix: null };
   }
 
   // ── 3. Session + 只读请求（GET/HEAD）──────────────────────────────
   const isReadOnly = method === 'GET' || method === 'HEAD';
   if (session && isReadOnly) {
-    const tenantId = session.tenantId || session.projectId || 'default';
+    const tenantId = session.orgId || session.tenantId || 'default';
     return { ok: true, tenantId, userId: session.sub, role: session.role, keyPrefix: null };
   }
 
@@ -196,8 +196,8 @@ async function resolveAuthContext(req, path, method) {
   }
 
   // ── 5. 放行（session 写操作通过 legacy 校验 / 无 env key / 匿名）──
-  // tenantId 优先级：JWT session > 请求头（用户可控，仅作提示） > 'default'
-  const tenantId = (session && (session.tenantId || session.projectId))
+  // tenantId 优先级：JWT session(orgId) > 请求头（用户可控，仅作提示） > 'default'
+  const tenantId = (session && (session.orgId || session.tenantId))
     || req.headers['x-tenant-id']
     || 'default';
   return {

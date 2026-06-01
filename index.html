@@ -74,10 +74,18 @@
               <span>CUE</span>
               <small>项目中枢</small>
             </button>
-            <div class="ws-switcher-wrap" id="topbarProjectWrap">
-              <button type="button" class="ws-switcher-btn" id="topbarProjectBtn" aria-haspopup="true" aria-expanded="false">
+            <div class="ws-switcher-wrap" id="topbarOrgWrap">
+              <button type="button" class="ws-switcher-btn" id="topbarOrgBtn" aria-haspopup="true" aria-expanded="false">
                 <span class="ws-avatar" id="topbarOrgAvatar"></span>
-                <span class="ws-name" id="topbarProjectName">组织</span>
+                <span class="ws-name" id="topbarOrgName">组织</span>
+                <svg class="ws-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="ws-dropdown" id="topbarOrgDropdown" hidden></div>
+            </div>
+            <span class="ws-sep" aria-hidden="true">/</span>
+            <div class="ws-switcher-wrap" id="topbarProjectWrap">
+              <button type="button" class="ws-switcher-btn ws-switcher-btn-project" id="topbarProjectBtn" aria-haspopup="true" aria-expanded="false">
+                <span class="ws-name" id="topbarProjectName">项目</span>
                 <svg class="ws-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
               </button>
               <div class="ws-dropdown" id="topbarProjectDropdown" hidden></div>

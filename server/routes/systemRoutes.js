@@ -9,9 +9,12 @@ import {
   isProjectFounder,
   normalizeEmail,
   normalizePhone,
+  orgRoleForUser,
   roleForProject,
   sanitizeUser,
+  userCanAccessOrg,
   userCanAccessProject,
+  userCanManageOrg,
   userCanManageProject,
   verifyEmailCode,
   verifyPhoneCode,
@@ -41,6 +44,21 @@ function sanitizeUserForProject(user, projectId, project = null) {
     projectRole: roleForProject(user, projectId),
     isFounder: project ? isProjectFounder(user, project) : false
   };
+}
+
+function sanitizeUserForOrg(user, orgId, org = null) {
+  return {
+    ...sanitizeUser(user),
+    orgRole: orgRoleForUser(user, orgId),
+    isFounder: org ? Boolean(org.founderId && user.id === org.founderId) : false
+  };
+}
+
+// 列出某组织下，用户可访问的项目（组织内的 GitHub 仓库）
+function projectsInOrg(store, orgId, user) {
+  return (store.projects || [])
+    .filter((p) => (p.orgId || 'default') === orgId && userCanAccessProject(user, p.id))
+    .map((p) => ({ id: p.id, name: p.name, summary: p.summary || '', githubFullRepo: p.githubFullRepo || '' }));
 }
 
 export function createSystemRoutes({
@@ -131,10 +149,10 @@ export function createSystemRoutes({
         return true;
       }
 
-      // ── 2. 找出用户可访问的组织列表 ───────────────────────────────
-      const userOrgs = (store.projects || [])
-        .filter((p) => userCanAccessProject(user, p.id))
-        .map((p) => ({ id: p.id, name: p.name, summary: p.summary || '' }));
+      // ── 2. 找出用户可访问的真实组织列表 ──────────────────────────
+      const userOrgs = (store.organizations || [])
+        .filter((o) => userCanAccessOrg(user, o.id))
+        .map((o) => ({ id: o.id, name: o.name, summary: o.summary || '' }));
 
       // ── 3. 确定要进入的组织 ────────────────────────────────────────
       // 优先级：请求体指定 orgId > 自动选唯一一个 > 需要前端让用户选
@@ -145,23 +163,26 @@ export function createSystemRoutes({
           : null;
 
       if (targetOrgId) {
-        // 已确定组织 → 签发完整 session token（含 orgId/tenantId）
-        const org = (store.projects || []).find((p) => p.id === targetOrgId) || null;
+        const org = (store.organizations || []).find((o) => o.id === targetOrgId) || null;
+        const projects = projectsInOrg(store, targetOrgId, user);
+        const defaultProjectId = projects[0]?.id || '';
         sendJson(res, 200, {
           ok: true,
-          user:      sanitizeUserForProject(user, targetOrgId, org),
-          projectId: targetOrgId,   // 向下兼容字段
+          user:      sanitizeUserForOrg(user, targetOrgId, org),
           orgId:     targetOrgId,
-          token:     createSessionToken(user, targetOrgId),
+          projectId: defaultProjectId,
+          orgs:      userOrgs,
+          projects,
+          token:     createSessionToken(user, defaultProjectId, targetOrgId),
         });
       } else {
-        // 多组织 → 签发无 orgId 的临时 token，前端展示组织选择器
+        // 多组织 → 临时 token（无 orgId），前端展示组织选择器
         sendJson(res, 200, {
           ok:                   true,
           requiresOrgSelection: true,
           user:                 sanitizeUser(user),
           orgs:                 userOrgs,
-          token:                createSessionToken(user, ''),   // 无 orgId，权限受限
+          token:                createSessionToken(user, '', ''),
         });
       }
       return true;
@@ -174,35 +195,138 @@ export function createSystemRoutes({
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
       const user = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
       if (!user)  { sendJson(res, 401, { ok: false, error: 'session user not found' }); return true; }
-      const orgs = (store.projects || [])
-        .filter((p) => userCanAccessProject(user, p.id))
-        .map((p) => ({ id: p.id, name: p.name, summary: p.summary || '' }));
+      const orgs = (store.organizations || [])
+        .filter((o) => userCanAccessOrg(user, o.id))
+        .map((o) => ({ id: o.id, name: o.name, summary: o.summary || '' }));
       sendJson(res, 200, { ok: true, orgs });
+      return true;
+    }
+
+    // ── 列出某组织下的项目（GitHub 仓库）──────────────────────────
+    if (req.method === 'GET' && url.pathname.match(/^\/api\/orgs\/([^/]+)\/projects$/)) {
+      const orgId   = url.pathname.match(/^\/api\/orgs\/([^/]+)\/projects$/)[1];
+      const store   = await loadStore();
+      const session = verifySessionToken(getSessionToken(req));
+      if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
+      const user = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
+      if (!user || !userCanAccessOrg(user, orgId)) {
+        sendJson(res, 403, { ok: false, error: 'you do not have access to this organization' });
+        return true;
+      }
+      sendJson(res, 200, { ok: true, orgId, projects: projectsInOrg(store, orgId, user) });
+      return true;
+    }
+
+    // ── 在组织下创建项目（GitHub 仓库）────────────────────────────
+    if (req.method === 'POST' && url.pathname.match(/^\/api\/orgs\/([^/]+)\/projects$/)) {
+      if (typeof updateStore !== 'function') {
+        sendJson(res, 500, { ok: false, error: 'store is not writable' }); return true;
+      }
+      const orgId   = url.pathname.match(/^\/api\/orgs\/([^/]+)\/projects$/)[1];
+      const { json } = await readBody(req);
+      const session = verifySessionToken(getSessionToken(req));
+      if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
+      const store = await loadStore();
+      const user  = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
+      if (!user || !userCanManageOrg(user, orgId)) {
+        sendJson(res, 403, { ok: false, error: 'only org admins can create projects' }); return true;
+      }
+      if (!(store.organizations || []).some((o) => o.id === orgId)) {
+        sendJson(res, 404, { ok: false, error: 'organization not found' }); return true;
+      }
+      const name = String(json?.name || '').trim();
+      if (!name) { sendJson(res, 400, { ok: false, error: 'project name is required' }); return true; }
+      const now = new Date().toISOString();
+      const projectId = `proj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+      const githubOwner = String(json?.githubOwner || '').trim();
+      const repository  = String(json?.repository  || '').trim();
+      let newProject = null;
+      await updateStore((draft) => {
+        newProject = {
+          id: projectId,
+          orgId,
+          tenantId: orgId,
+          name,
+          summary: String(json?.summary || ''),
+          githubOwner,
+          repository,
+          githubFullRepo: githubOwner && repository ? `${githubOwner}/${repository}` : '',
+          localPath: '',
+          branch: String(json?.branch || ''),
+          status: '待同步',
+          lastSyncAt: '',
+          founderId: user.id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        draft.projects = [...(draft.projects || []), newProject];
+        // 创建者获得该项目的 project_admin 权限
+        const idx = draft.users.findIndex((u) => u.id === user.id);
+        if (idx !== -1 && !(draft.users[idx].projectIds || []).includes('*')) {
+          const u = draft.users[idx];
+          draft.users[idx] = {
+            ...u,
+            projectIds:   [...new Set([...(u.projectIds || []), projectId])],
+            projectRoles: { ...(u.projectRoles || {}), [projectId]: 'project_admin' },
+            updatedAt:    now,
+          };
+        }
+        return draft;
+      });
+      sendJson(res, 201, { ok: true, project: newProject });
       return true;
     }
 
     // ── 选择/切换组织（签发含 orgId 的新 token）────────────────────
     if (req.method === 'POST' && url.pathname === '/api/auth/select-org') {
       const { json } = await readBody(req);
-      const orgId   = String(json?.orgId || json?.projectId || '').trim();
+      const orgId   = String(json?.orgId || '').trim();
       const store   = await loadStore();
       const session = verifySessionToken(getSessionToken(req));
       if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
       const user = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
       if (!user) { sendJson(res, 401, { ok: false, error: 'session user not found' }); return true; }
-      if (!orgId || !userCanAccessProject(user, orgId)) {
+      if (!orgId || !userCanAccessOrg(user, orgId)) {
         sendJson(res, 403, { ok: false, error: 'you do not have access to this organization' });
         return true;
       }
-      const org = (store.projects || []).find((p) => p.id === orgId) || null;
+      const org = (store.organizations || []).find((o) => o.id === orgId) || null;
       if (!org) { sendJson(res, 404, { ok: false, error: 'organization not found' }); return true; }
+      const projects = projectsInOrg(store, orgId, user);
+      const defaultProjectId = projects[0]?.id || '';
       sendJson(res, 200, {
         ok:        true,
-        projectId: orgId,
         orgId,
+        projectId: defaultProjectId,
         org:  { id: org.id, name: org.name },
-        user: sanitizeUserForProject(user, orgId, org),
-        token: createSessionToken(user, orgId),
+        projects,
+        user: sanitizeUserForOrg(user, orgId, org),
+        token: createSessionToken(user, defaultProjectId, orgId),
+      });
+      return true;
+    }
+
+    // ── 选择/切换项目（组织内，签发更新 projectId 的新 token）──────
+    if (req.method === 'POST' && url.pathname === '/api/auth/select-project') {
+      const { json } = await readBody(req);
+      const projectId = String(json?.projectId || '').trim();
+      const store     = await loadStore();
+      const session   = verifySessionToken(getSessionToken(req));
+      if (!session) { sendJson(res, 401, { ok: false, error: 'not authenticated' }); return true; }
+      const user = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
+      if (!user) { sendJson(res, 401, { ok: false, error: 'session user not found' }); return true; }
+      const orgId = session.orgId || 'default';
+      const project = (store.projects || []).find((p) => p.id === projectId) || null;
+      if (!project || (project.orgId || 'default') !== orgId || !userCanAccessProject(user, projectId)) {
+        sendJson(res, 403, { ok: false, error: 'you do not have access to this project' });
+        return true;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        orgId,
+        projectId,
+        user: sanitizeUserForProject(user, projectId, project),
+        token: createSessionToken(user, projectId, orgId),
       });
       return true;
     }
@@ -225,50 +349,40 @@ export function createSystemRoutes({
       let newOrg  = null;
       await updateStore((draft) => {
         newOrg = {
-          id:         orgId,
+          id: orgId,
           name,
-          summary:    String(json?.summary || ''),
-          founderId:  user.id,
-          createdAt:  now,
-          updatedAt:  now,
-          // GitHub/GitLab 集成字段，可选填
-          githubOwner: String(json?.githubOwner || ''),
-          repository:  String(json?.repository  || ''),
-          githubFullRepo: json?.githubOwner && json?.repository
-            ? `${json.githubOwner}/${json.repository}`
-            : '',
-          localPath: '',
-          branch:    '',
-          status:    '待同步',
-          lastSyncAt: '',
+          summary: String(json?.summary || ''),
+          founderId: user.id,
+          createdAt: now,
+          updatedAt: now,
         };
-        draft.projects = [...(draft.projects || []), newOrg];
-        // 创建者自动成为组织的 project_admin
+        draft.organizations = [...(draft.organizations || []), newOrg];
+        // 创建者加入新组织并成为组织管理员
         const idx = draft.users.findIndex((u) => u.id === user.id);
         if (idx !== -1) {
           const u = draft.users[idx];
           draft.users[idx] = {
             ...u,
-            // 保留通配符 '*'（全局用户不应因创建新组织而丢失对所有已有组织的访问权）
-            projectIds:   (u.projectIds || []).includes('*')
-              ? u.projectIds   // wildcard 已涵盖所有 org，无需追加
-              : [...new Set([...(u.projectIds || []), orgId])],
-            projectRoles: { ...(u.projectRoles || {}), [orgId]: 'project_admin' },
-            updatedAt:    now,
+            orgIds:   (u.orgIds || []).includes('*')
+              ? u.orgIds
+              : [...new Set([...(u.orgIds || []), orgId])],
+            orgRoles: { ...(u.orgRoles || {}), [orgId]: 'project_admin' },
+            updatedAt: now,
           };
         }
         return draft;
       });
+      const updatedUser = {
+        ...user,
+        orgIds: [...(user.orgIds || []), orgId],
+        orgRoles: { ...(user.orgRoles || {}), [orgId]: 'project_admin' },
+      };
       sendJson(res, 201, {
         ok:    true,
         org:   newOrg,
-        token: createSessionToken(
-          // 用更新后的 user 重新签发，含新 orgId
-          { ...user, projectIds: [...(user.projectIds || []), orgId], projectRoles: { ...(user.projectRoles || {}), [orgId]: 'project_admin' } },
-          orgId
-        ),
         orgId,
-        projectId: orgId,
+        projectId: '',
+        token: createSessionToken(updatedUser, '', orgId),
       });
       return true;
     }
@@ -285,19 +399,18 @@ export function createSystemRoutes({
       const store   = await loadStore();
       const caller  = (store.users || []).find((u) => u.id === session.sub && u.active !== false);
       if (!caller)  { sendJson(res, 401, { ok: false, error: 'session user not found' }); return true; }
-      // 只有 project_admin / admin 可以邀请成员
-      const callerRole = (caller.projectRoles || {})[targetOrgId] || caller.role || 'developer';
-      if (!['admin', 'project_admin'].includes(callerRole)) {
+      // 只有组织管理员可以邀请成员
+      if (!userCanManageOrg(caller, targetOrgId)) {
         sendJson(res, 403, { ok: false, error: 'only org admins can invite members' }); return true;
       }
-      const org = (store.projects || []).find((p) => p.id === targetOrgId);
+      const org = (store.organizations || []).find((o) => o.id === targetOrgId);
       if (!org) { sendJson(res, 404, { ok: false, error: 'organization not found' }); return true; }
       const identifier = String(json?.username || json?.email || json?.phone || '').trim();
       const role       = ['developer', 'project_admin', 'hr_manager'].includes(json?.role) ? json.role : 'developer';
       if (!identifier) { sendJson(res, 400, { ok: false, error: 'username, email or phone is required' }); return true; }
       const invitee = findUserGlobally(store.users || [], identifier);
       if (!invitee) { sendJson(res, 404, { ok: false, error: 'user not found' }); return true; }
-      if (userCanAccessProject(invitee, targetOrgId)) {
+      if (userCanAccessOrg(invitee, targetOrgId)) {
         sendJson(res, 409, { ok: false, error: 'user is already a member of this organization' }); return true;
       }
       const now = new Date().toISOString();
@@ -306,20 +419,18 @@ export function createSystemRoutes({
         const idx = draft.users.findIndex((u) => u.id === invitee.id);
         if (idx === -1) return draft;
         const u = draft.users[idx];
-        // 保留通配符 '*'（如果已有），否则追加 orgId
-        const newProjectIds = (u.projectIds || []).includes('*')
-          ? u.projectIds
-          : [...new Set([...(u.projectIds || []), targetOrgId])];
         updatedUser = {
           ...u,
-          projectIds:   newProjectIds,
-          projectRoles: { ...(u.projectRoles || {}), [targetOrgId]: role },
-          updatedAt:    now,
+          orgIds:   (u.orgIds || []).includes('*')
+            ? u.orgIds
+            : [...new Set([...(u.orgIds || []), targetOrgId])],
+          orgRoles: { ...(u.orgRoles || {}), [targetOrgId]: role },
+          updatedAt: now,
         };
         draft.users[idx] = updatedUser;
         return draft;
       });
-      sendJson(res, 200, { ok: true, user: sanitizeUserForProject(updatedUser, targetOrgId, org) });
+      sendJson(res, 200, { ok: true, user: sanitizeUserForOrg(updatedUser, targetOrgId, org) });
       return true;
     }
 
