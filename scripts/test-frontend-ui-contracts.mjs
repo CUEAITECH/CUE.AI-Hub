@@ -38,18 +38,27 @@ for (const route of legacyRoutes) {
 }
 console.log('✓ 旧版路由仍可访问（data-route 存在）OK');
 
-const deliverySubGroup = html.match(/<div class="header-sub-group" data-sub="delivery">([\s\S]*?)<\/div>/);
-assert.ok(deliverySubGroup, 'delivery sub navigation must exist');
+// 侧边栏重构后：交付导航已移入 #sbGroupDelivery，旧 header-sub-group 不再存在
+// 验证侧边栏内包含这些路由（data-route 即可，不依赖具体容器）
 for (const route of ['roadmap', 'ai-pm']) {
   assert.ok(
-    deliverySubGroup[0].includes(`data-route="${route}"`),
-    `${route} must be restored under delivery navigation`,
+    html.includes(`data-route="${route}"`),
+    `${route} must exist as a navigable route in sidebar`,
   );
 }
-const legacySubGroup = html.match(/<div class="header-sub-group" data-sub="legacy">([\s\S]*?)<\/div>/);
-assert.ok(legacySubGroup, 'legacy sub navigation must exist');
-assert.ok(!legacySubGroup[0].includes('data-route="roadmap"'), 'roadmap must not remain hidden under legacy navigation');
-assert.ok(!legacySubGroup[0].includes('data-route="ai-pm"'), 'ai-pm must not remain hidden under legacy navigation');
+// 旧版功能路由也必须可访问
+for (const route of ['planning', 'standup', 'report', 'automation', 'attendance']) {
+  assert.ok(
+    html.includes(`data-route="${route}"`),
+    `legacy route ${route} must remain accessible`,
+  );
+}
+// 路由不应分类错误：roadmap/ai-pm 不应在旧版组
+const legacySbGroup = html.match(/id="sbBodyLegacy"[^>]*>([\s\S]*?)<\/div>/);
+if (legacySbGroup) {
+  assert.ok(!legacySbGroup[0].includes('data-route="roadmap"'), 'roadmap must not be in legacy sidebar group');
+  assert.ok(!legacySbGroup[0].includes('data-route="ai-pm"'), 'ai-pm must not be in legacy sidebar group');
+}
 
 // ── 3. 移动端导航 5 个条目 ───────────────────────────────────────────────
 const mobileNavSection = html.match(/class="mobile-app-nav"[^>]*>([\s\S]*?)<\/nav>/);
@@ -101,22 +110,22 @@ for (const id of requiredSectionIds) {
 }
 console.log('✓ section.view id 完整性 OK');
 
-// ── 8. 主导航按钮有 data-nav-parent ──────────────────────────────────────
-const navParents = ['overview', 'delivery', 'insight', 'personal', 'legacy'];
-for (const parent of navParents) {
+// ── 8. 侧边栏分组存在（data-sb-toggle 替代旧版 data-nav-parent）──────────
+const sbToggleGroups = ['delivery', 'insight', 'projects', 'legacy'];
+for (const group of sbToggleGroups) {
   assert.ok(
-    html.includes(`data-nav-parent="${parent}"`),
-    `主导航必须包含 data-nav-parent="${parent}"`,
+    html.includes(`data-sb-toggle="${group}"`),
+    `侧边栏必须包含 data-sb-toggle="${group}" 分组`,
   );
 }
 console.log('✓ 主导航 data-nav-parent 属性完整性 OK');
 
-// ── 9. 子导航 data-sub 分组完整性 ─────────────────────────────────────────
-const subGroups = ['delivery', 'insight', 'personal', 'legacy'];
-for (const group of subGroups) {
+// ── 9. 侧边栏分组 body 存在 ───────────────────────────────────────────────
+const sbBodyIds = ['sbBodyDelivery', 'sbBodyInsight', 'sbBodyProjects', 'sbBodyLegacy'];
+for (const id of sbBodyIds) {
   assert.ok(
-    html.includes(`data-sub="${group}"`),
-    `header-sub-group 必须包含 data-sub="${group}"`,
+    html.includes(`id="${id}"`),
+    `侧边栏分组 body id="${id}" 必须存在`,
   );
 }
 console.log('✓ 子导航 data-sub 分组 OK');

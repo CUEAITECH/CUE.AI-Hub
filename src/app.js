@@ -309,10 +309,11 @@ function makeWsItem({ name, active, withAvatar }) {
   return btn;
 }
 
-// 顶栏左侧：组织 + 项目两级切换器
+// 侧边栏：组织 + 项目两级切换器
 function renderWorkspaceSwitchers() {
   renderOrgSwitcher();
   renderProjectSwitcher();
+  renderSidebarUser();
 }
 
 // ── 组织切换器（一级）────────────────────────────────────────────
@@ -930,6 +931,91 @@ function syncSessionUser(user = {}) {
   if (user.projectRole || user.role) {
     sessionStorage.setItem('cueHubUserRole', user.projectRole || user.role);
   }
+  // 更新侧边栏底部用户信息
+  renderSidebarUser();
+}
+
+function renderSidebarUser() {
+  const name = sessionStorage.getItem('cueHubUser') || '';
+  const initial = (name[0] || '?').toUpperCase();
+  const avatarEl = document.querySelector('#sbUserAvatar');
+  const nameEl   = document.querySelector('#sbUserName');
+  // 移动端顶栏头像
+  const mobileAvatarEl = document.querySelector('#topbarOrgAvatarMobile');
+  if (avatarEl)  { avatarEl.textContent = initial; avatarEl.style.background = orgAvatarColor(name); }
+  if (nameEl)    nameEl.textContent = name || '加载中…';
+  if (mobileAvatarEl) {
+    mobileAvatarEl.textContent = initial;
+    mobileAvatarEl.style.background = orgAvatarColor(name);
+    mobileAvatarEl.style.display = name ? 'inline-flex' : 'none';
+  }
+}
+
+// 侧边栏：更新 active 状态
+function renderSidebarActiveRoute(routeId) {
+  document.querySelectorAll('.sb-item[data-route]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.route === routeId);
+  });
+}
+
+// 侧边栏：折叠/展开分组
+function initSidebarGroups() {
+  document.querySelectorAll('[data-sb-toggle]').forEach((header) => {
+    const key      = header.dataset.sbToggle;
+    const body     = document.querySelector(`#sbBody${key.charAt(0).toUpperCase() + key.slice(1)}`);
+    const chevron  = header.querySelector('.sb-group-chevron');
+    const stored   = localStorage.getItem(`cue_sb_${key}`);
+    // 默认展开（除 legacy 外）
+    const collapsed = stored !== null ? stored === 'collapsed' : key === 'legacy';
+    if (collapsed && body) {
+      body.classList.add('sb-group-body-collapsed');
+      if (chevron) chevron.classList.add('sb-group-chevron-collapsed');
+      header.setAttribute('aria-expanded', 'false');
+    }
+    header.addEventListener('click', () => {
+      const isNowCollapsed = body.classList.toggle('sb-group-body-collapsed');
+      if (chevron) chevron.classList.toggle('sb-group-chevron-collapsed', isNowCollapsed);
+      header.setAttribute('aria-expanded', String(!isNowCollapsed));
+      localStorage.setItem(`cue_sb_${key}`, isNowCollapsed ? 'collapsed' : 'expanded');
+    });
+  });
+}
+
+// 侧边栏移动端开关
+function initSidebarMobileToggle() {
+  const btn     = document.querySelector('#sbMobileToggle');
+  const sidebar = document.querySelector('#sidebar');
+  const overlay = document.querySelector('#sbOverlay');
+  if (!btn || !sidebar || !overlay) return;
+
+  function openSidebar() {
+    sidebar.classList.add('sb-open');
+    overlay.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSidebar() {
+    sidebar.classList.remove('sb-open');
+    overlay.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+  }
+
+  btn.addEventListener('click', () => {
+    sidebar.classList.contains('sb-open') ? closeSidebar() : openSidebar();
+  });
+  overlay.addEventListener('click', closeSidebar);
+  // 点导航项后自动关闭侧边栏（移动端）
+  sidebar.addEventListener('click', (e) => {
+    if (e.target.closest('[data-route]') && window.innerWidth < 768) closeSidebar();
+  });
+}
+
+// 用户菜单按钮（底部三点）
+function initSidebarUserMenu() {
+  document.querySelector('#sbUserBtn')?.addEventListener('click', () => {
+    setRoute('pc-profile');
+  });
 }
 
 async function refreshSessionUserRole() {
@@ -4524,10 +4610,11 @@ function setRoute(route) {
   const activeParent = parentByRoute[route] || route;
   document.querySelectorAll('.nav-item').forEach((item) => {
     const isRouteActive = item.dataset.route === route;
-    // 一级导航按钮（无自身 route 的分组按钮）通过 data-nav-parent 匹配
     const isParentActive = item.classList.contains('nav-primary') && !item.dataset.route && item.dataset.navParent === activeParent;
     item.classList.toggle('active', isRouteActive || isParentActive);
   });
+  // 侧边栏 active 状态同步
+  renderSidebarActiveRoute(route);
   const mobileRouteMap = {
     // 移动端底部导航：总览 / 任务 / PR / 观察 / 我的
     overview:        'overview',
@@ -5409,6 +5496,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', () => renderObservatory().catch(() => {}));
   });
+
+  // 侧边栏初始化（一次性，DOM 就绪后立即执行）
+  initSidebarGroups();
+  initSidebarMobileToggle();
+  initSidebarUserMenu();
+  renderSidebarUser();
 });
 
 async function initApp() {

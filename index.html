@@ -66,83 +66,169 @@
       </div>
     </section>
     <div class="app-shell">
-      <header class="topbar" id="topbar">
-        <div class="header-main">
-          <!-- 左侧：品牌 + 项目切换 + 状态标签 -->
-          <div class="header-left">
-            <button class="brand" type="button" data-route="overview">
-              <span>CUE</span>
-              <small>项目中枢</small>
-            </button>
-            <div class="ws-switcher-wrap" id="topbarOrgWrap">
-              <button type="button" class="ws-switcher-btn" id="topbarOrgBtn" aria-haspopup="true" aria-expanded="false">
-                <span class="ws-avatar" id="topbarOrgAvatar"></span>
-                <span class="ws-name" id="topbarOrgName">组织</span>
-                <svg class="ws-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
-              </button>
-              <div class="ws-dropdown" id="topbarOrgDropdown" hidden></div>
-            </div>
-            <span class="ws-sep" aria-hidden="true">/</span>
-            <div class="ws-switcher-wrap" id="topbarProjectWrap">
-              <button type="button" class="ws-switcher-btn ws-switcher-btn-project" id="topbarProjectBtn" aria-haspopup="true" aria-expanded="false">
-                <span class="ws-name" id="topbarProjectName">项目</span>
-                <svg class="ws-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
-              </button>
-              <div class="ws-dropdown" id="topbarProjectDropdown" hidden></div>
-            </div>
-            <button class="mobile-more-toggle" type="button" data-action="toggle-mobile-secondary-nav" aria-controls="headerSub" aria-expanded="false">
-              <span>更多</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <span class="status-pill" id="syncStatus">API 未连接</span>
-            <span class="status-pill wecom-pill" id="wecomStatus" style="display:none">企微已接入</span>
-          </div>
-          <!-- 右侧：主导航（v2 架构精简版） -->
-          <div class="header-right">
-            <nav class="nav" aria-label="主导航">
-              <button class="nav-item nav-primary active" type="button" data-route="overview" data-nav-parent="overview">总览</button>
-              <button class="nav-item nav-primary" type="button" data-nav-parent="delivery">交付</button>
-              <button class="nav-item nav-primary" type="button" data-nav-parent="insight">洞察</button>
-              <button class="nav-item nav-primary" type="button" data-nav-parent="personal">我的</button>
-              <button class="nav-item nav-primary nav-legacy-toggle" type="button" data-nav-parent="legacy" aria-label="旧版功能">旧版</button>
-            </nav>
-          </div>
+
+      <!-- ── 侧边栏 (Linear 风格) ── -->
+      <aside class="sidebar" id="sidebar" aria-label="主导航">
+
+        <!-- 顶部：组织切换器 -->
+        <div class="sb-org-wrap" id="topbarOrgWrap">
+          <button type="button" class="sb-org-btn" id="topbarOrgBtn" aria-haspopup="true" aria-expanded="false">
+            <span class="ws-avatar sb-org-avatar" id="topbarOrgAvatar"></span>
+            <span class="sb-org-name" id="topbarOrgName">组织</span>
+            <svg class="ws-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="ws-dropdown sb-org-dropdown" id="topbarOrgDropdown" hidden></div>
         </div>
-        <!-- 展开式第二行导航 -->
-        <div class="header-sub" id="headerSub">
-          <!-- ── 交付：v2 就绪核心页面 ── -->
-          <div class="header-sub-group" data-sub="delivery">
-            <button class="nav-item" type="button" data-route="assignment">分工领取</button>
-            <button class="nav-item" type="button" data-route="roadmap">路径图</button>
-            <button class="nav-item" type="button" data-route="ai-pm">AI PM</button>
-            <button class="nav-item" type="button" data-route="viewPulls">PR 列表</button>
-            <button class="nav-item" type="button" data-route="reviews">AI 审阅</button>
-            <button class="nav-item nav-item-hidden" type="button" data-route="task-detail">任务详情</button>
+
+        <!-- 主导航 -->
+        <nav class="sb-nav" id="sbNav" aria-label="功能导航">
+
+          <!-- 总览 -->
+          <button class="sb-item active" type="button" data-route="overview">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            总览
+          </button>
+
+          <!-- 交付（可折叠） -->
+          <div class="sb-group" id="sbGroupDelivery">
+            <button class="sb-group-header" type="button" data-sb-toggle="delivery" aria-expanded="true">
+              <svg class="sb-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+              <span>交付</span>
+            </button>
+            <div class="sb-group-body" id="sbBodyDelivery">
+              <button class="sb-item sb-item-child" type="button" data-route="assignment">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                分工领取
+              </button>
+              <button class="sb-item sb-item-child" type="button" data-route="roadmap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l4-8 4 4 4-6 4 10"/></svg>
+                路径图
+              </button>
+              <button class="sb-item sb-item-child" type="button" data-route="ai-pm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+                AI PM
+              </button>
+              <button class="sb-item sb-item-child" type="button" data-route="viewPulls">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg>
+                PR 列表
+              </button>
+              <button class="sb-item sb-item-child" type="button" data-route="reviews">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                AI 审阅
+              </button>
+              <button class="sb-item sb-item-child sb-item-hidden" type="button" data-route="task-detail">任务详情</button>
+            </div>
           </div>
-          <!-- ── 洞察：观察台 + 晚会 ── -->
-          <div class="header-sub-group" data-sub="insight">
-            <button class="nav-item" type="button" data-route="observatory">观察台</button>
-            <button class="nav-item" type="button" data-route="meeting">晚会闭环</button>
+
+          <!-- 洞察（可折叠） -->
+          <div class="sb-group" id="sbGroupInsight">
+            <button class="sb-group-header" type="button" data-sb-toggle="insight" aria-expanded="true">
+              <svg class="sb-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+              <span>洞察</span>
+            </button>
+            <div class="sb-group-body" id="sbBodyInsight">
+              <button class="sb-item sb-item-child" type="button" data-route="observatory">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                观察台
+              </button>
+              <button class="sb-item sb-item-child" type="button" data-route="meeting">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                晚会闭环
+              </button>
+            </div>
           </div>
-          <!-- ── 个人中心 ── -->
-          <div class="header-sub-group" data-sub="personal">
-            <button class="nav-item" type="button" data-route="pc-workspace">我的工作台</button>
-            <button class="nav-item" type="button" data-route="pc-profile">个人名片</button>
-            <button class="nav-item" type="button" data-route="pc-account">账号设置</button>
-            <button class="nav-item" type="button" data-route="account-admin">账号管理</button>
-            <button class="nav-item" type="button" data-route="sys-config">系统设置</button>
+
+          <!-- 项目列表 -->
+          <div class="sb-group" id="sbGroupProjects">
+            <button class="sb-group-header" type="button" data-sb-toggle="projects" aria-expanded="true">
+              <svg class="sb-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+              <span>项目</span>
+              <span class="sb-group-badge" id="sbProjectCount"></span>
+            </button>
+            <div class="sb-group-body" id="sbBodyProjects">
+              <!-- 由 JS renderSidebarProjects() 动态填充 -->
+              <div class="sb-item sb-item-child" id="topbarProjectWrap">
+                <button type="button" class="sb-project-btn" id="topbarProjectBtn" aria-haspopup="true">
+                  <svg class="ws-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+                  <span id="topbarProjectName">选择项目</span>
+                </button>
+                <div class="ws-dropdown sb-project-dropdown" id="topbarProjectDropdown" hidden></div>
+              </div>
+            </div>
           </div>
-          <!-- ── 旧版（折叠，按需访问） ── -->
-          <div class="header-sub-group" data-sub="legacy">
-            <span class="nav-legacy-label">旧版功能（未迁移至 v2）</span>
-            <button class="nav-item nav-item-legacy" type="button" data-route="planning">AI 排期</button>
-            <button class="nav-item nav-item-legacy" type="button" data-route="standup">异步站会</button>
-            <button class="nav-item nav-item-legacy" type="button" data-route="report">日报&amp;晚报</button>
-            <button class="nav-item nav-item-legacy" type="button" data-route="automation">自动提醒</button>
-            <button class="nav-item nav-item-legacy" type="button" data-route="attendance">考勤统计</button>
+
+          <!-- 旧版（折叠，按需访问） -->
+          <div class="sb-group sb-group-legacy" id="sbGroupLegacy">
+            <button class="sb-group-header" type="button" data-sb-toggle="legacy" aria-expanded="false">
+              <svg class="sb-group-chevron sb-group-chevron-collapsed" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+              <span>旧版功能</span>
+            </button>
+            <div class="sb-group-body sb-group-body-collapsed" id="sbBodyLegacy">
+              <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="planning">AI 排期</button>
+              <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="standup">异步站会</button>
+              <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="report">日报&amp;晚报</button>
+              <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="automation">自动提醒</button>
+              <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="attendance">考勤统计</button>
+            </div>
           </div>
+
+        </nav>
+
+        <!-- 设置区 -->
+        <div class="sb-settings">
+          <div class="sb-section-label">设置</div>
+          <button class="sb-item sb-item-hidden" type="button" data-route="pc-profile">个人名片</button>
+          <button class="sb-item" type="button" data-route="pc-workspace">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><line x1="12" y1="12" x2="12" y2="12.01"/></svg>
+            我的工作台
+          </button>
+          <button class="sb-item" type="button" data-route="pc-account">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            账号设置
+          </button>
+          <button class="sb-item" type="button" data-route="sys-config" data-settings-tab="org">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            组织设置
+          </button>
+          <button class="sb-item" type="button" data-route="sys-config" data-settings-tab="project">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            项目设置
+          </button>
+          <button class="sb-item" type="button" data-route="sys-config" data-settings-tab="apikeys">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            API 密钥
+          </button>
+          <button class="sb-item" type="button" data-route="account-admin">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            账号管理
+          </button>
         </div>
+
+        <!-- 底部：用户信息 + 状态 -->
+        <div class="sb-footer">
+          <span class="status-pill" id="syncStatus" style="margin-bottom:6px;align-self:flex-start;">API 未连接</span>
+          <span class="status-pill wecom-pill" id="wecomStatus" style="display:none;margin-bottom:6px;align-self:flex-start;">企微已接入</span>
+          <button class="sb-user-btn" type="button" id="sbUserBtn">
+            <span class="sb-user-avatar" id="sbUserAvatar">?</span>
+            <span class="sb-user-name" id="sbUserName">加载中…</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </button>
+        </div>
+
+      </aside>
+
+      <!-- 移动端顶栏（仅在 < 768px 显示） -->
+      <header class="topbar-mobile" id="topbar">
+        <button class="sb-mobile-toggle" type="button" id="sbMobileToggle" aria-label="打开导航" aria-controls="sidebar" aria-expanded="false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <button class="brand" type="button" data-route="overview">
+          <span>CUE</span><small>项目中枢</small>
+        </button>
+        <span class="sb-org-avatar" id="topbarOrgAvatarMobile" style="width:22px;height:22px;font-size:10px;border-radius:5px;"></span>
       </header>
+      <!-- 移动端侧边栏遮罩 -->
+      <div class="sb-overlay" id="sbOverlay" hidden></div>
 
       <main>
         <!-- 总览 -->
