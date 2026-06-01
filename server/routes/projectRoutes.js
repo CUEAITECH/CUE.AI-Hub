@@ -1,4 +1,4 @@
-import { isProjectFounder, verifySessionToken } from '../services/auth.js';
+import { getTenantId, isProjectFounder, verifySessionToken } from '../services/auth.js';
 import { importDocsForProject, makeSlugId } from '../services/docsManager.js';
 import logger from '../logger.js';
 
@@ -86,7 +86,7 @@ export function createProjectRoutes({
 
   return async function projectRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/projects') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       sendJson(res, 200, { projects: store.projects || [] });
       return true;
     }
@@ -97,7 +97,7 @@ export function createProjectRoutes({
       const id = String(json.id || slugId('project', json.githubFullRepo || json.repository || json.name)).trim();
       const project = normalizeProjectInput(json, id);
       if (!project.name) { sendError(res, 400, 'project name required'); return true; }
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       if ((store.projects || []).some((item) => item.id === project.id)) {
         sendError(res, 409, 'project id already exists');
         return true;
@@ -135,7 +135,7 @@ export function createProjectRoutes({
           }
         }
         return draft;
-      });
+      }, getTenantId(req));
       const saved = (nextStore.projects || []).find((item) => item.id === project.id);
       if (!saved) { sendError(res, 409, 'project id already exists'); return true; }
       sendJson(res, 201, { project: saved });
@@ -148,7 +148,7 @@ export function createProjectRoutes({
       const { json } = await readBody(req);
       const targetUsername = String(json?.targetUsername || '').trim();
       if (!targetUsername) { sendError(res, 400, 'targetUsername required'); return true; }
-      const before = await loadStore();
+      const before = await loadStore(getTenantId(req));
       const project = (before.projects || []).find((p) => p.id === projectId);
       if (!project) { sendError(res, 404, 'project not found'); return true; }
       const callerSession = (() => {
@@ -186,7 +186,7 @@ export function createProjectRoutes({
         }
         // 老创始人保留 project_admin 角色（不强降，留个管理权）
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, { ok: true, projectId, newFounderId: target.id, newFounderUsername: target.username });
       return true;
     }
@@ -222,7 +222,7 @@ export function createProjectRoutes({
           updatedAt: new Date().toISOString()
         };
         return draft;
-      });
+      }, getTenantId(req));
       const project = (nextStore.projects || []).find((item) => item.id === projectId);
       if (!project) { sendError(res, 404, 'project not found'); return true; }
       sendJson(res, 200, { project });
@@ -231,7 +231,7 @@ export function createProjectRoutes({
 
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/projects/')) {
       const projectId = decodeURIComponent(url.pathname.split('/')[3] || '');
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const project = (store.projects || []).find((item) => item.id === projectId);
       if (!project) { sendError(res, 404, 'project not found'); return true; }
       if (projectId === 'cue_ai_classroom' || (store.projects || []).length <= 1) {
@@ -250,14 +250,14 @@ export function createProjectRoutes({
       const nextStore = await updateStore((draft) => {
         draft.projects = (draft.projects || []).filter((item) => item.id !== projectId);
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, { deleted: true, projectId, projects: nextStore.projects || [] });
       return true;
     }
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/sync-github')) {
       const projectId = decodeURIComponent(url.pathname.split('/')[3] || '');
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const project = (store.projects || []).find((item) => item.id === projectId);
       if (!project) { sendError(res, 404, 'project not found'); return true; }
       if (!hasGitHubConfig(project)) {
@@ -279,7 +279,7 @@ export function createProjectRoutes({
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/sync-local-git')) {
       const projectId = decodeURIComponent(url.pathname.split('/')[3] || '');
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const project = (store.projects || []).find((item) => item.id === projectId);
       if (!project) {
         sendError(res, 404, 'project not found');
@@ -341,7 +341,7 @@ export function createProjectRoutes({
         draft.activities = [...newActivities, ...retainedActivities].slice(0, 700);
         draft.reviews = [...newReviews, ...(draft.reviews || [])].slice(0, 300);
         return draft;
-      });
+      }, getTenantId(req));
 
       const alerts = scanRisks(nextStore);
       sendJson(res, 200, {
@@ -358,7 +358,7 @@ export function createProjectRoutes({
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/sync-docs')) {
       const projectId = url.pathname.split('/')[3];
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const project = (store.projects || []).find((item) => item.id === projectId);
       if (!project) { sendError(res, 404, '项目不存在'); return true; }
 
@@ -377,7 +377,7 @@ export function createProjectRoutes({
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/update-docs')) {
       const projectId = url.pathname.split('/')[3];
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const project = (store.projects || []).find((item) => item.id === projectId);
       if (!project) { sendError(res, 404, '项目不存在'); return true; }
 
@@ -421,7 +421,7 @@ export function createProjectRoutes({
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/daily-scan')) {
       const projectId = url.pathname.split('/')[3];
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const project = (store.projects || []).find((item) => item.id === projectId);
       if (!project) { sendError(res, 404, '项目不存在'); return true; }
 
@@ -439,7 +439,7 @@ export function createProjectRoutes({
               );
               draft.activities = [...newActivities, ...retained].slice(0, 700);
               return draft;
-            });
+            }, getTenantId(req));
             result.steps.syncCommits = { ok: true, added: syncResult.activities?.length || 0 };
           }
         }
@@ -473,7 +473,7 @@ export function createProjectRoutes({
       }
 
       try {
-        const freshStore = await loadStore();
+        const freshStore = await loadStore(getTenantId(req));
         const { owner, repo } = getProjectRepo(project);
         const docTasks = (freshStore.docTasks || {})[projectId] || [];
         const hubTasks = (freshStore.tasks || []).filter((task) => task.projectId === projectId);
