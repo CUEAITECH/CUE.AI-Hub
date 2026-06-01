@@ -21,6 +21,9 @@ const legacyCueAiRepoAliases = new Set([
 const legacyHubReviewRepos = new Set(['cue-project-hub', 'cue-project-hub-api', 'CUEAITECH/CUE-Project-Hub', 'CUEAITECH/CUE.AI-Hub']);
 const seedDemoReviewIds = new Set(['review_001', 'review_002', 'review_003']);
 const defaultProjectId = 'cue_ai_classroom';
+// 默认组织 id 固定为 'default'：与历史数据 tenant_id='default' 对齐，实现零数据迁移拆分。
+// Organization = 租户边界（tenant_id），Project = 其下的 GitHub 仓库（project_id）。
+const defaultOrgId = 'default';
 
 let cache = null;
 
@@ -183,6 +186,7 @@ export function migrateStore(store) {
     assignments: [],
     attendanceRecords: [],
     alerts: [],
+    organizations: [],
     projects: [],
     eveningReports: {},
     reports: {},
@@ -420,6 +424,48 @@ export function migrateStore(store) {
       ? 'PR diff 可输出通过、提醒、阻断、升级四级结论。'
       : task.acceptance
   }));
+
+  // ── Org/Project 正交拆分迁移 ──────────────────────────────────
+  // Organization（租户）与 Project（GitHub 仓库）分层。默认组织 id='default'，
+  // 与历史 tenant_id 对齐，无需迁移任何 tenant_id 数据。
+  if (!Array.isArray(next.organizations)) next.organizations = [];
+  if (!next.organizations.some((o) => o.id === defaultOrgId)) {
+    // 默认组织的创始人：优先系统管理员，其次第一个用户
+    const founder = (next.users || []).find((u) => u.role === 'admin')
+      || (next.users || [])[0]
+      || null;
+    next.organizations.unshift({
+      id: defaultOrgId,
+      name: 'Cue.AI',
+      summary: 'Cue.AI 团队默认组织，包含全部研发交付项目。',
+      founderId: founder?.id || '',
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  // 每个 project 归属到一个组织（存量项目默认挂到 'default' 组织）
+  next.projects = (next.projects || []).map((p) => (
+    p.orgId ? p : { ...p, orgId: defaultOrgId }
+  ));
+  // 每个用户补全组织成员关系：orgIds + orgRoles（由 projectRoles 推导最高权限）
+  const ROLE_RANK = { admin: 3, project_admin: 2, hr_manager: 1, developer: 0 };
+  next.users = (next.users || []).map((u) => {
+    if (Array.isArray(u.orgIds) && u.orgRoles && typeof u.orgRoles === 'object') return u;
+    // 系统管理员（projectIds 含 '*'）→ 默认组织 admin
+    const isGlobal = (u.projectIds || []).includes('*');
+    const projectRoleValues = Object.values(u.projectRoles || {});
+    const highestRole = isGlobal
+      ? (u.role || 'admin')
+      : projectRoleValues.reduce(
+          (best, r) => (ROLE_RANK[r] > ROLE_RANK[best] ? r : best),
+          u.role || 'developer'
+        );
+    return {
+      ...u,
+      orgIds: Array.isArray(u.orgIds) && u.orgIds.length ? u.orgIds : [defaultOrgId],
+      orgRoles: u.orgRoles && typeof u.orgRoles === 'object' ? u.orgRoles : { [defaultOrgId]: highestRole },
+    };
+  });
 
   // 多租户迁移：对所有数组集合补全 tenantId: 'default'
   const TENANT_STAMP_ARRAYS = [
