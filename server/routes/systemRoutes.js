@@ -596,6 +596,12 @@ export function createSystemRoutes({
       }
 
       const now = new Date().toISOString();
+      // 找出该项目所属的组织，确保新用户同时获得组织成员资格
+      const projectRecord = (before.projects || []).find((p) => p.id === projectId) || null;
+      const derivedOrgId  = projectRecord?.orgId || 'default';
+      // 组织角色：project_admin → project_admin；其余角色保持不变
+      const derivedOrgRole = role;
+
       let createdUser = null;
       await updateStore((draft) => {
         draft.users = draft.users || [];
@@ -603,11 +609,17 @@ export function createSystemRoutes({
           const index = draft.users.findIndex((user) => user.id === existingUser.id);
           if (index !== -1) {
             const current = draft.users[index];
+            const currentOrgIds = Array.isArray(current.orgIds) ? current.orgIds : [];
             createdUser = {
               ...current,
               name: name || current.name,
               projectIds: [...new Set([...(current.projectIds || []), projectId])],
               projectRoles: { ...(current.projectRoles || {}), [projectId]: role },
+              // 同步组织成员资格（保留 '*' 通配符，否则追加）
+              orgIds: currentOrgIds.includes('*')
+                ? currentOrgIds
+                : [...new Set([...currentOrgIds, derivedOrgId])],
+              orgRoles: { ...(current.orgRoles || {}), [derivedOrgId]: derivedOrgRole },
               active: true,
               updatedAt: now
             };
@@ -620,8 +632,10 @@ export function createSystemRoutes({
           username,
           name,
           role,
-          projectIds: [projectId],
+          projectIds:   [projectId],
           projectRoles: { [projectId]: role },
+          orgIds:       [derivedOrgId],
+          orgRoles:     { [derivedOrgId]: derivedOrgRole },
           active: true,
           passwordHash: hashPassword(password),
           createdAt: now,

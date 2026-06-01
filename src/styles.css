@@ -174,8 +174,8 @@ body:not(.authenticated) .app-shell {
 .sb-item:hover svg { color: var(--sb-text); }
 .sb-item.active {
   background: var(--sb-bg-active);
-  color: #fff;
-  font-weight: 500;
+  color: var(--sb-accent);   /* 浅色主题：深蓝色文字，满足 4.5:1 对比度要求 */
+  font-weight: 600;
   box-shadow: inset 2px 0 0 var(--sb-accent);
 }
 .sb-item.active svg { color: var(--sb-accent); }
@@ -360,16 +360,26 @@ body:not(.authenticated) .app-shell {
 .sidebar.sb-collapsed #topbarOrgName,
 .sidebar.sb-collapsed #topbarProjectName,
 .sidebar.sb-collapsed .ws-sep { display: none !important; }
-/* 折叠时图标居中 */
-.sidebar.sb-collapsed .sb-item { justify-content: center; padding: 0; }
+/* 折叠时：保留 group body，只折叠图标居中、隐藏文字
+   ── 这样折叠态仍可通过图标导航，不会出现空白侧栏 ── */
+.sidebar.sb-collapsed .sb-item { justify-content: center; padding: 0; height: 32px; }
 .sidebar.sb-collapsed .sb-item-child { padding-left: 0; }
 .sidebar.sb-collapsed .sb-org-btn { justify-content: center; padding: 10px; }
-.sidebar.sb-collapsed .sb-group-body { display: none; }
-.sidebar.sb-collapsed .sb-group-header { justify-content: center; padding: 4px 0; }
+/* group body 保持显示（不做 display:none），只隐藏分组标题行（用分割线替代） */
+.sidebar.sb-collapsed .sb-group-header { display: none; }
+/* 折叠时组间加分割线（::before 伪元素） */
+.sidebar.sb-collapsed .sb-group + .sb-group::before,
+.sidebar.sb-collapsed .sb-settings::before {
+  content: '';
+  display: block;
+  height: 1px;
+  background: var(--sb-border);
+  margin: 4px 10px;
+}
 .sidebar.sb-collapsed .sb-footer { align-items: center; padding: 8px 4px; }
 .sidebar.sb-collapsed .sb-user-btn { justify-content: center; padding: 6px 0; }
 .sidebar.sb-collapsed .status-pill { display: none !important; }
-.sidebar.sb-collapsed .sb-settings .sb-item { height: 36px; }
+.sidebar.sb-collapsed .sb-settings .sb-item { height: 32px; }
 
 /* ── 主内容区（sidebar 右侧） ───────────────── */
 .app-shell > main {

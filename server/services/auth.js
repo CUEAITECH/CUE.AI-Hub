@@ -73,9 +73,14 @@ export function userCanManageProject(user = {}, projectId = '') {
 // Organization 是租户边界（tenant_id），Project 是其下的 GitHub 仓库。
 export function userCanAccessOrg(user = {}, orgId = '') {
   const orgIds = Array.isArray(user.orgIds) ? user.orgIds : [];
-  // 兼容未迁移用户：projectIds 含 '*' 视为可访问任意组织
   if (orgIds.includes('*') || orgIds.includes(orgId)) return true;
-  return Array.isArray(user.projectIds) && user.projectIds.includes('*');
+  // 全局 project 通配符：可访问任意组织
+  if (Array.isArray(user.projectIds) && user.projectIds.includes('*')) return true;
+  // 向下兼容：通过旧版 POST /api/auth/users 创建的用户只有 projectIds，没有 orgIds。
+  // 此类用户 orgIds 为空，但有具体 projectIds → 允许访问 'default' 组织（所有存量项目均在此）。
+  // 一旦 orgIds 被正确写入（新建用户或重新邀请），此 fallback 不再触发。
+  if (!orgIds.length && Array.isArray(user.projectIds) && user.projectIds.length > 0 && orgId === 'default') return true;
+  return false;
 }
 
 export function orgRoleForUser(user = {}, orgId = '') {
