@@ -486,12 +486,14 @@ export function migrateStore(store) {
   return rebindStoreExplicitRefs(next);
 }
 
+const FILTERABLE_KEYS = [
+  'tasks', 'members', 'reviews', 'activities', 'standups', 'assignments',
+  'attendanceRecords', 'alerts', 'projects', 'planAdjustments', 'roadmapReviews',
+  'riskAnalyses', 'deliverables', 'phases', 'users', 'aiPromptTraces', 'pulls', 'bypasses',
+];
+
 function filterStoreByTenant(store, tenantId) {
-  const FILTERABLE = [
-    'tasks', 'members', 'reviews', 'activities', 'standups', 'assignments',
-    'attendanceRecords', 'alerts', 'projects', 'planAdjustments', 'roadmapReviews',
-    'riskAnalyses', 'deliverables', 'phases', 'users', 'aiPromptTraces', 'pulls', 'bypasses',
-  ];
+  const FILTERABLE = FILTERABLE_KEYS;
   const filtered = { ...store };
   for (const key of FILTERABLE) {
     if (Array.isArray(filtered[key])) {
@@ -535,9 +537,21 @@ export async function saveStore(nextStore) {
   return cache;
 }
 
-export async function updateStore(mutator) {
-  const current = await loadStore();
+export async function updateStore(mutator, tenantId = 'default') {
+  const current = await loadStore();   // always full cache for writes
   const next = await mutator(structuredClone(current));
+  if (next && tenantId && tenantId !== 'default') {
+    // auto-stamp any record that was just created (no tenantId yet)
+    for (const key of FILTERABLE_KEYS) {
+      if (Array.isArray(next[key])) {
+        next[key] = next[key].map((r) =>
+          r && typeof r === 'object' && !r.tenantId
+            ? { ...r, tenantId }
+            : r
+        );
+      }
+    }
+  }
   return saveStore(next || current);
 }
 
