@@ -1,3 +1,5 @@
+import { getTenantId } from '../services/auth.js';
+
 function reviewSha(review) {
   return review.sha || (review.id?.startsWith('review_') ? review.id.slice(7) : null);
 }
@@ -25,7 +27,7 @@ export function createReviewRoutes({
       const nextStore = await updateStore((store) => {
         store.reviews.unshift(review);
         return store;
-      });
+      }, getTenantId(req));
       sendJson(res, 201, { review, reviews: nextStore.reviews });
       return true;
     }
@@ -100,7 +102,7 @@ export function createReviewRoutes({
         }
 
         return draft;
-      });
+      }, getTenantId(req));
       if (!updated) { sendError(res, 404, 'review not found'); return true; }
       sendJson(res, 200, { review: updated });
       return true;
@@ -108,7 +110,7 @@ export function createReviewRoutes({
 
     if (req.method === 'GET' && url.pathname.match(/^\/api\/reviews\/[^/]+$/) && url.pathname !== '/api/reviews/queue') {
       const id = decodeURIComponent(url.pathname.split('/').pop());
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const review = (store.reviews || []).find((item) => item.id === id);
       if (!review) { sendError(res, 404, 'review not found'); return true; }
 
@@ -132,7 +134,7 @@ export function createReviewRoutes({
 
     if (req.method === 'POST' && url.pathname.match(/^\/api\/reviews\/[^/]+\/solutions$/)) {
       const id = decodeURIComponent(url.pathname.split('/').slice(-2)[0]);
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const review = (store.reviews || []).find((item) => item.id === id);
       if (!review) { sendError(res, 404, 'review not found'); return true; }
 
@@ -167,7 +169,7 @@ AI 建议：${review.suggestion || '无'}`;
         const index = (draft.reviews || []).findIndex((item) => item.id === id);
         if (index >= 0) draft.reviews[index].solutions = finalSolutions;
         return draft;
-      });
+      }, getTenantId(req));
 
       sendJson(res, 200, { solutions: finalSolutions });
       return true;
@@ -176,7 +178,7 @@ AI 建议：${review.suggestion || '无'}`;
     if (req.method === 'POST' && url.pathname.match(/^\/api\/reviews\/[^/]+\/resolve$/)) {
       const id = decodeURIComponent(url.pathname.split('/').slice(-2)[0]);
       const { json } = await readBody(req);
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const review = (store.reviews || []).find((item) => item.id === id);
       if (!review) { sendError(res, 404, 'review not found'); return true; }
 
@@ -220,14 +222,14 @@ AI 建议：${review.suggestion || '无'}`;
           draft.tasks = [createdTask, ...(draft.tasks || [])];
         }
         return draft;
-      });
+      }, getTenantId(req));
 
       sendJson(res, 200, { review: updatedReview, task: createdTask });
       return true;
     }
 
     if (req.method === 'GET' && url.pathname === '/api/reviews/queue') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const allReviews = store.reviews || [];
       const tasks = store.tasks || [];
 
@@ -291,7 +293,7 @@ AI 建议：${review.suggestion || '无'}`;
     }
 
     if (req.method === 'GET' && url.pathname === '/api/reviews/queue/detailed') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const allReviews = store.reviews || [];
       const tasks = store.tasks || [];
 

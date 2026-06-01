@@ -1,4 +1,4 @@
-import { getUserFromRequest } from '../services/auth.js';
+import { getTenantId, getUserFromRequest } from '../services/auth.js';
 
 // per-(date,userId) in-flight guard：避免同一用户连续点刷新导致重复 LLM 调用
 const inFlightRefresh = new Map();
@@ -17,7 +17,7 @@ export function createRecommendationRoutes({
   return async function recommendationRoutes(req, res, url) {
     // GET /api/recommendations?date=YYYY-MM-DD
     if (req.method === 'GET' && url.pathname === '/api/recommendations') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const user = getUserFromRequest(req, store);
       if (!user) { sendError(res, 401, 'login required'); return true; }
 
@@ -52,7 +52,7 @@ export function createRecommendationRoutes({
 
     // POST /api/recommendations/refresh
     if (req.method === 'POST' && url.pathname === '/api/recommendations/refresh') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const user = getUserFromRequest(req, store);
       if (!user) { sendError(res, 401, 'login required'); return true; }
 
@@ -78,10 +78,10 @@ export function createRecommendationRoutes({
             }
           }
           return draft;
-        });
+        }, getTenantId(req));
 
         // 重新生成
-        const fresh = await loadStore();
+        const fresh = await loadStore(getTenantId(req));
         try {
           const result = await generateDailyTaskSuggestions(date, user.id, fresh, { triggeredBy: 'manual' });
           await updateStore((draft) => {
@@ -92,8 +92,8 @@ export function createRecommendationRoutes({
               candidates: result.candidates
             };
             return draft;
-          });
-          const after = await loadStore();
+          }, getTenantId(req));
+          const after = await loadStore(getTenantId(req));
           const entry = after.dailyTaskSuggestions[date][user.id];
           sendJson(res, 200, { date, ...entry });
         } catch (err) {
@@ -113,7 +113,7 @@ export function createRecommendationRoutes({
     const acceptMatch = url.pathname.match(/^\/api\/recommendations\/([^/]+)\/accept$/);
     if (req.method === 'POST' && acceptMatch) {
       const taskId = acceptMatch[1];
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const user = getUserFromRequest(req, store);
       if (!user) { sendError(res, 401, 'login required'); return true; }
 
@@ -172,7 +172,7 @@ export function createRecommendationRoutes({
           }
         }
         return draft;
-      });
+      }, getTenantId(req));
 
       sendJson(res, 200, { assignment, candidate: candidateSnapshot });
       return true;
