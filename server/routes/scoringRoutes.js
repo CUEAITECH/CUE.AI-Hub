@@ -5,7 +5,7 @@ import {
   canManageAttendance,
   normalizeAttendanceRecord
 } from '../services/scoring.js';
-import { roleForProject, verifySessionToken } from '../services/auth.js';
+import { getTenantId, roleForProject, verifySessionToken } from '../services/auth.js';
 
 function getSessionUser(req, users = [], projectId = '') {
   const header = req.headers.authorization || '';
@@ -59,7 +59,7 @@ export function createScoringRoutes({
 
   return async function scoringRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/scoring/daily') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const projectId = resolveProjectId(store, url);
       const date = url.searchParams.get('date') || todayText();
       const totalBonus = Number(url.searchParams.get('totalBonus') || 0);
@@ -70,7 +70,7 @@ export function createScoringRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/scoring/monthly') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const projectId = resolveProjectId(store, url);
       const month = url.searchParams.get('month') || todayText().slice(0, 7);
       const totalBonus = Number(url.searchParams.get('totalBonus') || 0);
@@ -81,7 +81,7 @@ export function createScoringRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/scoring/weekly') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const projectId = resolveProjectId(store, url);
       const date = url.searchParams.get('date') || todayText();
       const totalBonus = Number(url.searchParams.get('totalBonus') || 0);
@@ -92,7 +92,7 @@ export function createScoringRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/scoring/me') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const projectId = resolveProjectId(store, url);
       const date = url.searchParams.get('date') || todayText();
       const sessionUser = getSessionUser(req, store.users || [], projectId);
@@ -108,7 +108,7 @@ export function createScoringRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/attendance/records') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const projectId = resolveProjectId(store, url);
       const date = url.searchParams.get('date') || todayText();
       const records = byProject(store.attendanceRecords || [], projectId)
@@ -123,7 +123,7 @@ export function createScoringRoutes({
     }
 
     if (req.method === 'GET' && url.pathname === '/api/attendance/weekly') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const projectId = resolveProjectId(store, url);
       const date = url.searchParams.get('date') || todayText();
       const weekStart = weekStartMonday(date);
@@ -137,7 +137,7 @@ export function createScoringRoutes({
 
     if (req.method === 'POST' && url.pathname === '/api/attendance/records') {
       const { json } = await readBody(req);
-      const before = await loadStore();
+      const before = await loadStore(getTenantId(req));
       const projectId = resolveProjectId(before, url, json);
       const sessionUser = getSessionUser(req, before.users || [], projectId);
       const project = (before.projects || []).find((item) => item.id === projectId) || null;
@@ -166,7 +166,7 @@ export function createScoringRoutes({
         draft.attendanceRecords.unshift(record);
         draft.attendanceRecords = draft.attendanceRecords.slice(0, 2000);
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 201, {
         record,
         scoring: buildDailyScores(next, { projectId, date: record.date })

@@ -1,4 +1,5 @@
 import logger from '../logger.js';
+import { getTenantId } from '../services/auth.js';
 export function createReportRoutes({
   loadStore,
   updateStore,
@@ -19,7 +20,7 @@ export function createReportRoutes({
 
   return async function reportRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/reports/evening') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const date = getDateParam(url);
       const entry = (store.eveningReports || {})[date];
       if (!entry) {
@@ -34,7 +35,7 @@ export function createReportRoutes({
       const { json } = await readBody(req);
       const date = json?.date || todayText();
       const finalEntry = await generateEveningReport(date);
-      const updatedStore = await loadStore();
+      const updatedStore = await loadStore(getTenantId(req));
       const alerts = updatedStore.alerts || [];
       sendJson(res, 201, {
         date,
@@ -49,7 +50,7 @@ export function createReportRoutes({
     }
 
     if (req.method === 'POST' && url.pathname === '/api/reports/daily') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const today = todayText();
       const alerts = scanRisks(store);
       const metrics = buildMetrics(store, alerts);
@@ -93,7 +94,7 @@ ${alerts.filter((alert) => alert.severity === 'P1').map((alert) => `- ${alert.ti
         draft.reports = draft.reports || {};
         draft.reports[today] = { report, generatedAt: new Date().toISOString() };
         return draft;
-      });
+      }, getTenantId(req));
 
       let wecomSent = false;
       if (isWeComAvailable()) {
@@ -105,7 +106,7 @@ ${alerts.filter((alert) => alert.severity === 'P1').map((alert) => `- ${alert.ti
     }
 
     if (req.method === 'GET' && url.pathname === '/api/reports/compare') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const date = url.searchParams.get('date') || todayText();
       const eveningEntry = (store.eveningReports || {})[date];
       if (!eveningEntry) {
@@ -141,7 +142,7 @@ ${alerts.filter((alert) => alert.severity === 'P1').map((alert) => `- ${alert.ti
     if (req.method === 'POST' && url.pathname === '/api/reports/meeting-summary') {
       const { json } = await readBody(req);
       const date = json?.date || todayText();
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
 
       const todayAssignments = (store.assignments || []).filter((assignment) => assignment.date === date);
       const eveningEntry = (store.eveningReports || {})[date];
@@ -179,7 +180,7 @@ ${alerts.filter((alert) => alert.severity === 'P1').map((alert) => `- ${alert.ti
           meetingSummaryAt: new Date().toISOString()
         };
         return draft;
-      });
+      }, getTenantId(req));
 
       let wecomSent = false;
       if (isWeComAvailable()) {
@@ -200,7 +201,7 @@ ${alerts.filter((alert) => alert.severity === 'P1').map((alert) => `- ${alert.ti
     }
 
     if (req.method === 'GET' && url.pathname === '/api/reports/meeting-summary') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const date = url.searchParams.get('date') || todayText();
       const dayReport = (store.reports || {})[date] || {};
       sendJson(res, 200, {

@@ -1,3 +1,4 @@
+import { getTenantId } from '../services/auth.js';
 // ── PR 模板生成 ──────────────────────────────────────────────────────────────
 function buildPrBody(task, projectName = '') {
   const acceptance = (task.acceptance || '').trim();
@@ -76,13 +77,13 @@ export function createTaskRoutes({
       const nextStore = await updateStore((store) => {
         store.tasks.unshift(task);
         return store;
-      });
+      }, getTenantId(req));
       sendJson(res, 201, { task, tasks: nextStore.tasks });
       return true;
     }
 
     if (req.method === 'POST' && url.pathname === '/api/tasks/ai-progress') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const results = await estimateTasksProgress(store);
       if (!results.length) {
         sendJson(res, 200, { tasks: store.tasks, suggestions: [], message: '无关联提交，无法估算进度。' });
@@ -108,7 +109,7 @@ export function createTaskRoutes({
           };
         }
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, {
         tasks: next.tasks,
         suggestions: results.filter((result) => result.suggestComplete).map((result) => result.taskId)
@@ -133,7 +134,7 @@ export function createTaskRoutes({
           progressSource: manualPatch ? 'manual' : store.tasks[index].progressSource
         });
         return store;
-      });
+      }, getTenantId(req));
       const task = nextStore.tasks.find((item) => item.id === id);
       if (!task) sendError(res, 404, 'task not found');
       else sendJson(res, 200, { task, tasks: nextStore.tasks });
@@ -145,14 +146,14 @@ export function createTaskRoutes({
       const nextStore = await updateStore((store) => {
         store.tasks = store.tasks.filter((task) => task.id !== id);
         return store;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, { deleted: id, tasks: nextStore.tasks });
       return true;
     }
 
     if (req.method === 'POST' && url.pathname === '/api/plans') {
       const { json } = await readBody(req);
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const tasks = await generatePlan(json?.goal || '', store.members);
       sendJson(res, 200, {
         goal: json?.goal || '',
@@ -165,7 +166,7 @@ export function createTaskRoutes({
     // 为任务在关联项目仓库里创建 Draft PR（含分支），PR body 内嵌 AC checklist
     if (req.method === 'POST' && /^\/api\/tasks\/[^/]+\/create-pr$/.test(url.pathname)) {
       const taskId = decodeURIComponent(url.pathname.split('/')[3]);
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const task = (store.tasks || []).find((t) => t.id === taskId);
       if (!task) { sendError(res, 404, 'task not found'); return true; }
 
@@ -271,7 +272,7 @@ ${acLines}
             t.updatedAt = new Date().toISOString();
           }
           return draft;
-        });
+        }, getTenantId(req));
 
         sendJson(res, 201, {
           prNumber,
@@ -293,7 +294,7 @@ ${acLines}
       const nextStore = await updateStore((store) => {
         store.tasks = [...normalized, ...store.tasks];
         return store;
-      });
+      }, getTenantId(req));
       sendJson(res, 201, { tasks: nextStore.tasks, added: normalized.length });
       return true;
     }
