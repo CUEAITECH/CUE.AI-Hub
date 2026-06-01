@@ -644,7 +644,8 @@ export function createSystemRoutes({
         };
         draft.users.push(createdUser);
         return draft;
-      }, getTenantId(req));
+      // credential-admin 请求无 session，tenantId 应取项目所属组织而非请求 session
+      }, tokenAdmin ? getTenantId(req) : derivedOrgId);
       const project = (before.projects || []).find((p) => p.id === projectId) || null;
       sendJson(res, existingUser ? 200 : 201, { ok: true, user: sanitizeUserForProject(createdUser, projectId, project) });
       return true;

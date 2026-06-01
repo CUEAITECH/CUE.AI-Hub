@@ -541,14 +541,32 @@ export async function updateStore(mutator, tenantId = 'default') {
   const current = await loadStore();   // always full cache for writes
   const next = await mutator(structuredClone(current));
   if (next && tenantId) {
-    // auto-stamp any record that was just created (no tenantId yet)
+    // Snapshot cross-tenant records BEFORE mutation so we can restore them.
+    const crossTenant = {};
     for (const key of FILTERABLE_KEYS) {
-      if (Array.isArray(next[key])) {
-        next[key] = next[key].map((r) =>
-          r && typeof r === 'object' && !r.tenantId
-            ? { ...r, tenantId }
-            : r
-        );
+      if (!Array.isArray(current[key])) continue;
+      crossTenant[key] = new Map(
+        current[key]
+          .filter((r) => r && r.tenantId && r.tenantId !== tenantId)
+          .map((r) => [r.id, r])
+      );
+    }
+
+    for (const key of FILTERABLE_KEYS) {
+      if (!Array.isArray(next[key])) continue;
+      // Stamp new records; restore any cross-tenant record that was modified.
+      next[key] = next[key].map((r) => {
+        if (!r || typeof r !== 'object') return r;
+        if (!r.tenantId) return { ...r, tenantId };          // new → stamp
+        if (r.tenantId !== tenantId) {
+          return crossTenant[key]?.get(r.id) || r;           // restore original
+        }
+        return r;
+      });
+      // Restore cross-tenant records that the mutator deleted.
+      const nextIds = new Set(next[key].map((r) => r?.id).filter(Boolean));
+      for (const [id, original] of (crossTenant[key] || new Map())) {
+        if (!nextIds.has(id)) next[key].push(original);
       }
     }
   }
