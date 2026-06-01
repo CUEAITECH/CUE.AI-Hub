@@ -1,4 +1,5 @@
 import logger from '../logger.js';
+import { getTenantId } from '../services/auth.js';
 export function createAssignmentRoutes({
   loadStore,
   updateStore,
@@ -26,7 +27,7 @@ export function createAssignmentRoutes({
 
   return async function assignmentRoutes(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/assignments') {
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const date = getDateParam(url);
       sendJson(res, 200, {
         date,
@@ -37,7 +38,7 @@ export function createAssignmentRoutes({
 
     if (req.method === 'POST' && url.pathname === '/api/assignments') {
       const { json } = await readBody(req);
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const assignment = normalizeAssignment(json || {}, store);
       if (!assignment.owner || !assignment.taskTitle) {
         sendError(res, 400, 'owner and task are required');
@@ -47,7 +48,7 @@ export function createAssignmentRoutes({
       const nextStore = await updateStore((draft) => {
         draft.assignments = [assignment, ...(draft.assignments || [])].slice(0, 500);
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 201, {
         assignment,
         assignments: (nextStore.assignments || []).filter((item) => item.date === assignment.date)
@@ -60,7 +61,7 @@ export function createAssignmentRoutes({
 
     if (req.method === 'POST' && url.pathname.startsWith('/api/assignments/') && url.pathname.endsWith('/brief')) {
       const id = decodeURIComponent(url.pathname.split('/').at(-2) || '');
-      const store = await loadStore();
+      const store = await loadStore(getTenantId(req));
       const assignment = (store.assignments || []).find((item) => item.id === id);
       if (!assignment) {
         sendError(res, 404, 'assignment not found');
@@ -100,7 +101,7 @@ export function createAssignmentRoutes({
           }
         }
         return draft;
-      });
+      }, getTenantId(req));
       if (!updated) {
         sendError(res, 404, 'assignment not found');
       } else {
@@ -118,7 +119,7 @@ export function createAssignmentRoutes({
       const nextStore = await updateStore((draft) => {
         draft.assignments = (draft.assignments || []).filter((assignment) => assignment.id !== id);
         return draft;
-      });
+      }, getTenantId(req));
       sendJson(res, 200, { deleted: id, assignments: nextStore.assignments || [] });
       return true;
     }
