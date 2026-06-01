@@ -540,7 +540,7 @@ export async function saveStore(nextStore) {
 export async function updateStore(mutator, tenantId = 'default') {
   const current = await loadStore();   // always full cache for writes
   const next = await mutator(structuredClone(current));
-  if (next && tenantId && tenantId !== 'default') {
+  if (next && tenantId) {
     // auto-stamp any record that was just created (no tenantId yet)
     for (const key of FILTERABLE_KEYS) {
       if (Array.isArray(next[key])) {
