@@ -486,10 +486,12 @@ export function migrateStore(store) {
   return rebindStoreExplicitRefs(next);
 }
 
+// 'users' 故意不在此列表中：用户记录通过 orgIds/orgRoles 做权限隔离，
+// 按 tenantId 过滤会导致跨组织切换时 auth/me 找不到 session user。
 const FILTERABLE_KEYS = [
   'tasks', 'members', 'reviews', 'activities', 'standups', 'assignments',
   'attendanceRecords', 'alerts', 'projects', 'planAdjustments', 'roadmapReviews',
-  'riskAnalyses', 'deliverables', 'phases', 'users', 'aiPromptTraces', 'pulls', 'bypasses',
+  'riskAnalyses', 'deliverables', 'phases', 'aiPromptTraces', 'pulls', 'bypasses',
 ];
 
 function filterStoreByTenant(store, tenantId) {
@@ -570,7 +572,9 @@ export async function updateStore(mutator, tenantId = 'default') {
       }
     }
   }
-  return saveStore(next || current);
+  const saved = await saveStore(next || current);
+  // 返回调用方时按 tenant 过滤，避免 POST 响应把其他租户数据暴露给调用方
+  return tenantId && tenantId !== 'default' ? filterStoreByTenant(saved, tenantId) : saved;
 }
 
 export function createId(prefix) {
