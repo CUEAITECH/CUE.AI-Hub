@@ -30,12 +30,10 @@ const state = {
   currentStage: {},
   metrics: {},
   plannedTasks: [],
-  standups: [],
   standupSummary: '',
   report: '',
   eveningReport: '',
   compareReport: '',
-  assignments: [],
   planAdjustments: [],
   docTasks: {},
   deliverables: [],
@@ -4907,7 +4905,10 @@ function bindEvents() {
   });
 
   document.querySelectorAll('[data-route]').forEach((button) => {
-    button.addEventListener('click', () => { setRoute(button.dataset.route); hideHeaderSub(); });
+    button.addEventListener('click', () => {
+      setRoute(button.dataset.route);
+      hideHeaderSub();
+    });
   });
 
   // Mega-bar 导航：hover 一级导航项展开所有子分组（overlay，不推动页面）
