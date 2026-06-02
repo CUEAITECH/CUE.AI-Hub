@@ -9,24 +9,31 @@ CUE 项目中枢是 Cue.AI 团队内部使用的 AI 研发交付指挥系统，�
 ## 命令
 
 ```bash
-npm run dev      # 启动服务（自动加载 .env）
-npm run check    # 语法检查所有 server + src/app.js
+npm run dev          # 启动服务（自动加载 .env）
+npm run check        # 语法检查：自动扫描 server/ src/ scripts/ 下所有 .js/.mjs
+npm run test:unit    # 单元测试：自动运行 scripts/test-*.mjs（新增测试文件无需改配置）
+npm run test:regression  # 回归测试
+npm run test:ci      # CI 全量：check + test:unit + test:regression
 ```
 
-> 无测试框架，语法验证用 `node --check`。服务启动在 `http://127.0.0.1:4317`，端口由 `PORT` 环境变量控制。
+> 语法验证用 `node --check`（通过 `scripts/check-syntax.mjs` 自动扫描，无需手动维护文件列表）。服务启动在 `http://127.0.0.1:4317`，端口由 `PORT` 环境变量控制。
 
 ## 技术栈
 
-- Node.js 18+ ES Modules，零框架（原生 `http` 模块）
+- Node.js 18+ ES Modules，原生 `http` 入口 + Fastify v2 bridge
 - LLM：`openai` SDK（`gpt-5.5` 规划/解释 + `gpt-5.4-mini` review map-chunk 高频低成本）
-- 数据持久化：`server/data/db.json`（JSON 文件，进程内 in-memory cache）
-- 前端：单文件 `index.html` + `src/app.js`（无打包、无框架、浏览器原生 ESM）
+- 数据持久化：`server/data/db.json` 兼容层 + `server/data/v2.db` SQLite v2 层
+- 前端：浏览器原生 ESM，无打包；`src/app.js` 仍是主控入口，新增代码优先走 `src/api/`、`src/state/`、`src/features/`
 
 ## 架构
 
 ```
-server/index.js         ← 路由总入口（handleApi 函数，所有路由顺序匹配）
-server/store.js         ← JSON 文件读写 + in-memory cache + 数据迁移
+server/index.js         ← HTTP 总入口：静态资源、/v2/app facade、Fastify /v2 bridge、legacy allowlist
+server/store.js         ← JSON 兼容层读写 + in-memory cache + 数据迁移 + SQLite 防抖同步
+server/v2/app.js        ← v2 鉴权 choke point + prefix router
+server/v2/fastifyApp.js ← Fastify bridge，/v2/* 进入 handleV2
+server/v2/routes/       ← v2 native resources：actors/events/pulls/reviews/observability/gateway 等
+server/db/              ← SQLite 初始化、schema、写入 actor
 server/services/
   claude.js             ← Claude API 封装（prompt caching、降级返回 null）
   planner.js            ← AI 任务规划（LLM 优先 → 规则引擎降级）
@@ -40,21 +47,34 @@ server/services/
   wecom.js              ← 企业微信 Webhook 推送
 server/data/
   seed.json             ← 初始数据（db.json 不存在时从此读取）
-  db.json               ← 运行时数据（.gitignore 中，不提交）
+  db.json               ← legacy/compat 运行时数据（.gitignore 中，不提交）
+  v2.db                 ← SQLite v2 运行时数据（.gitignore 中，不提交）
   openapi.js            ← GET /api/openapi.json 的规范定义
 src/
-  app.js                ← 单文件前端（state 对象 + render* 函数 + bindEvents）
+  app.js                ← 主前端 shell（全局 state + legacy render/bindEvents，迁移中）
+  api/                  ← domain API clients，负责 /api → /v2/app facade 映射或 native /v2 调用
+  state/                ← domain stores/selectors
+  features/             ← 已抽出的 feature renderer / interaction modules
   styles.css
-index.html              ← 8 个 section.view 对应 8 个导航页
+index.html              ← 多个 section.view 对应导航页
 ```
 
 ### 路由匹配规则
 
-`server/index.js` 的 `handleApi` 是纯顺序 if-else 链，**路由定义顺序即优先级**。新增路由前确认没有同路径的重复定义（历史上曾出现 POST `/api/reports/evening` 重复定义导致下面的路由永远无法命中）。
+`server/index.js` 先处理 `/v2/app/*` facade，再处理 Fastify `/v2/*`，再放行少量外部 legacy `/api/*`，最后禁用普通 v1 `/api/*`。legacy `handleApi` 和 route modules 仍是顺序匹配，**路由定义顺序即优先级**。新增路由前确认没有同路径的重复定义（历史上曾出现 POST `/api/reports/evening` 重复定义导致下面的路由永远无法命中）。
 
 ### Store 层
 
-`store.js` 维护一个 in-memory `cache`。`loadStore()` 单例读取，`saveStore()` 全量覆盖写入，`updateStore(mutator)` 提供 structuredClone + 原子更新。`migrateStore()` 在每次启动时自动补全缺失字段（加新字段时在这里设默认值）。
+`store.js` 维护一个 in-memory `cache`。`loadStore()` 单例读取，`saveStore()` 全量覆盖写入，`updateStore(mutator)` 提供 structuredClone + 原子更新。`migrateStore()` 在每次启动时自动补全缺失字段（加新字段时在这里设默认值）。写入后会防抖同步到 SQLite，供 v2 native routes 读取。生产环境 bootstrap 默认用户时必须显式配置 `HUB_ADMIN_PASSWORD`/`HUB_LOGIN_PASSWORD`，不能落到开发默认密码。
+
+### V2 鉴权
+
+`server/v2/app.js` 是 v2 native endpoints 的鉴权边界：
+- `/v2/health`、`/v2/info`、`/v2/openapi.json`、`/v2/gateway/validate` 豁免。
+- `cue_` API key 走 `gatewayAuth()`，tenant 从 key 记录读取。
+- 登录 session 可访问非 gateway v2 routes，tenant 从 JWT 的 `orgId`/`tenantId` 读取。
+- legacy `CUE_API_KEY` 仅作外部系统兼容，tenant 固定为 `default`。
+- 其余匿名请求返回 401，不能通过 `X-Tenant-Id` 自行落入 default tenant。
 
 ### LLM 调用约定
 

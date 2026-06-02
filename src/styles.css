@@ -21,7 +21,7 @@
   /* ── 侧边栏专属 token（浅色，与主内容区一致） ── */
   --sb-bg:        #ffffff;
   --sb-bg-hover:  #f1f5f9;
-  --sb-bg-active: rgba(37,99,235,.07);
+  --sb-bg-active: rgba(0,0,0,.06);
   --sb-text:      #1e293b;
   --sb-text-dim:  #94a3b8;
   --sb-border:    rgba(15,23,42,.08);
@@ -93,12 +93,19 @@ body:not(.authenticated) .app-shell {
   flex-shrink: 0;
 }
 
+.sb-org-header {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--sb-border);
+}
+
 .sb-org-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 12px 12px 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 8px 10px 12px;
   border: none;
   background: transparent;
   color: var(--sb-text);
@@ -107,7 +114,6 @@ body:not(.authenticated) .app-shell {
   cursor: pointer;
   text-align: left;
   transition: background .12s;
-  border-bottom: 1px solid var(--sb-border);
 }
 .sb-org-btn:hover { background: var(--sb-bg-hover); }
 .sb-org-btn .ws-chevron { color: var(--sb-text-dim); margin-left: auto; }
@@ -153,8 +159,9 @@ body:not(.authenticated) .app-shell {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 0 12px;
+  width: calc(100% - 12px);
+  margin: 1px 6px;
+  padding: 0 8px;
   height: 32px;
   border: none;
   background: transparent;
@@ -164,7 +171,7 @@ body:not(.authenticated) .app-shell {
   cursor: pointer;
   text-align: left;
   transition: background .1s, color .1s;
-  border-radius: 0;
+  border-radius: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -174,14 +181,13 @@ body:not(.authenticated) .app-shell {
 .sb-item:hover svg { color: var(--sb-text); }
 .sb-item.active {
   background: var(--sb-bg-active);
-  color: var(--sb-accent);   /* 浅色主题：深蓝色文字，满足 4.5:1 对比度要求 */
-  font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--sb-accent);
+  color: var(--sb-text);
+  font-weight: 500;
 }
-.sb-item.active svg { color: var(--sb-accent); }
+.sb-item.active svg { color: var(--sb-text); }
 
 /* 子级条目（稍微缩进） */
-.sb-item-child { padding-left: 28px; height: 28px; font-size: 12.5px; }
+.sb-item-child { padding-left: 24px; height: 28px; font-size: 12.5px; }
 .sb-item-hidden { display: none !important; }
 .sb-item-legacy { color: var(--sb-text-dim); font-size: 12px; }
 
@@ -254,11 +260,11 @@ body:not(.authenticated) .app-shell {
 .sb-project-btn:hover { color: #fff; }
 .sb-project-dropdown { top: calc(100% + 4px); left: 0; right: 0; }
 
-/* ── 设置区 ─────────────────────────────────── */
+/* ── 设置区（在 sb-nav flex 列内） ──────────── */
 .sb-settings {
-  flex-shrink: 0;
   border-top: 1px solid var(--sb-border);
   padding: 6px 0 4px;
+  flex-shrink: 0;
 }
 
 .sb-section-label {
@@ -275,9 +281,13 @@ body:not(.authenticated) .app-shell {
 .sb-footer {
   flex-shrink: 0;
   border-top: 1px solid var(--sb-border);
-  padding: 8px 10px;
+  padding: 6px 10px 8px;
   display: flex;
   flex-direction: column;
+  gap: 2px;
+}
+.sb-footer .status-pill {
+  align-self: flex-start;
 }
 
 .sb-user-btn {
@@ -319,26 +329,25 @@ body:not(.authenticated) .app-shell {
   font-weight: 500;
 }
 
-/* ── 折叠切换按钮 ───────────────────────────── */
+/* ── 折叠切换按钮（移至顶栏右侧） ───────────── */
 .sb-collapse-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--sb-border);
+  border: none;
   border-radius: 6px;
-  background: var(--sb-bg);
+  background: transparent;
   color: var(--sb-text-dim);
   cursor: pointer;
-  margin: 4px auto 6px;
-  transition: background .12s, color .12s, border-color .12s;
+  margin: 0 4px 0 0;
+  transition: background .12s, color .12s;
   flex-shrink: 0;
 }
 .sb-collapse-btn:hover {
   background: var(--sb-bg-hover);
   color: var(--sb-text);
-  border-color: var(--sb-accent);
 }
 
 /* ── 折叠状态 ───────────────────────────────── */
@@ -360,26 +369,37 @@ body:not(.authenticated) .app-shell {
 .sidebar.sb-collapsed #topbarOrgName,
 .sidebar.sb-collapsed #topbarProjectName,
 .sidebar.sb-collapsed .ws-sep { display: none !important; }
-/* 折叠时：保留 group body，只折叠图标居中、隐藏文字
-   ── 这样折叠态仍可通过图标导航，不会出现空白侧栏 ── */
-.sidebar.sb-collapsed .sb-item { justify-content: center; padding: 0; height: 32px; }
+/* 折叠时：图标居中、文字隐藏
+   ── font-size:0 消掉直接文本节点；gap:0 防止图标偏心 ── */
+.sidebar.sb-collapsed .sb-item {
+  justify-content: center;
+  padding: 0;
+  height: 32px;
+  margin: 1px;
+  width: calc(100% - 2px);
+  font-size: 0 !important;
+  gap: 0 !important;
+}
 .sidebar.sb-collapsed .sb-item-child { padding-left: 0; }
-.sidebar.sb-collapsed .sb-org-btn { justify-content: center; padding: 10px; }
-/* group body 保持显示（不做 display:none），只隐藏分组标题行（用分割线替代） */
+.sidebar.sb-collapsed .sb-org-btn { justify-content: center; padding: 10px 4px; flex: 1; }
+.sidebar.sb-collapsed .sb-collapse-btn { margin: 0; }
+/* group body 保持显示，只隐藏分组标题行 */
 .sidebar.sb-collapsed .sb-group-header { display: none; }
-/* 折叠时组间加分割线（::before 伪元素） */
+/* 折叠时组间加分割线 */
 .sidebar.sb-collapsed .sb-group + .sb-group::before,
 .sidebar.sb-collapsed .sb-settings::before {
   content: '';
   display: block;
   height: 1px;
   background: var(--sb-border);
-  margin: 4px 10px;
+  margin: 4px 6px;
 }
 .sidebar.sb-collapsed .sb-footer { align-items: center; padding: 8px 4px; }
 .sidebar.sb-collapsed .sb-user-btn { justify-content: center; padding: 6px 0; }
 .sidebar.sb-collapsed .status-pill { display: none !important; }
 .sidebar.sb-collapsed .sb-settings .sb-item { height: 32px; }
+/* 折叠时项目切换按钮区域的空白项隐藏 */
+.sidebar.sb-collapsed #topbarProjectWrap { display: none; }
 
 /* ── 主内容区（sidebar 右侧） ───────────────── */
 .app-shell > main {
@@ -8851,10 +8871,13 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 
 #observatory {
   padding: 1.25rem 1.5rem;
-  display: flex;
   flex-direction: column;
   gap: 1rem;
   max-width: 960px;
+}
+/* display 交给 .view/.view.active 控制，不在这里覆盖 */
+#observatory.active {
+  display: flex;
 }
 
 /* ── Section header ───────────────────────────────────────────── */
@@ -10271,8 +10294,39 @@ select:disabled {
 }
 
 .cfg-header {
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
+
+/* ── 系统设置 Tab 导航 ── */
+.cfg-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border, rgba(15,23,42,.1));
+  margin-bottom: 24px;
+}
+
+.cfg-tab {
+  padding: 8px 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-muted, #64748b);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+  border-radius: 0;
+}
+.cfg-tab:hover { color: var(--text-primary, #0f172a); }
+.cfg-tab.active {
+  color: var(--text-primary, #0f172a);
+  border-bottom-color: #2563eb;
+  font-weight: 600;
+}
+
+.cfg-panel { }
+.cfg-panel[hidden] { display: none; }
 
 .cfg-title {
   font-size: 1.35rem;

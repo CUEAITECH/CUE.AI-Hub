@@ -80,80 +80,89 @@ function buildHtml(config) {
     <div class="cfg-page">
       <div class="cfg-header">
         <h2 class="cfg-title">系统设置</h2>
-        <p class="cfg-subtitle">配置立即生效，无需重启服务。API Key 等敏感值在展示时自动打码。</p>
       </div>
 
-      <form id="cfgForm" class="cfg-form" autocomplete="off">
-        ${groupsHtml}
+      <!-- Tab 导航 -->
+      <nav class="cfg-tabs" role="tablist">
+        <button class="cfg-tab active" role="tab" aria-selected="true"  data-cfg-tab="interface">接口配置</button>
+        <button class="cfg-tab"        role="tab" aria-selected="false" data-cfg-tab="org">组织管理</button>
+        <button class="cfg-tab"        role="tab" aria-selected="false" data-cfg-tab="apikeys">API 密钥</button>
+      </nav>
 
-        <div class="cfg-actions">
-          <button type="submit" class="cfg-btn cfg-btn-primary" id="cfgSaveBtn">
-            保存配置
-          </button>
-          <button type="button" class="cfg-btn cfg-btn-ghost" id="cfgSyncBtn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            同步到 PR-Agent
-          </button>
-          <button type="button" class="cfg-btn cfg-btn-ghost" id="cfgReloadBtn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            重新加载
-          </button>
-        </div>
-      </form>
-
-      <section class="cfg-group" id="cfgOrgSection">
-        <h3 class="cfg-group-title">组织管理</h3>
-        <p class="cfg-gateway-desc">查看并管理你所在的组织，邀请成员加入当前组织。</p>
-        <div id="cfgOrgList" class="cfg-gateway-list"><p class="cfg-gateway-empty">加载中…</p></div>
-        <form id="cfgInviteForm" class="cfg-gateway-create" autocomplete="off" style="margin-top:12px;">
-          <h4 style="margin:0 0 10px;font-size:.88rem;color:var(--text-muted);">邀请成员到当前组织</h4>
-          <div class="cfg-field">
-            <label class="cfg-label"><span class="cfg-label-text">用户名 / 邮箱 / 手机号</span></label>
-            <input class="cfg-input" id="inviteIdentifier" type="text" placeholder="输入已注册的用户名、邮箱或手机号" autocomplete="off" />
+      <!-- Panel: 接口配置 -->
+      <div class="cfg-panel" data-cfg-panel="interface">
+        <form id="cfgForm" class="cfg-form" autocomplete="off">
+          ${groupsHtml}
+          <div class="cfg-actions">
+            <button type="submit" class="cfg-btn cfg-btn-primary" id="cfgSaveBtn">保存配置</button>
+            <button type="button" class="cfg-btn cfg-btn-ghost" id="cfgSyncBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              同步到 PR-Agent
+            </button>
+            <button type="button" class="cfg-btn cfg-btn-ghost" id="cfgReloadBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              重新加载
+            </button>
           </div>
-          <div class="cfg-field">
-            <label class="cfg-label"><span class="cfg-label-text">角色</span></label>
-            <select class="cfg-input" id="inviteRole">
-              <option value="developer">开发者</option>
-              <option value="hr_manager">HR 管理员</option>
-              <option value="project_admin">组织管理员</option>
-            </select>
-          </div>
-          <button type="submit" class="cfg-btn cfg-btn-primary" id="inviteBtn">邀请加入</button>
         </form>
-      </section>
-
-      <section class="cfg-group cfg-group-gateway" id="cfgGatewaySection">
-        <h3 class="cfg-group-title">API 访问密钥</h3>
-        <p class="cfg-gateway-desc">生成密钥后可在外部系统中以 <code>Authorization: Bearer cue_xxx</code> 头调用本 API。密钥仅在创建时完整显示一次。</p>
-        <div id="cfgGatewayList" class="cfg-gateway-list">
-          <p class="cfg-gateway-empty">加载中…</p>
+        <div class="cfg-info-box">
+          <strong>说明</strong>
+          <ul>
+            <li><b>DB</b>：值来自数据库，覆盖 env 变量</li>
+            <li><b>ENV</b>：值来自服务器环境变量</li>
+            <li><b>默认</b>：内置默认值</li>
+            <li>API Key 留空保存 = 删除 DB 覆盖，恢复使用 env 变量</li>
+            <li>「同步到 PR-Agent」= 把 API Key 写入 GitHub Secrets，并更新 PR-Agent workflow YAML</li>
+          </ul>
         </div>
-        <form id="cfgGatewayForm" class="cfg-gateway-create" autocomplete="off">
-          <div class="cfg-field">
-            <label class="cfg-label"><span class="cfg-label-text">密钥名称</span></label>
-            <input class="cfg-input" id="gwKeyName" type="text" placeholder="用途描述，例如：production-server" autocomplete="off" />
-          </div>
-          <div class="cfg-field">
-            <label class="cfg-label"><span class="cfg-label-text">速率限制（次/分钟）</span></label>
-            <input class="cfg-input" id="gwRateLimit" type="number" value="100" min="1" max="10000" autocomplete="off" />
-          </div>
-          <button type="submit" class="cfg-btn cfg-btn-primary" id="gwCreateBtn">生成新 API Key</button>
-        </form>
-      </section>
+      </div>
+
+      <!-- Panel: 组织管理 -->
+      <div class="cfg-panel" data-cfg-panel="org" hidden>
+        <section class="cfg-group" id="cfgOrgSection">
+          <h3 class="cfg-group-title">组织管理</h3>
+          <p class="cfg-gateway-desc">查看并管理你所在的组织，邀请成员加入当前组织。</p>
+          <div id="cfgOrgList" class="cfg-gateway-list"><p class="cfg-gateway-empty">加载中…</p></div>
+          <form id="cfgInviteForm" class="cfg-gateway-create" autocomplete="off" style="margin-top:12px;">
+            <h4 style="margin:0 0 10px;font-size:.88rem;color:var(--text-muted);">邀请成员到当前组织</h4>
+            <div class="cfg-field">
+              <label class="cfg-label"><span class="cfg-label-text">用户名 / 邮箱 / 手机号</span></label>
+              <input class="cfg-input" id="inviteIdentifier" type="text" placeholder="输入已注册的用户名、邮箱或手机号" autocomplete="off" />
+            </div>
+            <div class="cfg-field">
+              <label class="cfg-label"><span class="cfg-label-text">角色</span></label>
+              <select class="cfg-input" id="inviteRole">
+                <option value="developer">开发者</option>
+                <option value="hr_manager">HR 管理员</option>
+                <option value="project_admin">组织管理员</option>
+              </select>
+            </div>
+            <button type="submit" class="cfg-btn cfg-btn-primary" id="inviteBtn">邀请加入</button>
+          </form>
+        </section>
+      </div>
+
+      <!-- Panel: API 密钥 -->
+      <div class="cfg-panel" data-cfg-panel="apikeys" hidden>
+        <section class="cfg-group cfg-group-gateway" id="cfgGatewaySection">
+          <h3 class="cfg-group-title">API 访问密钥</h3>
+          <p class="cfg-gateway-desc">生成密钥后可在外部系统中以 <code>Authorization: Bearer cue_xxx</code> 头调用本 API。密钥仅在创建时完整显示一次。</p>
+          <div id="cfgGatewayList" class="cfg-gateway-list"><p class="cfg-gateway-empty">加载中…</p></div>
+          <form id="cfgGatewayForm" class="cfg-gateway-create" autocomplete="off">
+            <div class="cfg-field">
+              <label class="cfg-label"><span class="cfg-label-text">密钥名称</span></label>
+              <input class="cfg-input" id="gwKeyName" type="text" placeholder="用途描述，例如：production-server" autocomplete="off" />
+            </div>
+            <div class="cfg-field">
+              <label class="cfg-label"><span class="cfg-label-text">速率限制（次/分钟）</span></label>
+              <input class="cfg-input" id="gwRateLimit" type="number" value="100" min="1" max="10000" autocomplete="off" />
+            </div>
+            <button type="submit" class="cfg-btn cfg-btn-primary" id="gwCreateBtn">生成新 API Key</button>
+          </form>
+        </section>
+      </div>
 
       <div id="cfgStatus" class="cfg-status" hidden></div>
-
-      <div class="cfg-info-box">
-        <strong>说明</strong>
-        <ul>
-          <li><b>DB</b>：值来自数据库，覆盖 env 变量（前端保存的都写到这里）</li>
-          <li><b>ENV</b>：值来自服务器环境变量</li>
-          <li><b>默认</b>：内置默认值</li>
-          <li>API Key 留空保存 = 删除 DB 覆盖，恢复使用 env 变量</li>
-          <li>「同步到 PR-Agent」= 把 API Key 写入 GitHub Secrets，并更新 PR-Agent workflow YAML 的 Base URL + 模型</li>
-        </ul>
-      </div>
     </div>`;
 }
 
@@ -196,8 +205,24 @@ export async function renderSettings(helpers) {
   }
 }
 
+function switchCfgTab(container, tabId) {
+  container.querySelectorAll('.cfg-tab').forEach((btn) => {
+    const active = btn.dataset.cfgTab === tabId;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', String(active));
+  });
+  container.querySelectorAll('.cfg-panel').forEach((panel) => {
+    panel.hidden = panel.dataset.cfgPanel !== tabId;
+  });
+}
+
 function bindEvents(container, helpers) {
   const { configApi, gatewayApi, toast } = helpers;
+
+  // Tab 切换
+  container.querySelectorAll('.cfg-tab').forEach((btn) => {
+    btn.addEventListener('click', () => switchCfgTab(container, btn.dataset.cfgTab));
+  });
   // 保存
   const form = container.querySelector('#cfgForm');
   form?.addEventListener('submit', async (e) => {
