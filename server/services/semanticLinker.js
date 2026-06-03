@@ -201,6 +201,42 @@ export async function buildHybridAnalysis(store) {
  * 三个调用方共用：planningRoutes / scheduler / projectRoutes(daily-scan)
  * 返回 { semanticLinks, riskAnalyses, healthAnalysis, aiAnalysisUpdatedAt }
  */
+/**
+ * E1: 高置信度 commit-task 关联 → 把对应任务标记为 completed。
+ * 只升级（pending/in_progress → completed），不降级已完成任务。
+ * confidence ≥ 0.75 才触发（TraceLLM benchmark 对标，SPEC-E1 REQ-E1-NFR-001）。
+ * @param {Array} commitTaskLinks - semanticLinks.commitTaskLinks
+ * @returns {Promise<string[]>} 实际翻转的 task id 列表
+ */
+export async function applyCommitLinksToTasks(commitTaskLinks) {
+  if (!Array.isArray(commitTaskLinks) || !commitTaskLinks.length) return [];
+
+  const highConfidence = commitTaskLinks.filter(
+    (link) => Number(link.confidence || 0) >= 0.75
+  );
+  if (!highConfidence.length) return [];
+
+  const taskIds = new Set(highConfidence.map((l) => l.taskId).filter(Boolean));
+  const flipped = [];
+
+  await updateStore((draft) => {
+    (draft.tasks || []).forEach((task) => {
+      if (taskIds.has(task.id) && task.status !== 'completed') {
+        task.status = 'completed';
+        task.updatedAt = new Date().toISOString();
+        flipped.push(task.id);
+      }
+    });
+    return draft;
+  });
+
+  if (flipped.length) {
+    const { default: logger } = await import('../logger.js');
+    logger.info(`[E1] ${flipped.length} 个任务由 commit 覆盖自动标记 completed: ${flipped.join(', ')}`);
+  }
+  return flipped;
+}
+
 export async function refreshAnalysisIntoStore() {
   const snap = await loadStore();
   const analysis = await buildHybridAnalysis(snap);
@@ -211,5 +247,10 @@ export async function refreshAnalysisIntoStore() {
     healthAnalysis: analysis.healthAnalysis || null,
     aiAnalysisUpdatedAt: analysis.generatedAt
   }));
+
+  // E1: 高置信度 commit 关联 → 自动翻转任务状态
+  const commitTaskLinks = analysis.semanticLinks?.commitTaskLinks || [];
+  await applyCommitLinksToTasks(commitTaskLinks);
+
   return analysis;
 }

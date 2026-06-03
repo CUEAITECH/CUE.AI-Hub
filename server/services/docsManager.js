@@ -558,9 +558,18 @@ export function selectDailyDocTasks(tasks, limit = 8, selectionContext = {}) {
       .map((t) => String(t.title || '').trim())
   );
 
-  // 有 semanticLink commit 覆盖的 hub 任务标题 → 降权（可能已在进行中）
+  // E1：高置信度 commit 覆盖的任务也视为完成，加入 completedTitles（SPEC-E1 防重导入）
+  // confidence ≥ 0.75 才算高置信度（TraceLLM benchmark 对标）
   const commitLinks = selectionContext.semanticLinks?.commitTaskLinks || [];
   const hubById = new Map(hubTasks.map((t) => [t.id, t]));
+  commitLinks
+    .filter((link) => Number(link.confidence || 0) >= 0.75)
+    .forEach((link) => {
+      const task = hubById.get(link.taskId);
+      if (task) completedTitles.add(String(task.title || '').trim());
+    });
+
+  // 有 semanticLink commit 覆盖的 hub 任务标题（含低置信度）→ 降权（可能已在进行中）
   const titlesWithCommit = new Set(
     commitLinks.map((link) => hubById.get(link.taskId)?.title).filter(Boolean)
   );
@@ -794,6 +803,22 @@ export function makeSlugId(createId) {
       .slice(0, 40);
     return `${prefix}_${normalized || createId('node').replace(/^node_/, '')}`;
   };
+}
+
+/**
+ * 按 (sourceDoc + title) 生成稳定、幂等的 task ID（djb2 hash → base36）。
+ * 重解析同一文档的同名任务产生相同 ID，不再用随机 nanoid，保证 E1 的任务追溯不归零。
+ * @param {string} sourceDoc - 来源文档路径
+ * @param {string} title     - 任务标题
+ * @returns {string}         - 如 "task_3f2a8c1"
+ */
+export function stableTaskId(sourceDoc, title) {
+  const raw = String(sourceDoc || '') + '|' + String(title || '');
+  let h = 5381;
+  for (let i = 0; i < raw.length; i++) {
+    h = (Math.imul(h, 33) ^ raw.charCodeAt(i)) >>> 0;
+  }
+  return `task_${h.toString(36).padStart(7, '0')}`;
 }
 
 export function normalizeTitle(value) {
@@ -1106,7 +1131,7 @@ export async function importDocsForProject(project, projectId, importLimit) {
           phaseId: findPhaseForDeliverable(task.deliverableTitle || task.title, parsedPhasesResult),
           title: task.deliverableTitle || task.title,
           owner: task.owner || '',
-          acceptance: task.description || '',
+          acceptance: (task.acceptance && task.acceptance !== task.description) ? task.acceptance : '',
           keywords: [task.title, task.deliverableTitle, task.sourceDoc].filter(Boolean),
           status: task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '推进中' : '待补证据',
           progress: task.status === 'completed' ? 100 : 0,  // 进度由子任务聚合，不在此硬编码
@@ -1136,7 +1161,7 @@ export async function importDocsForProject(project, projectId, importLimit) {
           phaseId: findPhaseForDeliverable(fallbackTitle, parsedPhasesResult),
           title: fallbackTitle,
           owner: task.owner || '',
-          acceptance: task.acceptance || task.description || '',
+          acceptance: (task.acceptance && task.acceptance !== task.description) ? task.acceptance : '',
           keywords: [task.title, task.deliverableTitle, task.sourceDoc].filter(Boolean),
           status: task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '推进中' : '待补证据',
           progress: 0,
@@ -1152,7 +1177,13 @@ export async function importDocsForProject(project, projectId, importLimit) {
       }
 
       if (!duplicate) {
-        const taskId = createId('task');
+        // stableTaskId：按 (sourceDoc + title) hash 生成稳定 ID，重解析不归零（SPEC-L2 REQ-L2-005）
+        const taskId = stableTaskId(task.sourceDoc, task.title);
+        const safeAcceptance = (task.acceptance && task.acceptance !== task.description)
+          ? task.acceptance
+          : (deliverable?.acceptance && deliverable.acceptance !== task.description)
+            ? deliverable.acceptance
+            : '';
         existing.unshift({
           id: taskId,
           title: task.title,
@@ -1163,11 +1194,17 @@ export async function importDocsForProject(project, projectId, importLimit) {
           priority: task.priority || 'P1',
           status: task.status || 'pending',
           description: task.description || '',
+          businessNote: task.businessNote || '',
+          dependencies: Array.isArray(task.dependencies) ? task.dependencies : [],
+          requirementRefs: Array.isArray(task.requirementRefs) ? task.requirementRefs : [],
+          evidenceRefs: [],
+          milestoneId: task.milestoneId || null,
+          e2Status: 'not-tested',
           dueDate: task.dueDate || '',
           sourceDoc: task.sourceDoc || '',
           projectId,
           deliverableId: deliverable?.id || null,
-          acceptance: task.acceptance || deliverable?.acceptance || task.description || '',
+          acceptance: safeAcceptance,
           createdAt: new Date().toISOString()
         });
         if (deliverable && !deliverable.taskIds?.includes(taskId)) {
@@ -1186,7 +1223,11 @@ export async function importDocsForProject(project, projectId, importLimit) {
         if (deliverable && isBindingPlausible(duplicate.title, deliverable, parsedPhasesResult)) {
           duplicate.deliverableId = deliverable.id;
           if (isPlaceholderAcceptance(duplicate.acceptance)) {
-            duplicate.acceptance = task.acceptance || deliverable.acceptance || task.description || duplicate.acceptance || '';
+            // 只用独立的 acceptance（非 description 复制）；description 不作兜底
+            const candidateAcceptance = (task.acceptance && task.acceptance !== task.description) ? task.acceptance
+              : (deliverable.acceptance && deliverable.acceptance !== task.description) ? deliverable.acceptance
+              : null;
+            duplicate.acceptance = candidateAcceptance || duplicate.acceptance || '';
           }
           if (!deliverable.taskIds?.includes(duplicate.id)) {
             deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];

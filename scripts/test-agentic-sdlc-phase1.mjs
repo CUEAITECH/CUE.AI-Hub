@@ -154,6 +154,179 @@ test('prompt 包含 description 和 businessNote 分开要求', () => {
   );
 });
 
+// ─── Task 3: stableTaskId 幂等 ID ─────────────────────────────────────────
+// 注意：docsManager.js 引入 store.js/SQLite，不能在测试中直接 import。
+// 改用从源码中提取并独立运行同等逻辑来验证正确性。
+
+console.log('\nTask 3: stableTaskId — 幂等任务 ID\n');
+
+// 与 docsManager.js 中 stableTaskId 实现完全相同的纯函数（djb2 hash）
+function stableTaskId(sourceDoc, title) {
+  const raw = String(sourceDoc || '') + '|' + String(title || '');
+  let h = 5381;
+  for (let i = 0; i < raw.length; i++) {
+    h = (Math.imul(h, 33) ^ raw.charCodeAt(i)) >>> 0;
+  }
+  return `task_${h.toString(36).padStart(7, '0')}`;
+}
+
+// 验证源码中的实现与本测试逻辑一致（文本匹配）
+test('docsManager.js 包含 stableTaskId 函数定义', () => {
+  const src = readFileSync(new URL('../server/services/docsManager.js', import.meta.url), 'utf8');
+  assert.ok(src.includes('export function stableTaskId'), 'stableTaskId 应以 export function 形式导出');
+  assert.ok(src.includes('Math.imul(h, 33) ^ raw.charCodeAt(i)'), 'djb2 hash 实现应存在');
+  assert.ok(src.includes("task_${h.toString(36)"), 'ID 前缀应为 task_');
+});
+
+test('docsManager.js 中 createId(\'task\') 已替换为 stableTaskId', () => {
+  const src = readFileSync(new URL('../server/services/docsManager.js', import.meta.url), 'utf8');
+  // 不应再有 createId('task') 调用
+  assert.ok(!src.includes("createId('task')"), "createId('task') 应已被替换为 stableTaskId");
+});
+
+test('相同输入产生相同 ID', () => {
+  const id1 = stableTaskId('docs/plan.md', '实现学生端 TRTC 进房');
+  const id2 = stableTaskId('docs/plan.md', '实现学生端 TRTC 进房');
+  assert.equal(id1, id2, '相同 (sourceDoc, title) 应产生相同 ID');
+});
+
+test('不同 title 产生不同 ID', () => {
+  const id1 = stableTaskId('docs/plan.md', '任务 A');
+  const id2 = stableTaskId('docs/plan.md', '任务 B');
+  assert.notEqual(id1, id2, '不同 title 应产生不同 ID');
+});
+
+test('不同 sourceDoc 产生不同 ID', () => {
+  const id1 = stableTaskId('docs/plan-a.md', '同名任务');
+  const id2 = stableTaskId('docs/plan-b.md', '同名任务');
+  assert.notEqual(id1, id2, '不同 sourceDoc 应产生不同 ID');
+});
+
+test('ID 以 task_ 开头', () => {
+  const id = stableTaskId('docs/plan.md', '任务');
+  assert.ok(id.startsWith('task_'), `ID 应以 task_ 开头，实际: ${id}`);
+});
+
+test('空输入不崩溃', () => {
+  const id = stableTaskId('', '');
+  assert.ok(id.startsWith('task_'), '空输入应返回有效 ID');
+});
+
+// ─── Task 4: selectDailyDocTasks 防重导入 ─────────────────────────────────
+// 纯逻辑测试：不 import docsManager，直接测过滤核心逻辑
+
+console.log('\nTask 4: selectDailyDocTasks — 高置信度 commit 防重导入\n');
+
+function simulateFilter(hubTasks, commitLinks, candidates) {
+  // 复刻 selectDailyDocTasks 的 completedTitles 构建逻辑
+  const completedTitles = new Set(
+    hubTasks
+      .filter((t) => t.status === 'completed' || Number(t.progress || 0) >= 90)
+      .map((t) => String(t.title || '').trim())
+  );
+  const hubById = new Map(hubTasks.map((t) => [t.id, t]));
+  commitLinks
+    .filter((link) => Number(link.confidence || 0) >= 0.75)
+    .forEach((link) => {
+      const task = hubById.get(link.taskId);
+      if (task) completedTitles.add(String(task.title || '').trim());
+    });
+  return candidates.filter((c) => !completedTitles.has(String(c.title || '').trim()));
+}
+
+test('confidence=0.85 的 commit 覆盖任务不被重复导入', () => {
+  const hubTasks = [{ id: 'task_a', title: '已有 commit 的任务', status: 'pending', progress: 0 }];
+  const commitLinks = [{ activityId: 'c1', taskId: 'task_a', confidence: 0.85, reason: '测试' }];
+  const candidates = [
+    { title: '已有 commit 的任务', status: 'pending' },
+    { title: '全新任务', status: 'pending' }
+  ];
+  const result = simulateFilter(hubTasks, commitLinks, candidates);
+  assert.ok(!result.some((t) => t.title === '已有 commit 的任务'), '高置信度 commit 覆盖任务不应被导入');
+  assert.ok(result.some((t) => t.title === '全新任务'), '无 commit 的新任务应被导入');
+});
+
+test('confidence=0.60 的 commit 覆盖任务仍可被导入', () => {
+  const hubTasks = [{ id: 'task_b', title: '低置信度任务', status: 'pending', progress: 0 }];
+  const commitLinks = [{ activityId: 'c2', taskId: 'task_b', confidence: 0.60, reason: '低' }];
+  const candidates = [{ title: '低置信度任务', status: 'pending' }];
+  const result = simulateFilter(hubTasks, commitLinks, candidates);
+  assert.ok(result.some((t) => t.title === '低置信度任务'), '低置信度 commit 不应过滤掉任务');
+});
+
+test('confidence=0.75 边界值：恰好被过滤', () => {
+  const hubTasks = [{ id: 'task_c', title: '边界任务', status: 'pending', progress: 0 }];
+  const commitLinks = [{ activityId: 'c3', taskId: 'task_c', confidence: 0.75, reason: '边界' }];
+  const candidates = [{ title: '边界任务', status: 'pending' }];
+  const result = simulateFilter(hubTasks, commitLinks, candidates);
+  assert.ok(!result.some((t) => t.title === '边界任务'), 'confidence=0.75 应被过滤（≥0.75）');
+});
+
+test('已完成 hub 任务不被重导入（原有逻辑不受影响）', () => {
+  const hubTasks = [{ id: 'task_d', title: '已完成任务', status: 'completed', progress: 100 }];
+  const candidates = [{ title: '已完成任务', status: 'pending' }];
+  const result = simulateFilter(hubTasks, [], candidates);
+  assert.ok(!result.some((t) => t.title === '已完成任务'), '已完成任务不应被重导入');
+});
+
+// 验证 docsManager.js 源码包含正确的 confidence 过滤逻辑
+test('docsManager.js 包含 confidence >= 0.75 过滤逻辑', () => {
+  const src = readFileSync(new URL('../server/services/docsManager.js', import.meta.url), 'utf8');
+  assert.ok(src.includes('0.75'), 'selectDailyDocTasks 应包含 0.75 置信度阈值');
+  assert.ok(src.includes('completedTitles.add'), '高置信度 commit 应加入 completedTitles');
+});
+
+// ─── Task 5: applyCommitLinksToTasks 过滤逻辑 ─────────────────────────────
+
+console.log('\nTask 5: applyCommitLinksToTasks — 置信度过滤逻辑\n');
+
+// 纯逻辑：复刻过滤步骤，不 import semanticLinker（会拉入 store/SQLite）
+function filterHighConfidenceLinks(commitTaskLinks) {
+  return commitTaskLinks.filter((l) => Number(l.confidence || 0) >= 0.75);
+}
+
+test('confidence=0.80 进入高置信集合', () => {
+  const links = [{ activityId: 'c1', taskId: 'task_aaa', confidence: 0.80 }];
+  const result = filterHighConfidenceLinks(links);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].taskId, 'task_aaa');
+});
+
+test('confidence=0.60 不进入高置信集合', () => {
+  const links = [{ activityId: 'c2', taskId: 'task_bbb', confidence: 0.60 }];
+  const result = filterHighConfidenceLinks(links);
+  assert.equal(result.length, 0);
+});
+
+test('confidence=0.75 边界值：进入高置信集合', () => {
+  const links = [{ activityId: 'c3', taskId: 'task_ccc', confidence: 0.75 }];
+  const result = filterHighConfidenceLinks(links);
+  assert.equal(result.length, 1);
+});
+
+test('空数组不崩溃', () => {
+  const result = filterHighConfidenceLinks([]);
+  assert.deepEqual(result, []);
+});
+
+test('semanticLinker.js 包含 applyCommitLinksToTasks 导出', () => {
+  const src = readFileSync(new URL('../server/services/semanticLinker.js', import.meta.url), 'utf8');
+  assert.ok(src.includes('export async function applyCommitLinksToTasks'), 'applyCommitLinksToTasks 应被导出');
+  assert.ok(src.includes('0.75'), '应包含 0.75 置信度阈值');
+  assert.ok(src.includes("task.status = 'completed'"), '应将任务状态设为 completed');
+});
+
+test('refreshAnalysisIntoStore 在 updateStore 后调用 applyCommitLinksToTasks', () => {
+  const src = readFileSync(new URL('../server/services/semanticLinker.js', import.meta.url), 'utf8');
+  const fnStart = src.indexOf('export async function refreshAnalysisIntoStore');
+  const fnBlock = src.slice(fnStart, fnStart + 800);
+  assert.ok(fnBlock.includes('applyCommitLinksToTasks'), 'refreshAnalysisIntoStore 应调用 applyCommitLinksToTasks');
+  // 确保 applyCommitLinksToTasks 在第一个 updateStore 之后调用
+  const firstUpdate = fnBlock.indexOf('await updateStore');
+  const applyCall = fnBlock.indexOf('applyCommitLinksToTasks');
+  assert.ok(applyCall > firstUpdate, 'applyCommitLinksToTasks 应在 updateStore 之后调用');
+});
+
 // ─── 结果汇总 ──────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} 个测试，${passed} 通过，${failed} 失败\n`);
