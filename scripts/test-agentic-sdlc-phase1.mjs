@@ -109,6 +109,51 @@ test('已有 e2Status 的 task 不被覆盖', () => {
   assert.equal(task.e2Status, 'verified', '已有 e2Status 不应被覆盖');
 });
 
+// ─── Task 2: PARSE_SYSTEM_PROMPT v2 字段检查 ──────────────────────────────
+
+console.log('\nTask 2: PARSE_SYSTEM_PROMPT — Task v2 schema\n');
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const docsManagerSrc = readFileSync(join(__dirname, '../server/services/docsManager.js'), 'utf8');
+const promptStart = docsManagerSrc.indexOf('const PARSE_SYSTEM_PROMPT');
+const promptEnd = docsManagerSrc.indexOf('`;', promptStart) + 2;
+const promptBlock = docsManagerSrc.slice(promptStart, promptEnd);
+
+test('prompt 包含 businessNote 字段', () => {
+  assert.ok(promptBlock.includes('"businessNote"'), 'prompt 应包含 businessNote 字段定义');
+});
+
+test('prompt 包含 acceptance 字段', () => {
+  assert.ok(promptBlock.includes('"acceptance"'), 'prompt 应包含 acceptance 字段定义');
+});
+
+test('prompt 包含 dependencies 字段', () => {
+  assert.ok(promptBlock.includes('"dependencies"'), 'prompt 应包含 dependencies 字段定义');
+});
+
+test('prompt 包含 requirementRefs 字段', () => {
+  assert.ok(promptBlock.includes('"requirementRefs"'), 'prompt 应包含 requirementRefs 字段定义');
+});
+
+test('prompt 包含禁止复制 description 规则', () => {
+  assert.ok(promptBlock.includes('禁止复制'), 'prompt 应包含 acceptance 禁止复制 description 的规则');
+});
+
+test('prompt 包含 businessNote 格式规则', () => {
+  assert.ok(promptBlock.includes('用户能'), 'prompt 应包含 businessNote 格式示例');
+});
+
+test('prompt 包含 description 和 businessNote 分开要求', () => {
+  assert.ok(
+    promptBlock.includes('必须与 description 不同') || promptBlock.includes('businessNote 不同'),
+    'prompt 应要求 businessNote 与 description 不同'
+  );
+});
+
 // ─── 结果汇总 ──────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} 个测试，${passed} 通过，${failed} 失败\n`);

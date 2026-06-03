@@ -178,7 +178,7 @@ export async function fetchProjectDocs(owner, repo) {
   return docs.filter(Boolean);
 }
 
-const PARSE_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理助手，负责从开发计划文档中解析结构化任务。
+const PARSE_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理助手，负责从开发计划文档中解析结构化任务（Task v2 格式）。
 
 输出严格遵循以下 JSON 数组格式，不要输出其他内容：
 [
@@ -188,16 +188,31 @@ const PARSE_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理助手，
     "priority": "P0|P1|P2",
     "sourceDoc": "来源文档路径",
     "deliverableTitle": "所属交付项标题（从文档章节/模块/里程碑推断，20字以内）",
-    "description": "任务描述（50字以内）",
+    "description": "技术细节描述（接口名/SDK/模块等，50字以内）",
+    "businessNote": "业务语言描述（非技术人员可读，格式：用户能做XX，或：XX角色能XX；30字以内；必须与 description 不同）",
+    "acceptance": "独立的可测量完成条件（50字以内；禁止复制或改写 description；必须描述可验证的结果而非实现方式）",
+    "dependencies": ["依赖的其他任务标题（精确匹配，无依赖则为空数组 []）"],
+    "requirementRefs": ["来源需求编号，如 REQ-L2-001；无则为空数组 []"],
     "dueDate": "截止日期（YYYY-MM-DD 格式，无则留空）",
     "status": "pending|in_progress|completed"
   }
 ]
 
 判断状态的规则：
-- 文档中有 ✅、[x]、"已完成"、"完成" → completed
-- 文档中有 🔶、"进行中"、"开发中" → in_progress
+- 文档中有 ✅、[x]、「已完成」、「完成」 → completed
+- 文档中有 🔶、「进行中」、「开发中」 → in_progress
 - 其余 → pending
+
+acceptance 生成规则（重要）：
+- 必须描述可验证的结果，不能是对 description 的改写
+- 正确示例：「学生端进入课堂后，TRTC 控制台显示该学生已进房，本地麦克风按钮可用」
+- 错误示例（照抄技术描述）：「接入 trtc-sdk-v5，调用 enterRoom」
+- 无法确定验收条件时写：「[待产品确认验收标准]」（不要留空或复制 description）
+
+businessNote 生成规则：
+- 使用「用户能 XX」或「老师/学生能 XX」的格式
+- 正确示例：「学生能通过课堂码加入老师的课堂」
+- 错误示例（技术语言）：「调用 TRTC SDK 的 enterRoom 接口」
 
 注意：
 - 每个文档可解析多条任务
