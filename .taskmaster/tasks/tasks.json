@@ -1,0 +1,170 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "store.js 迁移 — Task v2 新字段",
+        "description": "在 migrateStore() 中加入 milestones/prds/testRuns/gapAnalysis/manualTestQueue 集合，并对现有 tasks 补全 businessNote/dependencies/evidenceRefs/e2Status 字段，修复 acceptance===description 的历史数据",
+        "status": "done",
+        "dependencies": [],
+        "priority": "high",
+        "details": "修改 server/store.js:180-210。在 const next={} 里加 5 个新集合。在 return next 之前遍历 next.tasks，对每条任务补齐新字段默认值，并对 acceptance===description 的情况清空 acceptance。参考 docs/architecture/data-models.md 的 Store 迁移代码片段。",
+        "testStrategy": "运行 scripts/test-agentic-sdlc-phase1.mjs，断言 migrateStore({}) 返回对象包含 milestones/prds 数组，且旧任务的 acceptance===description 被清空为空字符串",
+        "subtasks": [],
+        "updatedAt": "2026-06-03T13:04:56.655Z"
+      },
+      {
+        "id": "2",
+        "title": "PARSE_SYSTEM_PROMPT 升级 — 输出 Task v2 schema",
+        "description": "替换 docsManager.js:181 的 PARSE_SYSTEM_PROMPT，要求 LLM 输出包含 acceptance（独立）/businessNote/dependencies/milestoneId/requirementRefs 字段，并加入生成规则防止 acceptance 复制 description",
+        "status": "done",
+        "dependencies": [
+          "1"
+        ],
+        "priority": "high",
+        "details": "修改 server/services/docsManager.js 第 181 行的 PARSE_SYSTEM_PROMPT 常量。新 schema 需包含：businessNote（用户能 XX 格式）/acceptance（可测量结果，禁止复制 description）/dependencies（任务标题列表）/deliverableTitle。参考 SPEC-L2 技术方案 §5。",
+        "testStrategy": "读取 docsManager.js 源码，断言 prompt 字符串包含 businessNote/acceptance/dependencies/禁止复制 description 等关键规则文本",
+        "subtasks": [],
+        "updatedAt": "2026-06-03T13:22:30.666Z"
+      },
+      {
+        "id": "3",
+        "title": "stableTaskId — 幂等任务 ID 生成",
+        "description": "在 docsManager.js 新增 stableTaskId(sourceDoc, title) 函数，基于 djb2 hash 生成稳定 ID；替换第 1140 行的 createId('task') 随机调用；修复第 1094/1155/1174 行 acceptance=description 硬编码",
+        "status": "done",
+        "dependencies": [
+          "2"
+        ],
+        "priority": "high",
+        "details": "在 makeSlugId（docsManager.js:772）后新增 stableTaskId export。djb2 hash = (h=5381; for char: h=(h*33^charCode)>>>0); return 'task_'+h.toString(36)。修改第 1094 行 acceptance: task.description→conditional，第 1140 行 createId('task')→stableTaskId(task.sourceDoc, task.title)，第 1155/1174 行 fallback chain 去掉 task.description 兜底。",
+        "testStrategy": "断言 stableTaskId('docs/a.md','任务A') 两次调用返回相同值；断言不同输入产生不同 ID；断言 ID 以 task_ 开头",
+        "subtasks": [],
+        "updatedAt": "2026-06-03T14:10:02.369Z"
+      },
+      {
+        "id": "4",
+        "title": "selectDailyDocTasks — 防重导入 commit 已覆盖任务",
+        "description": "在 docsManager.js selectDailyDocTasks（第 534 行）中，把 confidence≥0.75 的 commitTaskLinks 对应任务标题加入 completedTitles，防止重新 sync-docs 时把做完的任务重新导入为 pending",
+        "status": "done",
+        "dependencies": [
+          "3"
+        ],
+        "priority": "medium",
+        "details": "在现有 completedTitles Set 构建之后（约第 544 行），追加：取 selectionContext.semanticLinks?.commitTaskLinks，过滤 confidence>=0.75，通过 hubById Map 查 taskId 对应的 title，加入 completedTitles。注意 hubById 可从 selectionContext.hubTasks 构建。",
+        "testStrategy": "构造 hubTasks 含一个 pending 任务，semanticLinks.commitTaskLinks 含该任务 ID 且 confidence=0.85，断言 selectDailyDocTasks 不返回该任务",
+        "subtasks": [],
+        "updatedAt": "2026-06-03T14:12:41.677Z"
+      },
+      {
+        "id": "5",
+        "title": "applyCommitLinksToTasks — E1 状态回写",
+        "description": "在 semanticLinker.js 新增 applyCommitLinksToTasks(commitTaskLinks) 函数，对 confidence≥0.75 的关联把对应 task.status 改为 completed；在 refreshAnalysisIntoStore 末尾调用",
+        "status": "done",
+        "dependencies": [
+          "4"
+        ],
+        "priority": "high",
+        "details": "在 server/services/semanticLinker.js 末尾新增 export async function applyCommitLinksToTasks(links)。过滤 confidence>=0.75，收集 taskIds Set，updateStore 遍历 draft.tasks，对命中且 status!=='completed' 的任务设 status='completed'，updatedAt=now。在 refreshAnalysisIntoStore（第 204 行）的 await updateStore(...) 之后调用该函数。",
+        "testStrategy": "直接测过滤逻辑：构造 links=[{taskId:'a',confidence:0.8},{taskId:'b',confidence:0.6}]，验证只有 taskId='a' 进入高置信集合",
+        "subtasks": [],
+        "updatedAt": "2026-06-03T14:45:29.847Z"
+      },
+      {
+        "id": "6",
+        "title": "webhookRoutes — PR merged 触发 E1",
+        "description": "在 webhookRoutes.js 的 GitHub webhook handler 中，当 pull_request.action=closed 且 merged=true 时，fire-and-forget 调用 refreshAnalysisIntoStore，触发 E1 自动翻转任务状态",
+        "status": "pending",
+        "dependencies": [
+          "5"
+        ],
+        "priority": "medium",
+        "details": "在 server/routes/webhookRoutes.js 处理 pull_request 事件的位置（搜索 upsertPullFromWebhook），在其调用之后追加条件判断：if event==='pull_request' && payload?.action==='closed' && payload?.pull_request?.merged===true，then 动态 import semanticLinker 调用 refreshAnalysisIntoStore().catch(logger.error)。使用动态 import 避免循环依赖。",
+        "testStrategy": "语法检查通过（npm run check）；手动模拟 webhook payload 验证 import 路径正确",
+        "subtasks": []
+      },
+      {
+        "id": "7",
+        "title": "reviewTaskLinker.js — E3 修复任务创建",
+        "description": "新建 server/services/reviewTaskLinker.js，实现 handleReviewOutcome(review, updateStore)：当 level=Block/Escalate 时，在 store 创建修复任务（type:'fix'，priority:'P0'，dependencies:[originalTaskId]），并对原任务设 blocked=true",
+        "status": "pending",
+        "dependencies": [
+          "1"
+        ],
+        "priority": "high",
+        "details": "新建文件。修复任务 schema：id=stableTaskId('review_'+review.id, fixTitle)，title='修复：'+suggestion.slice(0,40)，acceptance='重新 review 通过等级降为 Warning 或 Pass'，type='fix'，priority='P0'，sourceReview=review.id，dependencies=[originalTaskId]。防重：检查 draft.tasks 是否已有该 id。对 Block 等级设 originalTask.blocked=true。",
+        "testStrategy": "断言 level=Pass 时返回 {fixTaskId:null}；断言修复任务 title 以「修复：」开头且不超过 30 字；断言 dependencies 包含 originalTaskId",
+        "subtasks": []
+      },
+      {
+        "id": "8",
+        "title": "pullPipeline.js — 接线 E3 修复任务（PR-Agent 主路）",
+        "description": "在 server/services/pullPipeline.js 的 hubReview 镜像进 store.reviews 之后（约第 306 行），检测 level===Block/Escalate，fire-and-forget 调用 reviewTaskLinker.handleReviewOutcome。这是 PR-Agent 生产主路的真正 choke point，不是 reviews.js（后者只是手动触发的次路）。",
+        "status": "pending",
+        "dependencies": [
+          "7"
+        ],
+        "priority": "medium",
+        "details": "重要修正：生产 PR review 走 PR-Agent → webhook sink → upsertPullIntoStore → buildHubReview → 镜像 store.reviews（pullPipeline.js:271-306），带 level。E3 必须挂这里，不是 reviews.js:84（那是 POST /v2/reviews 手动路）。在 updateStore 回调内拿到 reviewEntry 后，或在 updateStore 之后，对 level===Block||Escalate 的 reviewEntry 调 handleReviewOutcome({id:reviewEntry.id, level, suggestion:hubReview.suggestion, taskId:linkedTaskIds[0], pullId})。注意防重：handleReviewOutcome 已用 stableTaskId(review.id) 保证同一 review 不建第二个修复任务，rev_pr_<pullId> 是稳定 ID，重复 upsert 不会重复建。补充：也可在 reviews.js:84 加一份兜底，覆盖手动 review 路径。",
+        "testStrategy": "npm run check 无报错；node --check server/services/pullPipeline.js 通过；构造一个 level=Block 的 hubReview，验证 handleReviewOutcome 被调用且 rev_pr_<pullId> 不重复建任务",
+        "subtasks": []
+      },
+      {
+        "id": "9",
+        "title": "githubApi.js — buildTaskPRBody + createTaskBranchAndPR",
+        "description": "在 githubApi.js 新增两个 export：buildTaskPRBody(task) 生成标准 PR 描述（含业务目标/验收清单/依赖/关联）；createTaskBranchAndPR(task, project) 自动建 branch + draft PR 并返回 {branchName, prNumber, prUrl}",
+        "status": "pending",
+        "dependencies": [
+          "3"
+        ],
+        "priority": "medium",
+        "details": "buildTaskPRBody：组装 '## 业务目标\\n{businessNote}\\n\\n## 验收标准\\n{acceptance按分号split成checkbox}\\n\\n## 依赖\\n{dependencies}\\n\\n## 关联\\nTask:{id}...'。createTaskBranchAndPR：branch名=feat/task_{id}_{titleSlug}.slice(0,60)，调用已有 createBranch + createDraftPR。",
+        "testStrategy": "断言 buildTaskPRBody 返回包含 '## 业务目标'/'## 验收标准'/'- [ ]' 等 section；断言 branch 名长度<=60 且以 feat/task_ 开头",
+        "subtasks": []
+      },
+      {
+        "id": "10",
+        "title": "assignmentRoutes.js — 认领触发建 branch + PR",
+        "description": "在 server/routes/assignmentRoutes.js 的 POST /api/assignments handler 中，认领成功后 fire-and-forget 调用 createTaskBranchAndPR，并将返回的 prUrl 写入 task.evidenceRefs",
+        "status": "pending",
+        "dependencies": [
+          "9"
+        ],
+        "priority": "low",
+        "details": "在 refreshAssignmentBrief 调用之后追加：找到 task 对应的 project（按 task.projectId 或 store.projects[0]），if project.githubOwner && project.repository，then 动态 import githubApi，调用 createTaskBranchAndPR，.then 更新 task.evidenceRefs 加入 prUrl。整个过程 .catch(logger.warn) 不影响认领流程。",
+        "testStrategy": "npm run check 无报错；logger.warn 在无 GITHUB_TOKEN 时被调用不抛异常",
+        "subtasks": []
+      },
+      {
+        "id": "11",
+        "title": "测试文件 + 全量回归验证",
+        "description": "创建 scripts/test-agentic-sdlc-phase1.mjs，覆盖 Tasks 1-10 的核心逻辑；运行 npm run test:unit 和 npm run check 确保全量通过",
+        "status": "pending",
+        "dependencies": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10"
+        ],
+        "priority": "medium",
+        "details": "测试内容：migrateStore 新字段/task backfill；stableTaskId 幂等；buildTaskPRBody section 存在；applyCommitLinksToTasks 过滤逻辑；handleReviewOutcome Pass 不建任务。用纯逻辑单元测试，不依赖真实 LLM 或 GitHub API。",
+        "testStrategy": "node scripts/test-agentic-sdlc-phase1.mjs 全部 ✅；npm run test:unit 通过；npm run check 无报错",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-06-03T14:45:29.848Z",
+      "taskCount": 11,
+      "completedCount": 5,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}

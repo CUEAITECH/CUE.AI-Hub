@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "taskmaster-ai": {
+      "command": "task-master-mcp",
+      "args": [],
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      }
+    }
+  }
+}

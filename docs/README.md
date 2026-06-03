@@ -16,8 +16,9 @@ docs/
 ├── superpowers/      ← Daily dev plans + design docs (legacy, keep)
 │   ├── plans/
 │   └── specs/
+├── STATUS.md         ← **Current state: milestone + spec matrix + tech debt** (update each milestone)
 ├── AI-PM-PROGRESS.md ← Written by AI PM automatically — do not edit manually
-└── 开发进度.md        ← Manual progress log (legacy)
+└── 开发进度.md        ← Manual progress log (legacy, phases 1-8)
 ```
 
 ---
@@ -26,12 +27,13 @@ docs/
 
 | Directory | Write what | Who writes | Update frequency |
 |---|---|---|---|
+| `STATUS.md` | Current milestone, spec matrix, tech debt | Product lead + AI PM | Each milestone |
 | `vision/` | Product positioning, feasibility | Product lead | Low |
 | `specs/` | Layer/edge requirements + acceptance criteria | Product + eng | Per phase |
 | `architecture/adr/` | Why a technical decision was made | Tech lead | Low |
 | `research/` | Theory + open-source analysis | Anyone | Low |
 | `superpowers/plans/` | Concrete implementation tasks | Engineers | High |
-| `AI-PM-PROGRESS.md` | Current milestone progress | **AI PM (auto)** | Each sync |
+| `AI-PM-PROGRESS.md` | Current sprint progress | **AI PM (auto)** | Each sync |
 
 ---
 
@@ -78,7 +80,8 @@ flowchart LR
 
 | I want to... | Go to |
 |---|---|
-| Understand the product vision | [vision/product-vision.md](vision/product-vision.md) |
+| **See where we are right now** | **[STATUS.md](STATUS.md)** |
+| Understand the product vision | [vision/README.md](vision/README.md) |
 | See how much of the vision is buildable | [vision/feasibility-spec-agentic-sdlc.md](vision/feasibility-spec-agentic-sdlc.md) |
 | Find what to implement next | [specs/README.md](specs/README.md) — look for Phase 1 ★ |
 | Understand a tech decision | [architecture/adr/](architecture/adr/) |
