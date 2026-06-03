@@ -477,6 +477,25 @@ test('githubApi.js 에 buildTaskPRBody 와 createTaskBranchAndPR export 존재',
   assert.ok(src.includes('## 验收标准'), 'PR body 에 수락기준 섹션 있어야 함');
 });
 
+// ─── Task 10: assignmentRoutes L3 접선 ───────────────────────────────────
+
+console.log('\nTask 10: assignmentRoutes.js — 태스크 인수 → branch + PR\n');
+
+test('assignmentRoutes.js 에 L3 트리거 코드 존재', () => {
+  const src = readFileSync(new URL('../server/routes/assignmentRoutes.js', import.meta.url), 'utf8');
+  assert.ok(src.includes('createTaskBranchAndPR'), 'createTaskBranchAndPR 호출 있어야 함');
+  assert.ok(src.includes('githubApi.js'), 'githubApi.js 동적 import 있어야 함');
+  assert.ok(src.includes('evidenceRefs'), 'evidenceRefs 업데이트 있어야 함');
+  assert.ok(src.includes("logger.warn"), 'GitHub 실패 시 warn 로그 있어야 함');
+});
+
+test('L3 트리거는 refreshAssignmentBrief 이후에 위치', () => {
+  const src = readFileSync(new URL('../server/routes/assignmentRoutes.js', import.meta.url), 'utf8');
+  const briefPos = src.indexOf('refreshAssignmentBrief(assignment');
+  const l3Pos = src.indexOf('createTaskBranchAndPR');
+  assert.ok(l3Pos > briefPos, 'L3 트리거는 refreshAssignmentBrief 이후여야 함');
+});
+
 // ─── 结果汇总 ──────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} 个测试，${passed} 通过，${failed} 失败\n`);
