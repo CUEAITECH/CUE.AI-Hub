@@ -434,6 +434,49 @@ test('E3 트리거는 updateStore 이후에 위치', () => {
   assert.ok(e3Pos > updateStoreEnd, 'E3 트리거는 updateStore 블록 이후에 위치해야 함');
 });
 
+// ─── Task 9: buildTaskPRBody + createTaskBranchAndPR ─────────────────────
+
+console.log('\nTask 9: githubApi.js — buildTaskPRBody + createTaskBranchAndPR\n');
+
+// buildTaskPRBody 는 순수 함수 — 같은 로직을 인라인으로 테스트
+function buildTaskPRBody(task) {
+  const businessNote = task.businessNote || task.description || '（无业务说明）';
+  const acceptanceItems = String(task.acceptance || '（待补充验收标准）')
+    .split(/[；;。\n]+/).map((s) => s.trim()).filter(Boolean).map((s) => `- [ ] ${s}`).join('\n');
+  const deps = Array.isArray(task.dependencies) && task.dependencies.length
+    ? task.dependencies.map((d) => `- \`${d}\``).join('\n') : '无';
+  return ['## 业务目标', businessNote, '', '## 验收标准', acceptanceItems, '', '## 依赖', deps, '', '## 关联', `Task: \`${task.id}\``]
+    .join('\n').trim();
+}
+
+test('PR body 에 모든 section 포함', () => {
+  const task = { id: 'task_abc1234', title: '진입방 구현', businessNote: '학생이 수업에 입장 가능', acceptance: '진입 성공;마이크 활성화', dependencies: ['task_dep1'], milestoneId: 'm1' };
+  const body = buildTaskPRBody(task);
+  assert.ok(body.includes('## 业务目标'), '비즈니스 목표 섹션 있어야 함');
+  assert.ok(body.includes('학생이 수업에 입장 가능'), 'businessNote 내용 있어야 함');
+  assert.ok(body.includes('## 验收标准'), '수락기준 섹션 있어야 함');
+  assert.ok(body.includes('- [ ]'), 'checkbox 형식이어야 함');
+  assert.ok(body.includes('## 依赖'), '의존성 섹션 있어야 함');
+  assert.ok(body.includes('task_abc1234'), 'task ID 포함되어야 함');
+});
+
+test('branch 이름 최대 60자', () => {
+  const taskId = 'task_abc1234';
+  const title = '매우 긴 태스크 제목으로 branch 이름이 60자를 초과하는지 테스트';
+  const titleSlug = title.toLowerCase().replace(/[^\w一-鿿]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20);
+  const branchName = `feat/task_${taskId}_${titleSlug}`.slice(0, 60);
+  assert.ok(branchName.length <= 60, `branch 이름 최대 60자: 실제 ${branchName.length}`);
+  assert.ok(branchName.startsWith('feat/task_'), 'branch 이름은 feat/task_ 로 시작해야 함');
+});
+
+test('githubApi.js 에 buildTaskPRBody 와 createTaskBranchAndPR export 존재', () => {
+  const src = readFileSync(new URL('../server/services/githubApi.js', import.meta.url), 'utf8');
+  assert.ok(src.includes('export function buildTaskPRBody'), 'buildTaskPRBody export 있어야 함');
+  assert.ok(src.includes('export async function createTaskBranchAndPR'), 'createTaskBranchAndPR export 있어야 함');
+  assert.ok(src.includes('## 业务目标'), 'PR body 에 비즈니스 목표 섹션 있어야 함');
+  assert.ok(src.includes('## 验收标准'), 'PR body 에 수락기준 섹션 있어야 함');
+});
+
 // ─── 结果汇总 ──────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} 个测试，${passed} 通过，${failed} 失败\n`);

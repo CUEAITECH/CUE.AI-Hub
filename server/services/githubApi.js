@@ -430,6 +430,80 @@ export async function createDraftPR(owner, repo, { title, body, head, base = 'ma
 }
 
 /**
+ * SPEC-L3: Task v2 객체에서 표준 PR 설명 마크다운을 생성합니다.
+ * 포함 내용: 비즈니스 목표 / 수락 기준 체크리스트 / 의존성 / 연관 태스크
+ * @param {object} task - Task v2 객체
+ * @returns {string}
+ */
+export function buildTaskPRBody(task) {
+  const businessNote = task.businessNote || task.description || '（无业务说明）';
+
+  // acceptance를 줄 단위로 분리해 checkbox 형식으로 변환
+  const acceptanceItems = String(task.acceptance || '（待补充验收标准）')
+    .split(/[；;。\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => `- [ ] ${s}`)
+    .join('\n');
+
+  const deps = Array.isArray(task.dependencies) && task.dependencies.length
+    ? task.dependencies.map((d) => `- \`${d}\``).join('\n')
+    : '无';
+
+  const reqs = Array.isArray(task.requirementRefs) && task.requirementRefs.length
+    ? task.requirementRefs.join(', ')
+    : '无';
+
+  return [
+    '## 业务目标',
+    businessNote,
+    '',
+    '## 验收标准',
+    acceptanceItems,
+    '',
+    '## 依赖',
+    deps,
+    '',
+    '## 关联',
+    `Task: \`${task.id}\``,
+    task.milestoneId ? `Milestone: \`${task.milestoneId}\`` : '',
+    reqs !== '无' ? `Requirements: ${reqs}` : ''
+  ].filter((line) => line !== undefined).join('\n').trim();
+}
+
+/**
+ * SPEC-L3: 태스크에 대한 branch와 draft PR을 자동 생성합니다.
+ * Branch 이름: feat/task_{taskId}_{titleSlug} (최대 60자)
+ * @param {object} task    - Task v2 객체 (id, title, businessNote, acceptance 등)
+ * @param {object} project - { githubOwner, repository }
+ * @returns {Promise<{ branchName: string, prNumber: number, prUrl: string }>}
+ */
+export async function createTaskBranchAndPR(task, project) {
+  const { githubOwner: owner, repository: repo } = project;
+  if (!owner || !repo) throw new Error('project 缺少 githubOwner 或 repository');
+
+  // branch 이름: 특수문자 제거, 최대 60자
+  const titleSlug = String(task.title || '')
+    .toLowerCase()
+    .replace(/[^\w一-鿿]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 20);
+  const branchName = `feat/task_${task.id}_${titleSlug}`.slice(0, 60);
+
+  await createBranch(owner, repo, branchName);
+
+  const prBody = buildTaskPRBody(task);
+  const prTitle = `[${task.id}] ${String(task.title || '（无标题）')}`;
+  const { number: prNumber, htmlUrl: prUrl } = await createDraftPR(owner, repo, {
+    title: prTitle,
+    body: prBody,
+    head: branchName
+  });
+
+  return { branchName, prNumber, prUrl };
+}
+
+/**
  * 在指定分支上创建或更新一个文件（用于生成初始 commit）
  * @param {string} owner
  * @param {string} repo
