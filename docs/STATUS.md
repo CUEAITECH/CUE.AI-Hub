@@ -7,17 +7,34 @@
 
 ## 当前里程碑
 
-**Agentic SDLC Phase 1 — 闭环地基**
+**Agentic SDLC Phase 2 — 澄清反问 + 业务缺口分析**
 
-| 目标 | 状态 |
-|---|---|
-| SPEC-L2：Task schema v2（acceptance / dependencies / businessNote / 稳定 ID） | ⬜ 未开始 |
-| SPEC-E1：commit/PR → 任务状态自动翻转 | ⬜ 未开始 |
-| SPEC-E3：diff 风险 Block → 自动建修复任务 | ⬜ 未开始 |
-| SPEC-L3：任务认领 → 自动建 branch + draft PR | ⬜ 未开始 |
+依赖 Phase 1 已完成的 E1/E3/L2/L3 信号，下一步推进：
+- SPEC-L1：想法 → 澄清反问 → 标准 PRD（Phase 2，85% 可实现度）
+- SPEC-L4-c：业务缺口静态分析（Phase 2，52% 可实现度）
+- SPEC-E4：完成情况 → 实时调整里程碑（Phase 2，依赖 E1+E3 信号）
 
-预计工期：6–8 周（依据 feasibility spec）  
-负责人：田家铭（架构主导）
+---
+
+## ✅ 已完成里程碑：Agentic SDLC Phase 1
+
+**完成时间：** 2026-06-03  
+**50 个单元测试全部通过 / 175 个文件语法检查无报错**
+
+| 目标 | 状态 | 接线位置 |
+|---|---|---|
+| SPEC-L2：Task schema v2（acceptance / dependencies / businessNote / 稳定 ID） | ✅ 完成 | `docsManager.js` PARSE_SYSTEM_PROMPT + stableTaskId |
+| SPEC-E1：commit/PR → 任务状态自动翻转 | ✅ 完成 | `semanticLinker.js` applyCommitLinksToTasks + `webhookRoutes.js` |
+| SPEC-E3：diff 风险 Block → 自动建修复任务 | ✅ 完成 | `reviewTaskLinker.js`（新建）+ `pullPipeline.js`（PR-Agent 主路）|
+| SPEC-L3：任务认领 → 自动建 branch + draft PR | ✅ 完成 | `githubApi.js` buildTaskPRBody/createTaskBranchAndPR + `assignmentRoutes.js` |
+
+**完成的闭环边：**
+```
+PR 合并 → E1 → task.status='completed'（自动，confidence≥0.75）
+sync-docs → 已覆盖任务不重复导入（防归零）
+PR-Agent Block → E3 → 建修复任务 + 阻断里程碑进度（自动）
+任务认领 → L3 → branch + draft PR + evidenceRefs 写回（自动）
+```
 
 ---
 
@@ -26,14 +43,14 @@
 | Spec | 标题 | Phase | 可实现度 | 实现状态 | 已有种子代码 |
 |---|---|---|---|---|---|
 | SPEC-L1 | 想法 → 澄清反问 → 标准 PRD | 2 | 85% | ⬜ 未开始 | 无 |
-| **SPEC-L2** | PRD → 里程碑 + Task schema v2 | **1 ★** | 78% | ⬜ 未开始 | `docsManager.js` PARSE_SYSTEM_PROMPT（需升级）|
-| **SPEC-L3** | 任务 → 自动建 branch + draft PR | **1 ★** | 90% | ⬜ 未开始 | `githubApi.js` createBranch / createDraftPR 已有 |
+| **SPEC-L2** | PRD → 里程碑 + Task schema v2 | **1 ★** | 78% | ✅ **已完成** | `docsManager.js` PARSE_SYSTEM_PROMPT v2 + stableTaskId |
+| **SPEC-L3** | 任务 → 自动建 branch + draft PR | **1 ★** | 90% | ✅ **已完成** | `githubApi.js` buildTaskPRBody/createTaskBranchAndPR |
 | SPEC-L4 | 实时监控（commit / diff / 缺口 / PR 还差什么）| 2 | 65% | ⬜ 未开始 | `semanticLinker` / `reviewer` / `riskEngine` |
 | SPEC-L5 | Browser Agent 像人一样测试 | 3 | 48% | ⬜ 未开始 | `mcp__Claude_in_Chrome` 已连接 |
-| **SPEC-E1** | commit/PR → 任务状态自动翻转 | **1 ★** | 80% | ⬜ 未开始 | `semanticLinker.commitTaskLinks`（24 条已实证）|
+| **SPEC-E1** | commit/PR → 任务状态自动翻转 | **1 ★** | 80% | ✅ **已完成** | `semanticLinker.js` applyCommitLinksToTasks + webhookRoutes |
 | SPEC-E2 | 测试结果 → 业务是否真实现 | 3 | 48% | ⬜ 未开始 | 依赖 L5 |
-| **SPEC-E3** | diff 风险 → 阻断 / 新建修复任务 | **1 ★** | 83% | ⬜ 未开始 | `reviewer.js`（182 条 review 已工作）|
-| SPEC-E4 | 完成情况 → 实时调整里程碑 | 2 | 65% | ⬜ 未开始 | 依赖 E1 + E3 |
+| **SPEC-E3** | diff 风险 → 阻断 / 新建修复任务 | **1 ★** | 83% | ✅ **已完成** | `reviewTaskLinker.js`（新建）+ `pullPipeline.js` |
+| SPEC-E4 | 完成情况 → 实时调整里程碑 | 2 | 65% | ⬜ 未开始 | 依赖 E1 + E3（现已就绪）|
 | SPEC-E5 | 交付 → 下一轮迭代起点 | 3 | 80% | ⬜ 未开始 | `dailyBrief.js` |
 
 ★ = Phase 1 优先，先做这四条闭环最关键的边。
@@ -58,15 +75,23 @@
 
 ---
 
-## 当前已知技术债（Phase 1 要修的）
+## Phase 1 已修技术债 ✅
 
-| 问题 | 位置 | 症状 |
+| 问题 | 修复位置 | 状态 |
 |---|---|---|
-| `acceptance = description` 硬编码 | `docsManager.js:1094` | 任务验收标准直接复制描述，无意义 |
-| Task ID 不稳定 | `docsManager.js:1140` `createId('task')` | 重新解析同一文档 → 新 ID → 已完成任务归零 |
-| commitTaskLinks 不回写 store | `semanticLinker.js` | 语义关联生成后停留在分析层，任务状态不更新 |
-| Block review 无下游动作 | `pullPipeline.js:306`（主路）/ `reviews.js:84`（次路） | PR-Agent Block 仅广播企微，不建修复任务、不阻断里程碑计入 |
-| 认领任务无 branch/PR 自动创建 | `assignmentRoutes.js` | 工程师需手动建分支，PR body 无验收清单 |
+| `acceptance = description` 硬编码 | `docsManager.js` 4 处 + PARSE_SYSTEM_PROMPT 规则 | ✅ 修复 |
+| Task ID 不稳定（重解析归零） | `docsManager.js` stableTaskId（djb2 hash） | ✅ 修复 |
+| commitTaskLinks 不回写 store | `semanticLinker.js` applyCommitLinksToTasks | ✅ 修复 |
+| Block review 无下游动作 | `pullPipeline.js` + `reviewTaskLinker.js` | ✅ 修复 |
+| 认领任务无 branch/PR 自动创建 | `githubApi.js` + `assignmentRoutes.js` | ✅ 修复 |
+
+## Phase 2 准备进入的技术债
+
+| 问题 | 位置 | Phase |
+|---|---|---|
+| AI PM 没有澄清反问入口 | 待新建 `prdClarifier.js` + 前端 | Phase 2（SPEC-L1）|
+| 业务缺口分析缺失（无代码扫描）| 待新建 `gapAnalyzer.js` | Phase 2（SPEC-L4-c）|
+| 里程碑状态不自动调整 | 待新建 replanning 逻辑 | Phase 2（SPEC-E4）|
 
 ---
 
