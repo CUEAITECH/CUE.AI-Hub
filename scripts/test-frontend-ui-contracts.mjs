@@ -7,7 +7,7 @@
  *   3. styles.css 必须定义所有 CSS 变量（--text, --blue, --green…）
  *   4. styles.css 禁止裸 emoji 作为图标（仅允许在注释中）
  *   5. 所有 feature section（.view）在 HTML 中都有对应 id
- *   6. 旧版路由在 HTML 中存在（可被访问，只是不在主导航）
+ *   6. 旧版非管理路由在 HTML 中存在（可被访问，只是不在主导航）
  *   7. :focus-visible 样式必须存在（无障碍要求）
  *   8. CSS 不得硬编码 hex 值（应使用 CSS 变量）—— 仅检查 feature 模块产生的动态 innerHTML
  */
@@ -29,14 +29,14 @@ for (const route of v2Routes) {
 console.log('✓ v2 核心路由 data-route 完整性 OK');
 
 // ── 2. 旧版路由仍然可访问 ────────────────────────────────────────────────
-const legacyRoutes = ['planning', 'standup', 'report', 'automation', 'attendance'];
+const legacyRoutes = ['planning', 'automation'];
 for (const route of legacyRoutes) {
   assert.ok(
     html.includes(`data-route="${route}"`),
     `index.html must still have legacy route data-route="${route}"`,
   );
 }
-console.log('✓ 旧版路由仍可访问（data-route 存在）OK');
+console.log('✓ 旧版非管理路由仍可访问（data-route 存在）OK');
 
 // 侧边栏重构后：交付导航已移入 #sbGroupDelivery，旧 header-sub-group 不再存在
 // 验证侧边栏内包含这些路由（data-route 即可，不依赖具体容器）
@@ -46,11 +46,17 @@ for (const route of ['roadmap', 'ai-pm']) {
     `${route} must exist as a navigable route in sidebar`,
   );
 }
-// 旧版功能路由也必须可访问
-for (const route of ['planning', 'standup', 'report', 'automation', 'attendance']) {
+// 旧版非管理功能路由也必须可访问
+for (const route of legacyRoutes) {
   assert.ok(
     html.includes(`data-route="${route}"`),
-    `legacy route ${route} must remain accessible`,
+    `legacy non-management route ${route} must remain accessible`,
+  );
+}
+for (const route of ['standup', 'report', 'attendance']) {
+  assert.ok(
+    !html.includes(`data-route="${route}"`),
+    `management route ${route} must be removed from Product Hub navigation`,
   );
 }
 // 路由不应分类错误：roadmap/ai-pm 不应在旧版组

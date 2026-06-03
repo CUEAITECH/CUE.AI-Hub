@@ -109,11 +109,9 @@ import { createWeComRoutes } from './routes/wecomRoutes.js';
 import { createProjectRoutes } from './routes/projectRoutes.js';
 import { createTaskRoutes } from './routes/taskRoutes.js';
 import { createReviewRoutes } from './routes/reviewRoutes.js';
-import { createStandupRoutes } from './routes/standupRoutes.js';
 import { createReportRoutes } from './routes/reportRoutes.js';
 import { createPlanningRoutes } from './routes/planningRoutes.js';
 import { createWebhookRoutes } from './routes/webhookRoutes.js';
-import { createScoringRoutes } from './routes/scoringRoutes.js';
 import { createRecommendationRoutes } from './routes/recommendationRoutes.js';
 import {
   generateDailyTaskSuggestions,
@@ -267,14 +265,6 @@ const routeModules = [
     normalizeTask,
     generateAssignmentBrief
   }),
-  createScoringRoutes({
-    loadStore,
-    updateStore,
-    readBody,
-    sendJson,
-    sendError,
-    todayText
-  }),
   createRecommendationRoutes({
     loadStore,
     updateStore,
@@ -311,18 +301,6 @@ const routeModules = [
     fetchCommitDetail,
     callClaude,
     parseJsonOutput
-  }),
-  createStandupRoutes({
-    loadStore,
-    updateStore,
-    readBody,
-    sendJson,
-    sendError,
-    normalizeStandup,
-    todayText,
-    callClaude,
-    isWeComAvailable,
-    sendWeComMarkdown
   }),
   createReportRoutes({
     loadStore,

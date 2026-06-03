@@ -3144,7 +3144,6 @@ select:focus {
 }
 
 .meeting-reconcile-list,
-.meeting-attendance-list,
 .meeting-target-list,
 .meeting-assignment-list {
   display: grid;
@@ -3152,7 +3151,6 @@ select:focus {
 }
 
 .meeting-reconcile-row,
-.meeting-attendance-row,
 .meeting-target-row,
 .meeting-owner-assignments {
   display: grid;
@@ -3169,14 +3167,12 @@ select:focus {
 }
 
 .meeting-reconcile-row div,
-.meeting-target-row div,
-.meeting-attendance-row div {
+.meeting-target-row div {
   display: grid;
   gap: 3px;
 }
 
 .meeting-reconcile-row span,
-.meeting-attendance-row span,
 .meeting-target-row span,
 .meeting-assignment-row small,
 .meeting-assignment-row p {
@@ -3191,366 +3187,9 @@ select:focus {
 .meeting-reconcile-status .warn { color: var(--amber); }
 .meeting-reconcile-status .danger { color: var(--red); }
 
-.meeting-attendance-row {
-  width: 100%;
-  grid-template-columns: minmax(0, 1fr) auto;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: default;
-}
-
-.meeting-attendance-row small {
-  grid-column: 1 / -1;
-  color: var(--dim);
-}
-
-.meeting-attendance-row.is-editable {
-  cursor: pointer;
-}
-
-.meeting-attendance-row.is-editable:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(18, 18, 18, 0.08);
-}
-
-.meeting-attendance-row.is-present b { color: var(--green); }
-.meeting-attendance-row.is-late b { color: var(--amber); }
-.meeting-attendance-row.is-missing b { color: var(--red); }
 
 .meeting-kpis-compact {
   margin-bottom: 10px;
-}
-
-.attendance-manager-form {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.attendance-manager-form label {
-  display: grid;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.attendance-manager-form select,
-.attendance-manager-form input {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(18, 18, 18, 0.12);
-  background: #fff;
-  color: var(--text);
-}
-
-.attendance-manager-form .attendance-manager-note {
-  grid-column: 1 / span 2;
-}
-
-.attendance-option-panel {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-}
-
-.attendance-option-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 8px;
-  align-items: start;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(18, 18, 18, 0.1);
-  background: #fff;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.attendance-option-card b {
-  color: var(--accent);
-}
-
-.attendance-option-card span {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.attendance-option-card:hover {
-  border-color: rgba(18, 18, 18, 0.22);
-  transform: translateY(-1px);
-}
-
-.attendance-option-card.is-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(18, 18, 18, 0.08);
-  background: rgba(18, 18, 18, 0.03);
-}
-
-.attendance-manager-form button {
-  align-self: end;
-}
-
-.meeting-attendance-readonly {
-  margin-bottom: 10px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.attendance-shell {
-  display: grid;
-  gap: 14px;
-}
-
-.attendance-policy-copy {
-  display: grid;
-  gap: 10px;
-  color: var(--muted);
-  line-height: 1.7;
-}
-
-.attendance-bulk-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(18, 18, 18, 0.1);
-  border-radius: 12px;
-  background: rgba(18, 18, 18, 0.04);
-}
-
-.attendance-bulk-bar div {
-  display: grid;
-  gap: 2px;
-  margin-right: auto;
-}
-
-.attendance-bulk-bar span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.attendance-bulk-bar select {
-  min-width: 240px;
-  padding: 9px 10px;
-  border-radius: 9px;
-  border: 1px solid rgba(18, 18, 18, 0.12);
-  background: #fff;
-  color: var(--text);
-}
-
-.attendance-board {
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 14px;
-}
-
-.attendance-ranking-list {
-  display: grid;
-  gap: 8px;
-}
-
-.attendance-ranking-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  padding: 12px;
-  border: 1px solid rgba(18, 18, 18, 0.08);
-  border-radius: 10px;
-  background: var(--panel-2);
-}
-
-.attendance-ranking-row div {
-  display: grid;
-  gap: 4px;
-}
-
-.attendance-ranking-row span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.attendance-ranking-row b {
-  font-size: 22px;
-}
-
-.attendance-table-wrap {
-  overflow: auto;
-}
-
-.attendance-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 960px;
-}
-
-.attendance-table th,
-.attendance-table td {
-  padding: 10px 8px;
-  border-bottom: 1px solid rgba(18, 18, 18, 0.08);
-  vertical-align: top;
-}
-
-.attendance-table th {
-  text-align: left;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.attendance-table th small {
-  display: block;
-  margin-top: 4px;
-  font-weight: 500;
-}
-
-.attendance-name-cell strong,
-.attendance-name-cell span {
-  display: block;
-}
-
-.attendance-name-cell span {
-  color: var(--muted);
-  font-size: 12px;
-  margin-top: 4px;
-}
-
-.attendance-day-cell {
-  display: grid;
-  gap: 6px;
-}
-
-.attendance-floating-popover {
-  position: absolute;
-  z-index: 80;
-  padding: 10px;
-  border-radius: 14px;
-  border: 1px solid rgba(18, 18, 18, 0.12);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18px 48px rgba(18, 18, 18, 0.16);
-  backdrop-filter: blur(10px);
-}
-
-.attendance-floating-editor {
-  display: grid;
-  gap: 6px;
-}
-
-.attendance-floating-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 2px 6px;
-  color: var(--text);
-}
-
-.attendance-floating-head button {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.attendance-floating-option {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 8px;
-  padding: 8px 10px;
-  border-radius: 9px;
-  border: 1px solid rgba(18, 18, 18, 0.1);
-  background: #fff;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.attendance-floating-option b {
-  color: var(--accent);
-  font-size: 12px;
-}
-
-.attendance-floating-option span {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.attendance-floating-option:hover {
-  border-color: rgba(18, 18, 18, 0.24);
-  transform: translateY(-1px);
-}
-
-.attendance-floating-option.is-selected {
-  border-color: var(--accent);
-  background: rgba(18, 18, 18, 0.03);
-}
-
-.attendance-day-cell small,
-.attendance-score-cell {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.attendance-selected-mark {
-  display: inline-flex;
-  width: fit-content;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(18, 18, 18, 0.9);
-  color: #fff;
-  font-size: 11px;
-}
-
-.attendance-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1.3;
-  background: rgba(18, 18, 18, 0.06);
-  border: 0;
-  cursor: default;
-}
-
-.attendance-pill.is-editable {
-  cursor: pointer;
-  transition: transform 0.14s ease, box-shadow 0.14s ease;
-}
-
-.attendance-pill.is-editable:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(18, 18, 18, 0.08);
-}
-
-.attendance-pill.tone-ok,
-.attendance-pill.tone-leave {
-  background: rgba(22, 163, 74, 0.12);
-  color: #166534;
-}
-
-.attendance-pill.tone-warn,
-.attendance-pill.tone-late {
-  background: rgba(245, 158, 11, 0.14);
-  color: #92400e;
-}
-
-.attendance-pill.tone-risk,
-.attendance-pill.tone-absent {
-  background: rgba(220, 38, 38, 0.12);
-  color: #991b1b;
 }
 
 .meeting-target-row p {
@@ -6144,7 +5783,6 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 #metricHighRisk { color: #b42318; }
 #metricCommits  { color: #2563eb; }
 #metricReviews  { color: #9a6400; }
-#metricStandup  { color: #0f7a55; }
 
 /* Stage card */
 .stage-panel {
@@ -6709,169 +6347,6 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
 
 .pc-tab-panel { display: none; }
 .pc-tab-panel.active { display: block; }
-
-.score-ranking-card {
-  grid-column: span 6;
-  height: 260px;
-  overflow: hidden;
-}
-
-.score-ranking-tabs {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
-.score-ranking-tabs button {
-  border: 0;
-  border-radius: 4px;
-  padding: 3px 8px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.score-ranking-tabs button.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-sm);
-}
-
-.score-ranking-list,
-.score-breakdown {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  overflow-y: auto;
-}
-.score-breakdown {
-  gap: 10px;
-}
-
-.score-ranking-row {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  column-gap: 10px;
-  row-gap: 0;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  transition: background 150ms ease;
-}
-
-.score-ranking-row:last-child {
-  border-bottom: 0;
-}
-
-.score-ranking-row b {
-  grid-row: 1 / 3;
-  align-self: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--panel-2);
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.score-ranking-row span {
-  grid-row: 1;
-  grid-column: 2;
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text);
-  line-height: 1.3;
-}
-
-.score-ranking-row strong {
-  grid-row: 1 / 3;
-  grid-column: 3;
-  align-self: center;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--blue);
-}
-
-.score-ranking-row small {
-  grid-row: 2;
-  grid-column: 2;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.score-breakdown-head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.score-breakdown-head strong {
-  font-size: 44px;
-  line-height: 1;
-  color: var(--blue);
-}
-
-.score-breakdown-head span,
-.score-bonus-note {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.score-breakdown-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.score-breakdown-grid > div {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 12px;
-  background: var(--panel-2);
-  min-height: 104px;
-}
-
-.score-breakdown-grid b,
-.score-breakdown-grid span,
-.score-breakdown-grid small {
-  display: block;
-}
-
-.score-breakdown-grid b {
-  font-size: 20px;
-  color: var(--text);
-}
-
-.score-breakdown-grid span {
-  margin-top: 4px;
-  font-weight: 650;
-  color: var(--text);
-}
-
-.score-breakdown-grid small {
-  margin-top: 6px;
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-@media (max-width: 860px) {
-  .score-breakdown-grid {
-    grid-template-columns: 1fr;
-  }
-}
 
 /* ─── 个人名片 ────────────────────────────────────────────────────────────── */
 .pc-profile-card-page {
@@ -7787,8 +7262,7 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
   .dashboard-repo,
   .dashboard-activity,
   .dashboard-tasks,
-  .dashboard-risks,
-  .score-ranking-card {
+  .dashboard-risks {
     grid-column: 1 / -1;
     min-width: 0;
     border-radius: 12px;
@@ -7907,12 +7381,8 @@ details[open] .review-history-summary::before { transform: rotate(90deg); }
     order: 9;
   }
 
-  .score-ranking-card {
-    order: 10;
-  }
-
   .dashboard-repo {
-    order: 11;
+    order: 10;
   }
 
   .dashboard-activity {

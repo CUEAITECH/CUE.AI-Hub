@@ -23,7 +23,6 @@ import {
   verifySessionToken
 } from '../services/auth.js';
 import { isSmtpConfigured, sendVerificationEmail } from '../services/mailer.js';
-import { canManageAttendance } from '../services/scoring.js';
 
 function getSessionUser(req, users, projectId) {
   const session = verifySessionToken(getSessionToken(req));
@@ -858,8 +857,6 @@ export function createSystemRoutes({
             reviews: byProject(store.reviews || []),
             activities: byProject(store.activities || []),
             assignments: byProject(store.assignments || []),
-            standups: byProject(store.standups || []),
-            attendanceRecords: byProject(store.attendanceRecords || []),
             alerts: byProject(store.alerts || []),
             deliverables: byProject(store.deliverables || []),
             phases: byProject(store.phases || [])
@@ -880,9 +877,7 @@ export function createSystemRoutes({
         projects: store.projects || [],
         currentProjectId: projectId || (store.projects || [])[0]?.id || '',
         currentUser,
-        permissions: {
-          canManageAttendance: currentUser ? canManageAttendance(currentUser, projectId || (store.projects || [])[0]?.id || '', currentProject) : false
-        },
+        permissions: {},
         currentStage,
         alerts,
         metrics: buildMetrics(scopedStore, alerts),

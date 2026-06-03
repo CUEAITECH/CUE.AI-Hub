@@ -138,7 +138,7 @@
               </button>
               <button class="sb-item sb-item-child" type="button" data-route="meeting">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                晚会闭环
+                产品复盘
               </button>
             </div>
           </div>
@@ -170,10 +170,7 @@
             </button>
             <div class="sb-group-body sb-group-body-collapsed" id="sbBodyLegacy">
               <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="planning">AI 排期</button>
-              <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="standup">异步站会</button>
-              <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="report">日报&amp;晚报</button>
               <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="automation">自动提醒</button>
-              <button class="sb-item sb-item-child sb-item-legacy" type="button" data-route="attendance">考勤统计</button>
             </div>
           </div>
 
@@ -283,26 +280,6 @@
               <strong id="metricReviews">0</strong>
               <small>Block · Escalate 级别</small>
             </article>
-            <article class="metric-card">
-              <span>站会响应率</span>
-              <strong id="metricStandup">0%</strong>
-              <small>异步站会机器人</small>
-            </article>
-
-            <article class="panel score-ranking-card">
-              <div class="panel-head">
-                <div>
-                  <span>每日评分</span>
-                  <h2>成员贡献健康度排行</h2>
-                </div>
-                <div class="score-ranking-tabs" role="tablist">
-                  <button type="button" class="active" data-score-ranking-tab="daily">每日</button>
-                  <button type="button" data-score-ranking-tab="weekly">每周</button>
-                </div>
-              </div>
-              <div class="score-ranking-list" id="scoreRankingList"></div>
-            </article>
-
             <section class="panel cue-ai-panel dashboard-repo">
               <div class="panel-head">
                 <div>
@@ -591,15 +568,6 @@
                 <div id="myEveningList"></div>
               </article>
             </div>
-            <article class="pc-card pc-card-full">
-              <div class="pc-card-header">
-                <div>
-                  <span class="pc-card-eyebrow">成员评分 / 贡献健康度</span>
-                  <h4 class="pc-card-title">今日评分构成</h4>
-                </div>
-              </div>
-              <div id="myScoreBreakdown" class="score-breakdown"></div>
-            </article>
           </div>
         </section>
 
@@ -726,15 +694,15 @@
                 <div class="pc-header-crumb">
                   <span class="pc-header-parent">输出</span>
                   <span class="pc-header-sep">/</span>
-                  <h2>晚会闭环</h2>
+                  <h2>产品复盘</h2>
                 </div>
                 <div class="pc-header-actions">
                   <label class="meeting-date-inline">
                     <input id="meetingDate" type="date" aria-label="晚会日期" />
                   </label>
                   <button type="button" class="pc-btn-ghost" data-action="sync-cue-ai">同步仓库</button>
-                  <button type="button" class="pc-btn-ghost" data-action="generate-evening-report">生成对账</button>
-                  <button type="button" class="pc-btn-primary" data-action="meeting-summary">会后总结 →企微</button>
+                  <button type="button" class="pc-btn-ghost" data-action="generate-evening-report">生成复盘</button>
+                  <button type="button" class="pc-btn-primary" data-action="meeting-summary">复盘总结 →企微</button>
                 </div>
               </div>
             </div>
@@ -742,7 +710,7 @@
             <div class="meeting-kpis" id="meetingReportSummary">
               <div><span>对账窗口</span><b>昨晚 18:00 - 当前</b></div>
               <div><span>当前提交</span><b>待同步</b></div>
-              <div><span>晚会打卡</span><b>待同步</b></div>
+              <div><span>阻塞事项</span><b>待生成</b></div>
               <div><span>会后领取</span><b>待同步</b></div>
               <div><span>会后跟进</span><b>待生成</b></div>
             </div>
@@ -764,68 +732,19 @@
               <article class="meeting-panel">
                 <div class="meeting-panel-head">
                   <div>
-                    <span>出勤统计</span>
-                    <strong>企微回传 + 人工补录</strong>
-                  </div>
-                </div>
-                <div class="meeting-kpis meeting-kpis-compact" id="attendanceSummary">
-                  <div><span>晚会出席</span><b>待同步</b></div>
-                  <div><span>任务反馈</span><b>待同步</b></div>
-                  <div><span>数据来源</span><b>待同步</b></div>
-                </div>
-                <form class="attendance-manager-form" id="attendanceManagerForm" style="display:none">
-                  <label>
-                    成员
-                    <select id="attendanceOwner"></select>
-                  </label>
-                  <label>
-                    类型
-                    <select id="attendanceKind">
-                      <option value="meeting">晚会出席</option>
-                      <option value="task_completion">任务完成</option>
-                    </select>
-                  </label>
-                  <label>
-                    状态
-                    <select id="attendanceStatus">
-                      <option value="normal">正常</option>
-                      <option value="delayed">延迟</option>
-                      <option value="unreported_done">未汇报但完成/出席</option>
-                      <option value="reported_incomplete">已汇报但未完成/未出席</option>
-                      <option value="approved_leave">提前请假</option>
-                      <option value="temp_leave">临时请假</option>
-                      <option value="absent">缺勤</option>
-                    </select>
-                  </label>
-                  <div class="attendance-option-panel" id="attendanceOptionPanel"></div>
-                  <label class="attendance-manager-note">
-                    备注
-                    <input type="text" id="attendanceNote" placeholder="例如：企微漏报，人工补录" />
-                  </label>
-                  <button type="submit" class="pc-btn-primary">保存出勤</button>
-                </form>
-                <p class="meeting-attendance-readonly" id="attendanceReadOnlyHint">当前账号为只读，可查看企微回传和人工补录后的出勤结果。</p>
-                <div class="meeting-attendance-list" id="meetingAttendanceList">
-                  <div class="empty-state">等待企微机器人回传或人工补录出勤结果。</div>
-                </div>
-              </article>
-
-              <article class="meeting-panel">
-                <div class="meeting-panel-head">
-                  <div>
-                    <span>会后跟进</span>
-                    <strong>会后开发进度跟进</strong>
+                    <span>复盘行动</span>
+                    <strong>下一步产品推进</strong>
                   </div>
                 </div>
                 <div class="meeting-target-list" id="meetingNextTargets">
-                  <div class="empty-state">暂无会后跟进建议。生成晚会对账后会按缺口、提交支撑和风险自动生成。</div>
+                  <div class="empty-state">暂无复盘行动建议。生成产品复盘后会按缺口、提交支撑和风险自动生成。</div>
                 </div>
               </article>
 
               <article class="meeting-panel meeting-panel-main">
                 <div class="meeting-panel-head">
                   <div>
-                    <span>会后领取</span>
+                    <span>复盘后任务</span>
                     <strong>🤖 AI 今日推荐</strong>
                   </div>
                   <button type="button" data-action="refresh-recommendations" class="pc-btn-ghost">🔄 刷新推荐</button>
@@ -840,14 +759,14 @@
                 <div class="meeting-panel-head">
                   <div>
                     <span>报告正文</span>
-                    <strong>可复制推送的晚会对账</strong>
+                    <strong>可复制推送的产品复盘</strong>
                   </div>
                   <div class="card-head-right">
                     <button type="button" data-action="copy-evening-report">复制</button>
                     <button type="button" data-action="push-evening-report" id="btnPushEveningReport" style="display:none">推送企微</button>
                   </div>
                 </div>
-                <pre class="report-box" id="meetingEveningReport">点击「生成晚会对账」后，这里会输出前一天任务领取、当前提交、AI Review 风险和会后跟进建议。</pre>
+                <pre class="report-box" id="meetingEveningReport">点击「生成复盘」后，这里会输出产品推进、当前提交、AI Review 风险和下一步行动建议。</pre>
               </article>
               <!-- V4: 24h Timeline 视图 -->
               <article class="meeting-panel">
@@ -858,117 +777,6 @@
                 <div id="eveningTimeline" style="padding:12px;min-height:80px;">
                   <p style="color:#9ca3af;font-size:0.83em;">点击「刷新」加载今日事件 Timeline</p>
                 </div>
-              </article>
-            </div>
-          </section>
-        </section>
-
-        <section class="view" id="attendance">
-          <section class="workspace-shell attendance-shell">
-            <div class="assign-page-header">
-              <div class="pc-header-crumb">
-                <span class="pc-header-parent">指挥</span>
-                <span class="pc-header-sep">/</span>
-                <h2>考勤统计</h2>
-              </div>
-              <div class="pc-header-actions">
-                <button type="button" class="pc-btn-ghost" data-action="toggle-attendance-bulk">批量修改</button>
-                <label class="meeting-date-inline">
-                  <input id="attendanceWeekDate" type="date" aria-label="考勤周" />
-                </label>
-              </div>
-            </div>
-
-            <div class="meeting-kpis" id="attendanceWeeklySummary">
-              <div><span>统计周</span><b>待加载</b></div>
-              <div><span>参与成员</span><b>待加载</b></div>
-              <div><span>可编辑角色</span><b>Admin / 创始人 / 人事管理</b></div>
-              <div><span>评分维度</span><b>任务反馈 / 晚会出勤 / 请假</b></div>
-            </div>
-
-            <div class="attendance-bulk-bar" id="attendanceBulkBar" style="display:none">
-              <div>
-                <strong>批量修改模式</strong>
-                <span id="attendanceBulkCount">已选择 0 项</span>
-              </div>
-              <select id="attendanceBulkStatus" aria-label="批量考勤状态">
-                <option value="normal">正常 / 满分</option>
-                <option value="delayed">已说明延迟 / 满分</option>
-                <option value="unreported_done">未汇报但完成/出席 / 7分</option>
-                <option value="reported_incomplete">已汇报但未完成/未出席 / 4分</option>
-                <option value="approved_leave">提前请假 / 10分</option>
-                <option value="temp_leave">临时请假/迟到 / 7分</option>
-                <option value="absent">缺勤/未完成 / 0分</option>
-              </select>
-              <button type="button" class="pc-btn-primary" data-action="apply-attendance-bulk">应用到所选</button>
-              <button type="button" class="pc-btn-ghost" data-action="clear-attendance-bulk">清空</button>
-            </div>
-
-            <article class="workspace-card attendance-policy-card">
-              <div class="workspace-card-head">
-                <span>规则说明</span>
-                <strong>机器人播报与考勤口径</strong>
-              </div>
-              <div class="attendance-policy-copy">
-                <p><b>任务完成确认：</b>每日 17:00-18:00 在群里由机器人提示“姓名正常完成 / 姓名延迟完成”。延迟完成默认要求第二个工作日补齐；若后续请假，连续工作日按一个评分窗口取平均。</p>
-                <p><b>晚会出席确认：</b>每日 18:25 前在群里回复“姓名正常出席 / 姓名延迟出席”。18:25-18:35 回复按临时请假/迟到处理；18:35 后无记录默认缺勤，可由人事管理补录。</p>
-              </div>
-            </article>
-
-            <div class="attendance-board">
-              <article class="workspace-card attendance-ranking-card">
-                <div class="workspace-card-head">
-                  <span>周排行</span>
-                  <strong>考勤得分一目了然</strong>
-                </div>
-                <div class="attendance-ranking-list" id="attendanceRankingList">
-                  <div class="empty-state">正在加载本周考勤排行…</div>
-                </div>
-              </article>
-
-              <article class="workspace-card attendance-table-card">
-                <div class="workspace-card-head">
-                  <span>周考勤表</span>
-                  <strong>按人查看每日反馈 / 出席 / 请假</strong>
-                </div>
-                <div class="attendance-table-wrap" id="attendanceTableWrap">
-                  <div class="empty-state">正在加载本周考勤表…</div>
-                </div>
-              </article>
-            </div>
-          </section>
-        </section>
-
-        <!-- AI 排期 -->
-        <section class="view" id="planning">
-          <section class="workspace-shell">
-            <div class="assign-page-header">
-              <div class="pc-header-crumb">
-                <span class="pc-header-parent">指挥</span>
-                <span class="pc-header-sep">/</span>
-                <h2>AI 排期</h2>
-              </div>
-              <div class="pc-header-actions">
-                <button type="button" class="pc-btn-ghost" data-action="generate-plan">生成任务</button>
-                <button type="button" class="pc-btn-primary" data-action="apply-plan">应用到任务板</button>
-              </div>
-            </div>
-
-            <div class="workspace-grid planning-workbench">
-              <article class="workspace-card">
-                <div class="workspace-card-head">
-                  <span>阶段输入</span>
-                  <strong>本轮目标</strong>
-                </div>
-                <textarea id="stageGoal" aria-label="阶段目标">5 月 15 日前完成 Cue.AI 双设备课堂 MVP：TRTC 全链路联调、后端实时课堂链路、iPad 老师端开课、学生/教师端加入与提示、内容 SOP 与 Demo 验收。</textarea>
-              </article>
-
-              <article class="workspace-card workspace-card-wide">
-                <div class="workspace-card-head">
-                  <span>生成结果</span>
-                  <strong>候选任务与分工</strong>
-                </div>
-                <div class="plan-grid" id="planGrid"></div>
               </article>
             </div>
           </section>
