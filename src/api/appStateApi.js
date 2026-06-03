@@ -16,16 +16,6 @@ export function createAppStateApi(client = httpClient) {
     loadChecklist(projectId) {
       return client.request(`/api/stage/checklist${query({ projectId })}`);
     },
-    loadDailyScoring(projectId) {
-      return client.request(`/api/scoring/daily${query({ projectId })}`);
-    },
-    loadWeeklyScoring(projectId) {
-      return client.request(`/api/scoring/weekly${query({ projectId })}`);
-    },
-    loadWeeklyAttendance(projectId, date) {
-      const qs = query({ projectId, date });
-      return client.request(`/api/attendance/weekly${qs}`);
-    },
   };
 }
 
