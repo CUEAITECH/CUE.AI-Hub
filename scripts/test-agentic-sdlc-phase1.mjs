@@ -327,6 +327,113 @@ test('refreshAnalysisIntoStore 在 updateStore 后调用 applyCommitLinksToTasks
   assert.ok(applyCall > firstUpdate, 'applyCommitLinksToTasks 应在 updateStore 之后调用');
 });
 
+// ─── Task 6: webhookRoutes E1 trigger ────────────────────────────────────
+
+console.log('\nTask 6: webhookRoutes — PR merged 触发 E1\n');
+
+test('webhookRoutes.js 包含 PR merged E1 触发逻辑', () => {
+  const src = readFileSync(new URL('../server/routes/webhookRoutes.js', import.meta.url), 'utf8');
+  assert.ok(src.includes("json.action === 'closed'"), '应检查 action=closed');
+  assert.ok(src.includes('pull_request?.merged === true'), '应检查 merged=true');
+  assert.ok(src.includes('refreshAnalysisIntoStore'), '应调用 refreshAnalysisIntoStore');
+  assert.ok(src.includes('semanticLinker.js'), '应动态 import semanticLinker');
+});
+
+test('E1 触发在 upsertPullFromWebhook 之后', () => {
+  const src = readFileSync(new URL('../server/routes/webhookRoutes.js', import.meta.url), 'utf8');
+  const upsertPos = src.indexOf('upsertPullFromWebhook(repoFull');
+  const e1Pos = src.indexOf('refreshAnalysisIntoStore');
+  assert.ok(e1Pos > upsertPos, 'E1 触发应在 upsertPullFromWebhook 之后');
+});
+
+// ─── Task 7: reviewTaskLinker 핵심 로직 ────────────────────────────────────
+
+console.log('\nTask 7: reviewTaskLinker — E3 修复任务创建\n');
+
+// reviewTaskLinker.js 의 handleReviewOutcome 는 updateStore 를 주입받으므로
+// mock updateStore 로 순수 로직 검증 가능
+import { handleReviewOutcome } from '../server/services/reviewTaskLinker.js';
+
+test('Pass 레벨은 아무것도 하지 않음', async () => {
+  let called = false;
+  const mockStore = async () => { called = true; };
+  const result = await handleReviewOutcome({ id: 'rev_001', level: 'Pass', suggestion: '좋음' }, mockStore);
+  assert.equal(result.fixTaskId, null, 'Pass 는 fixTaskId=null 반환');
+  assert.ok(!called, 'Pass 는 updateStore 미호출');
+});
+
+test('Warning 레벨은 아무것도 하지 않음', async () => {
+  const result = await handleReviewOutcome({ id: 'rev_002', level: 'Warning', suggestion: '주의' }, async () => {});
+  assert.equal(result.fixTaskId, null, 'Warning 은 fixTaskId=null 반환');
+});
+
+test('Block 레벨 → 수정 태스크 생성', async () => {
+  let capturedDraft = null;
+  const mockStore = async (mutator) => {
+    capturedDraft = mutator({ tasks: [{ id: 'task_orig', title: '원래 태스크', owner: '林世棋', status: 'pending' }] });
+  };
+  const result = await handleReviewOutcome(
+    { id: 'rev_003', level: 'Block', suggestion: 'SQL 注入风险，user_id 未过滤', taskId: 'task_orig' },
+    mockStore
+  );
+  assert.ok(result.fixTaskId !== null, 'Block 은 fixTaskId 반환해야 함');
+  assert.ok(result.fixTaskId.startsWith('fix_'), `fixTaskId 는 fix_ 로 시작해야 함: ${result.fixTaskId}`);
+  const fixTask = capturedDraft?.tasks?.find((t) => t.id === result.fixTaskId);
+  assert.ok(fixTask, '수정 태스크가 draft.tasks 에 추가되어야 함');
+  assert.ok(fixTask.title.startsWith('修复：'), `title 은 修复：로 시작해야 함: ${fixTask.title}`);
+  assert.ok(fixTask.title.length <= 30, `title 은 30자 이하여야 함: ${fixTask.title.length}`);
+  assert.equal(fixTask.priority, 'P0', '수정 태스크 우선순위는 P0');
+  assert.equal(fixTask.type, 'fix', '수정 태스크 type은 fix');
+  assert.ok(fixTask.dependencies.includes('task_orig'), 'dependencies 에 원래 태스크 포함');
+  const orig = capturedDraft?.tasks?.find((t) => t.id === 'task_orig');
+  assert.equal(orig?.blocked, true, 'Block 레벨 → 원래 태스크 blocked=true');
+});
+
+test('Escalate 레벨 → 수정 태스크 생성 (blocked 없음)', async () => {
+  let capturedDraft = null;
+  const mockStore = async (mutator) => {
+    capturedDraft = mutator({ tasks: [] });
+  };
+  const result = await handleReviewOutcome(
+    { id: 'rev_004', level: 'Escalate', suggestion: '보안 이슈 에스컬레이션' },
+    mockStore
+  );
+  assert.ok(result.fixTaskId !== null, 'Escalate 도 fixTaskId 반환');
+  const fixTask = capturedDraft?.tasks?.find((t) => t.id === result.fixTaskId);
+  assert.ok(fixTask, 'Escalate 도 수정 태스크 생성');
+  assert.ok(!fixTask.blocked, 'Escalate 는 blocked 설정 안 함 (originalTask 없음)');
+});
+
+test('같은 review ID 로 두번 호출해도 태스크 중복 생성 안 됨', async () => {
+  let draft = { tasks: [] };
+  const mockStore = async (mutator) => { draft = mutator(draft); };
+  const review = { id: 'rev_005', level: 'Block', suggestion: '중복 방지 테스트' };
+  await handleReviewOutcome(review, mockStore);
+  await handleReviewOutcome(review, mockStore);
+  const fixTasks = draft.tasks.filter((t) => t.type === 'fix');
+  assert.equal(fixTasks.length, 1, '중복 호출해도 수정 태스크는 1개만 생성');
+});
+
+// ─── Task 8: pullPipeline E3 접선 ──────────────────────────────────────────
+
+console.log('\nTask 8: pullPipeline.js — E3 接线（PR-Agent 主路）\n');
+
+test('pullPipeline.js 에 E3 트리거 코드 존재', () => {
+  const src = readFileSync(new URL('../server/services/pullPipeline.js', import.meta.url), 'utf8');
+  assert.ok(src.includes("hubReview.level === 'Block'"), 'Block 레벨 감지 코드 있어야 함');
+  assert.ok(src.includes("hubReview.level === 'Escalate'"), 'Escalate 레벨 감지 코드 있어야 함');
+  assert.ok(src.includes('handleReviewOutcome'), 'handleReviewOutcome 호출 코드 있어야 함');
+  assert.ok(src.includes('reviewTaskLinker.js'), 'reviewTaskLinker.js 동적 import 있어야 함');
+});
+
+test('E3 트리거는 updateStore 이후에 위치', () => {
+  const src = readFileSync(new URL('../server/services/pullPipeline.js', import.meta.url), 'utf8');
+  // upsertPullIntoStore 함수 내에서 updateStore 블록 닫힘 이후에 E3 코드가 와야 함
+  const updateStoreEnd = src.lastIndexOf('return draft;\n  });');
+  const e3Pos = src.indexOf('handleReviewOutcome', updateStoreEnd);
+  assert.ok(e3Pos > updateStoreEnd, 'E3 트리거는 updateStore 블록 이후에 위치해야 함');
+});
+
 // ─── 结果汇总 ──────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} 个测试，${passed} 通过，${failed} 失败\n`);

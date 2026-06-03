@@ -308,6 +308,21 @@ export async function upsertPullIntoStore(prDetail, projectId, updateStore, stor
     return draft;
   });
 
+  // E3: Block/Escalate review → 自动建修复任务（SPEC-E3，PR-Agent 主路）
+  // fire-and-forget；reviewTaskLinker 内部用 stableId 防重，重复 upsert 无副作用
+  if (hubReview && (hubReview.level === 'Block' || hubReview.level === 'Escalate')) {
+    const reviewRecord = {
+      id: `rev_pr_${pullId}`,
+      level: hubReview.level,
+      suggestion: hubReview.suggestion || '',
+      taskId: linkedTaskIds?.[0] || null,
+      pullId
+    };
+    import('./reviewTaskLinker.js')
+      .then(({ handleReviewOutcome }) => handleReviewOutcome(reviewRecord, updateStore))
+      .catch((err) => logger.error('[E3] pullPipeline reviewTaskLinker 失败:', err.message));
+  }
+
   return { isNew, pull: pullEntry };
 }
 
