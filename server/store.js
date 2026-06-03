@@ -205,6 +205,12 @@ export function migrateStore(store) {
     pulls: [],
     bypasses: [],
     currentStage: defaultCurrentStage,
+    // Task v2 / Agentic SDLC Phase 1 新增集合
+    milestones: [],
+    prds: [],
+    testRuns: [],
+    gapAnalysis: {},
+    manualTestQueue: [],
     ...store
   };
 
@@ -482,6 +488,22 @@ export function migrateStore(store) {
       );
     }
   }
+
+  // Task v2 字段回填：补全新字段默认值，修复 acceptance===description 历史数据
+  next.tasks = (next.tasks || []).map((task) => {
+    const patched = { ...task };
+    if (!patched.businessNote)                    patched.businessNote = '';
+    if (!Array.isArray(patched.dependencies))     patched.dependencies = [];
+    if (!Array.isArray(patched.requirementRefs))  patched.requirementRefs = [];
+    if (!Array.isArray(patched.evidenceRefs))     patched.evidenceRefs = [];
+    if (!patched.milestoneId)                     patched.milestoneId = null;
+    if (!patched.e2Status)                        patched.e2Status = 'not-tested';
+    // acceptance === description → 清空（无效占位）
+    if (patched.acceptance && patched.acceptance === patched.description) {
+      patched.acceptance = '';
+    }
+    return patched;
+  });
 
   return rebindStoreExplicitRefs(next);
 }
