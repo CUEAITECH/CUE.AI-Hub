@@ -118,25 +118,26 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const docsManagerSrc = readFileSync(join(__dirname, '../server/services/docsManager.js'), 'utf8');
-const promptStart = docsManagerSrc.indexOf('const PARSE_SYSTEM_PROMPT');
-const promptEnd = docsManagerSrc.indexOf('`;', promptStart) + 2;
-const promptBlock = docsManagerSrc.slice(promptStart, promptEnd);
+// prompt 已外部化到 server/prompts/parse-docs.json，从文件读取验证
+const parseDocsPromptFile = JSON.parse(
+  readFileSync(join(__dirname, '../server/prompts/parse-docs.json'), 'utf8')
+);
+const promptBlock = parseDocsPromptFile.prompts.system;
 
 test('prompt 包含 businessNote 字段', () => {
-  assert.ok(promptBlock.includes('"businessNote"'), 'prompt 应包含 businessNote 字段定义');
+  assert.ok(promptBlock.includes('businessNote'), 'prompt 应包含 businessNote 字段定义');
 });
 
 test('prompt 包含 acceptance 字段', () => {
-  assert.ok(promptBlock.includes('"acceptance"'), 'prompt 应包含 acceptance 字段定义');
+  assert.ok(promptBlock.includes('acceptance'), 'prompt 应包含 acceptance 字段定义');
 });
 
 test('prompt 包含 dependencies 字段', () => {
-  assert.ok(promptBlock.includes('"dependencies"'), 'prompt 应包含 dependencies 字段定义');
+  assert.ok(promptBlock.includes('dependencies'), 'prompt 应包含 dependencies 字段定义');
 });
 
 test('prompt 包含 requirementRefs 字段', () => {
-  assert.ok(promptBlock.includes('"requirementRefs"'), 'prompt 应包含 requirementRefs 字段定义');
+  assert.ok(promptBlock.includes('requirementRefs'), 'prompt 应包含 requirementRefs 字段定义');
 });
 
 test('prompt 包含禁止复制 description 规则', () => {

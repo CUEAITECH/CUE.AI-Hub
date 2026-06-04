@@ -15,6 +15,7 @@ import remarkGfm from 'remark-gfm';   // GFM: task list [x], tables, strikethrou
 import { toString } from 'mdast-util-to-string';
 import { callClaude, parseJsonOutput } from './claude.js';
 import { healDependenciesByTitle } from './dependencyGraph.js';
+import { getSystemPrompt } from './promptLoader.js';
 import { createId, loadStore, updateStore } from '../store.js';
 import { defaultStageChecklist, reassignChecklistPhaseIds } from './stageChecklist.js';
 import logger from '../logger.js';
@@ -179,47 +180,7 @@ export async function fetchProjectDocs(owner, repo) {
   return docs.filter(Boolean);
 }
 
-const PARSE_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理助手，负责从开发计划文档中解析结构化任务（Task v2 格式）。
-
-输出严格遵循以下 JSON 数组格式，不要输出其他内容：
-[
-  {
-    "title": "任务标题（简洁，20字以内）",
-    "owner": "负责人，必须从团队成员中选：田家铭/胡佳涛/罗子宽/林世棋，文档未明确则写 '待认领'，禁止使用'成员A/B/C'等占位符",
-    "priority": "P0|P1|P2",
-    "sourceDoc": "来源文档路径",
-    "deliverableTitle": "所属交付项标题（从文档章节/模块/里程碑推断，20字以内）",
-    "description": "技术细节描述（接口名/SDK/模块等，50字以内）",
-    "businessNote": "业务语言描述（非技术人员可读，格式：用户能做XX，或：XX角色能XX；30字以内；必须与 description 不同）",
-    "acceptance": "独立的可测量完成条件（50字以内；禁止复制或改写 description；必须描述可验证的结果而非实现方式）",
-    "dependencies": ["依赖的其他任务标题（精确匹配，无依赖则为空数组 []）"],
-    "requirementRefs": ["来源需求编号，如 REQ-L2-001；无则为空数组 []"],
-    "dueDate": "截止日期（YYYY-MM-DD 格式，无则留空）",
-    "status": "pending|in_progress|completed"
-  }
-]
-
-判断状态的规则：
-- 文档中有 ✅、[x]、「已完成」、「完成」 → completed
-- 文档中有 🔶、「进行中」、「开发中」 → in_progress
-- 其余 → pending
-
-acceptance 生成规则（重要）：
-- 必须描述可验证的结果，不能是对 description 的改写
-- 正确示例：「学生端进入课堂后，TRTC 控制台显示该学生已进房，本地麦克风按钮可用」
-- 错误示例（照抄技术描述）：「接入 trtc-sdk-v5，调用 enterRoom」
-- 无法确定验收条件时写：「[待产品确认验收标准]」（不要留空或复制 description）
-
-businessNote 生成规则：
-- 使用「用户能 XX」或「老师/学生能 XX」的格式
-- 正确示例：「学生能通过课堂码加入老师的课堂」
-- 错误示例（技术语言）：「调用 TRTC SDK 的 enterRoom 接口」
-
-注意：
-- 每个文档可解析多条任务
-- 跳过纯描述性内容（如功能说明、背景），只提取可执行的任务条目
-- 如无明确截止日期，dueDate 留空字符串
-- **JSON 字符串值中绝对禁止内嵌英文双引号 "**：如需引述名称/术语，使用中文「」或省略引号；任何字段的值里出现未转义的 " 都会导致整个输出解析失败`;
+const PARSE_SYSTEM_PROMPT = getSystemPrompt('parse-docs');
 
 /**
  * 用 LLM 从文档内容解析结构化任务
@@ -356,53 +317,7 @@ export function parseProgressDoc(markdownContent = '') {
   return items;
 }
 
-const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负责从开发计划文档中提炼完整的开发阶段路线图，并为每个阶段分配路径图检查节点。
-
-输出严格遵循以下 JSON 对象格式，不输出其他内容：
-{
-  "phases": [
-    {
-      "id": "phase_<英文标识>",
-      "title": "阶段名（中文，10字以内）",
-      "status": "待开始|进行中|已完成",
-      "productKeywords": ["从文档中识别出来的该阶段关注的产品域关键词（如客户端骨架阶段可能是 iPad/iPhone/iOS/前端/App；后端阶段可能是 API/Session/服务/后端）。3-8 个，要求能让后续根据 deliverable 标题判断它属于该阶段。"]
-    }
-  ],
-  "nodes": [
-    {
-      "id": "保留已有节点id或新生成的stage_node_xxx",
-      "title": "节点短标题（20字以内）",
-      "owner": "负责人，必须从团队成员中选：田家铭/胡佳涛/罗子宽/林世棋，文档未明确则写 '待认领'，禁止使用'成员A/B/C'等占位符",
-      "acceptance": "验收口径（80字以内）",
-      "phaseId": "所属阶段id（必须是上面phases中的id之一）",
-      "keywords": ["关键词1", "关键词2"]
-    }
-  ],
-  "nodeAssignments": { "nodeId": "phaseId" },
-  "deliverableAssignments": { "交付项标题（与用户提供的 deliverableTitles 完全一致）": "phaseId" }
-}
-
-规则：
-- phases 数量 3-8 个，覆盖从当前进行中到最终交付的完整路线图
-- 近期阶段（已开始/即将开始）：3-5 个节点，描述具体可交付物
-- 远期阶段（计划中/未开始）：1-3 个节点，可以相对模糊，以里程碑为主
-- 如果某一段计划任务过多（>5个），优先拆分为多个子阶段，而不是把任务堆在同一阶段
-- 节点总数不设上限，完整覆盖文档中所有阶段的交付物
-- id 用英文下划线格式（如 phase_backend, phase_launch），不能有重复
-- nodes 中的 phaseId 必须从 phases 数组中选取，不能创建新 phaseId
-- nodeAssignments 覆盖所有 nodes 的 nodeId→phaseId 映射
-- 优先复用用户提供的"当前路径图节点"的 id（通过标题语义匹配），未匹配则用新 id
-- 从文档的里程碑、阶段划分、进度标注中推断 phases 的 status
-- **deliverableAssignments 必须覆盖用户提供的【交付项标题】列表中的每一个标题（一个不能少）**：
-  - key 是原始的 deliverableTitle 字符串（一字不差地复用，含空格、标点、英文大小写）
-  - value 是 phases 中的 phaseId
-  - 输出前自己核对：deliverableAssignments 的 key 数量必须等于列表长度，遗漏任何一个视为失败
-  - 归类原则（项目无关，全靠语义匹配）：
-    * 先看 deliverable 标题里出现了什么产品域名词（任何产品的客户端/服务端/特定模块名等），再找该 phase 的 productKeywords 中最匹配的
-    * "里程碑/MVP/验收/交付物" 这类修饰词不影响归类——只看 deliverable 标题中真实指向的产品端或模块
-    * 不要把某个产品端的 MVP 当成其他端的子目标。比如"客户端 MVP"不归后端 phase，"后端 MVP"不归客户端 phase
-    * 若 deliverable 标题不属于任何已规划的 phase，挑文档语义最贴近的，绝不能默认丢到第一个 phase
-  - **重要**：每个 phase 的 productKeywords 必须能让上面这个归类原则跑通——即 productKeywords 至少要包含该 phase 涉及的产品端、模块或功能层名词，覆盖到该 phase 下所有 deliverable 标题中可能出现的关键名词`;
+const PHASES_SYSTEM_PROMPT = getSystemPrompt('parse-phases');
 
 /**
  * 从文档内容用 LLM 提炼开发阶段划分和路径图节点；LLM 失败时按 sourceDoc 文档名兜底归组
