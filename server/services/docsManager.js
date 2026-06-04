@@ -14,6 +14,7 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';   // GFM: task list [x], tables, strikethrough
 import { toString } from 'mdast-util-to-string';
 import { callClaude, parseJsonOutput } from './claude.js';
+import { healDependenciesByTitle } from './dependencyGraph.js';
 import { createId, loadStore, updateStore } from '../store.js';
 import { defaultStageChecklist, reassignChecklistPhaseIds } from './stageChecklist.js';
 import logger from '../logger.js';
@@ -1059,10 +1060,11 @@ export async function importDocsForProject(project, projectId, importLimit) {
     return { imported: 0, message: 'docs/ 目录无计划文档' };
   }
 
-  const parsedTasks = await parseDocsForTasks(docs);
-  if (!parsedTasks.length) {
+  const rawParsedTasks = await parseDocsForTasks(docs);
+  if (!rawParsedTasks.length) {
     return { imported: 0, message: 'LLM 未解析出任务（无 API key 或文档无可执行任务）' };
   }
+  const parsedTasks = healDependenciesByTitle(rawParsedTasks);
 
   const storeSnap = await loadStore();
   const planDocs = docs.filter((doc) => !String(doc.name || doc.path || '').includes('阶段进度追踪'));

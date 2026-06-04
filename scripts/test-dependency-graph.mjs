@@ -12,6 +12,7 @@ import {
   isCircularDependency,
   validateTaskDependencies,
   healDependencies,
+  healDependenciesByTitle,
 } from '../server/services/dependencyGraph.js';
 
 let pass = 0;
@@ -189,6 +190,77 @@ await test('heal：返回新数组，不修改原始输入', () => {
 await test('heal：空任务列表安全返回', () => {
   const healed = healDependencies([]);
   assert.deepEqual(healed, []);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 4. healDependenciesByTitle — CUE 真实场景（依赖存储为任务标题）
+// ═══════════════════════════════════════════════════════════════════
+
+function task(id, title, deps = []) {
+  return { id, title, dependencies: deps, status: 'pending' };
+}
+
+await test('byTitle：去除重复标题依赖', () => {
+  const tasks = [
+    task('t1', '配置本地环境', ['执行Mongo迁移', '执行Mongo迁移']),
+    task('t2', '执行Mongo迁移', []),
+  ];
+  const healed = healDependenciesByTitle(tasks);
+  const t1 = healed.find(x => x.id === 't1');
+  assert.deepEqual(t1.dependencies, ['执行Mongo迁移']);
+});
+
+await test('byTitle：删除自引用（标题等于自身标题）', () => {
+  const tasks = [
+    task('t1', '配置本地环境', ['配置本地环境', '执行Mongo迁移']),
+    task('t2', '执行Mongo迁移', []),
+  ];
+  const healed = healDependenciesByTitle(tasks);
+  const t1 = healed.find(x => x.id === 't1');
+  assert.ok(!t1.dependencies.includes('配置本地环境'));
+  assert.ok(t1.dependencies.includes('执行Mongo迁移'));
+});
+
+await test('byTitle：删除不存在的标题（孤儿）', () => {
+  const tasks = [
+    task('t1', '配置本地环境', ['不存在的任务', '执行Mongo迁移']),
+    task('t2', '执行Mongo迁移', []),
+  ];
+  const healed = healDependenciesByTitle(tasks);
+  const t1 = healed.find(x => x.id === 't1');
+  assert.ok(!t1.dependencies.includes('不存在的任务'));
+  assert.ok(t1.dependencies.includes('执行Mongo迁移'));
+});
+
+await test('byTitle：断开标题级循环依赖', () => {
+  const tasks = [
+    task('t1', '配置本地环境', ['执行Mongo迁移']),
+    task('t2', '执行Mongo迁移', ['配置本地环境']),
+  ];
+  const healed = healDependenciesByTitle(tasks);
+  // 修复后不应再有循环
+  const t1 = healed.find(x => x.id === 't1');
+  const t2 = healed.find(x => x.id === 't2');
+  const circular = (t1.dependencies.includes('执行Mongo迁移') && t2.dependencies.includes('配置本地环境'));
+  assert.ok(!circular, '标题级循环依赖未被断开');
+});
+
+await test('byTitle：不破坏合法标题依赖链', () => {
+  const tasks = [
+    task('t1', '完成生产检查', ['验证MongoDB写入']),
+    task('t2', '验证MongoDB写入', ['验证UserSig身份']),
+    task('t3', '验证UserSig身份', []),
+  ];
+  const healed = healDependenciesByTitle(tasks);
+  assert.deepEqual(healed.find(x => x.id === 't1').dependencies, ['验证MongoDB写入']);
+  assert.deepEqual(healed.find(x => x.id === 't2').dependencies, ['验证UserSig身份']);
+});
+
+await test('byTitle：返回新数组，不修改原始输入', () => {
+  const tasks = [task('t1', 'A', ['A'])];
+  const orig = JSON.stringify(tasks);
+  healDependenciesByTitle(tasks);
+  assert.equal(JSON.stringify(tasks), orig);
 });
 
 // ─── 汇总 ────────────────────────────────────────────────────────
