@@ -1,4 +1,5 @@
 import logger from '../logger.js';
+import { buildTaskContractMarkdown, taskContractPath } from './taskContract.js';
 /**
  * GitHub REST API v3 封装
  * 用于从远端仓库拉取 commits、文件变更和 patch，替代本地 git 命令
@@ -494,6 +495,23 @@ export async function createTaskBranchAndPR(task, project) {
 
   const prBody = buildTaskPRBody(task);
   const prTitle = `[${task.id}] ${String(task.title || '（无标题）')}`;
+
+  try {
+    await createFileOnBranch(
+      owner,
+      repo,
+      branchName,
+      taskContractPath(task.id),
+      buildTaskContractMarkdown(task, {
+        branchName,
+        projectName: project.name || `${owner}/${repo}`
+      }),
+      `chore(${task.id}): 初始化任务上下文文件`
+    );
+  } catch (err) {
+    if (!String(err.message || '').includes('422')) throw err;
+  }
+
   const { number: prNumber, htmlUrl: prUrl } = await createDraftPR(owner, repo, {
     title: prTitle,
     body: prBody,
