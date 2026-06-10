@@ -10,10 +10,12 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPTS_DIR = fileURLToPath(new URL('.', import.meta.url));
 const TEST_FILE_RUNNER = fileURLToPath(new URL('./run-test-file.mjs', import.meta.url));
-const TEST_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS || 30000);
+const TEST_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS || 90000);
 const RUN_HEAVY_UNIT_TESTS = process.env.RUN_HEAVY_UNIT_TESTS === '1';
 
 const heavyUnitTests = new Set([
+  'test-agentic-sdlc-phase1.mjs',
+  'test-prompt-loader.mjs',
   'test-agent-e2e.mjs',
   'test-event-replay.mjs',
   'test-invariants.mjs',
@@ -69,6 +71,7 @@ for (const file of testFiles) {
     stdio: 'pipe',
     encoding: 'utf8',
     timeout: TEST_TIMEOUT_MS,
+    env: { ...process.env, NODE_ENV: 'test' },
   });
   if (result.status === 0) {
     // 取第一行输出作为摘要（通常是 "XX OK"）

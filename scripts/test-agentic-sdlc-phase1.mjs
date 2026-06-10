@@ -500,4 +500,4 @@ test('L3 트리거는 refreshAssignmentBrief 이후에 위치', () => {
 // ─── 结果汇总 ──────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} 个测试，${passed} 通过，${failed} 失败\n`);
-if (failed > 0) process.exit(1);
+process.exit(failed > 0 ? 1 : 0);

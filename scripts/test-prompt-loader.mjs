@@ -130,4 +130,4 @@ await test('业务：parseDocsForTasks 在 callClaude 返回 null 时返回空�
 
 console.log('');
 console.log(`${pass + fail} tests: ${pass} passed, ${fail} failed`);
-if (fail > 0) process.exit(1);
+process.exit(fail > 0 ? 1 : 0);

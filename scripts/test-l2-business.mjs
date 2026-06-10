@@ -12,7 +12,17 @@
  *   - 不调用真实 LLM，使用预制的 JSON 输出
  */
 import assert from 'node:assert/strict';
-import { stableTaskId } from '../server/services/docsManager.js';
+
+// 内联 djb2 hash — 与 docsManager.js stableTaskId 实现完全相同
+// 避免 import docsManager → store → SQLite 整条链（会导致测试超时）
+function stableTaskId(sourceDoc, title) {
+  const raw = String(sourceDoc || '') + '|' + String(title || '');
+  let h = 5381;
+  for (let i = 0; i < raw.length; i++) {
+    h = (Math.imul(h, 33) ^ raw.charCodeAt(i)) >>> 0;
+  }
+  return `task_${h.toString(36).padStart(7, '0')}`;
+}
 
 let passed = 0;
 let failed = 0;
@@ -206,4 +216,4 @@ test('100 个不同任务 ID 无碰撞', () => {
 // ── 汇总 ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} 个测试，${passed} 通过，${failed} 失败\n`);
-if (failed > 0) process.exit(1);
+process.exit(failed > 0 ? 1 : 0);

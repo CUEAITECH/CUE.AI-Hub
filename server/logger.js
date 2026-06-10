@@ -14,38 +14,39 @@
 
 import pino from 'pino';
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isTest = process.env.NODE_ENV === 'test';
+const isDev = process.env.NODE_ENV !== 'production' && !isTest;
 
-const logger = pino(
-  {
-    level: process.env.LOG_LEVEL || 'info',
-    // 生产环境输出 JSON，开发环境 pino-pretty 美化
-    ...(isDev ? {} : {}),
-    // 时间戳格式
-    timestamp: pino.stdTimeFunctions.isoTime,
-    // 基础字段
-    base: {
-      pid: process.pid,
-      env: process.env.NODE_ENV || 'development',
-    },
-    // 将 err 对象序列化为可读格式
-    serializers: {
-      err: pino.stdSerializers.err,
-      error: pino.stdSerializers.err,
-    },
-  },
-  isDev
-    ? pino.transport({
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'SYS:HH:MM:ss',
-          ignore: 'pid,hostname,env',
-          messageFormat: '{msg}',
+const noop = () => {};
+const noopLogger = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop, child: () => noopLogger };
+
+const logger = isTest
+  ? noopLogger
+  : pino(
+      {
+        level: process.env.LOG_LEVEL || 'info',
+        timestamp: pino.stdTimeFunctions.isoTime,
+        base: {
+          pid: process.pid,
+          env: process.env.NODE_ENV || 'development',
         },
-      })
-    : process.stdout
-);
+        serializers: {
+          err: pino.stdSerializers.err,
+          error: pino.stdSerializers.err,
+        },
+      },
+      isDev
+        ? pino.transport({
+            target: 'pino-pretty',
+            options: {
+              colorize: true,
+              translateTime: 'SYS:HH:MM:ss',
+              ignore: 'pid,hostname,env',
+              messageFormat: '{msg}',
+            },
+          })
+        : process.stdout
+    );
 
 export default logger;
 

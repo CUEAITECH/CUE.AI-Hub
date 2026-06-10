@@ -180,4 +180,4 @@ await test('无原始任务时（无 taskId）也能建修复任务', async () =
 // ── 汇总 ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} 个测试，${passed} 通过，${failed} 失败\n`);
-if (failed > 0) process.exit(1);
+process.exit(failed > 0 ? 1 : 0);
