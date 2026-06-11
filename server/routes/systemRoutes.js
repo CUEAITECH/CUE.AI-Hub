@@ -70,6 +70,7 @@ export function createSystemRoutes({
   buildMetrics,
   buildStageChecklist,
   aggregateDeliverableProgress,
+  buildMilestoneMetrics,
   buildOpenApiSpec,
   sendJson,
   port,
@@ -882,7 +883,8 @@ export function createSystemRoutes({
         alerts,
         metrics: buildMetrics(scopedStore, alerts),
         stageChecklist: buildStageChecklist({ ...scopedStore, currentStage }),
-        deliverableProgress: aggregateDeliverableProgress(scopedStore)
+        deliverableProgress: aggregateDeliverableProgress(scopedStore),
+        milestoneMetrics: buildMilestoneMetrics(scopedStore)
       });
       return true;
     }

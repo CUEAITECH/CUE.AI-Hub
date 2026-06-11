@@ -257,6 +257,79 @@ export function createTaskRoutes({
       return true;
     }
 
+    // ── POST /api/tasks/:id/expand ────────────────────────────────────────────
+    // REQ-L2-008: 复杂任务展开为 2-5 个子任务（Taskmaster expand 借鉴）
+    if (req.method === 'POST' && /^\/api\/tasks\/[^/]+\/expand$/.test(url.pathname)) {
+      const taskId = decodeURIComponent(url.pathname.split('/')[3]);
+      const store = await loadStore(getTenantId(req));
+      const task = (store.tasks || []).find((t) => t.id === taskId);
+      if (!task) { sendError(res, 404, 'task not found'); return true; }
+
+      const { json: body } = await readBody(req);
+      const maxSubtasks = Math.max(2, Math.min(5, Number(body?.count) || 3));
+
+      const EXPAND_SYSTEM = `你是任务分解助手。把一个复杂任务分解为 ${maxSubtasks} 个可独立执行的子任务。
+每个子任务必须有：title（15字内）、acceptance（验收标准，一句话）、priority（P0/P1/P2）、owner（继承父任务）。
+输出 JSON 数组，只返回数组，不要其他文字。`;
+      const userPrompt = `任务：${task.title}
+描述：${task.description || '（无）'}
+验收：${task.acceptance || '（无）'}
+业务注释：${task.businessNote || '（无）'}
+
+请分解为 ${maxSubtasks} 个子任务：`;
+
+      let subtasks = [];
+      try {
+        const { callClaude } = await import('../services/claude.js');
+        const raw = await callClaude(EXPAND_SYSTEM, userPrompt);
+        if (raw) {
+          const parsed = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] || '[]');
+          subtasks = Array.isArray(parsed) ? parsed : [];
+        }
+      } catch (_) { /* LLM 降级：返回空列表，让前端提示用户手动填 */ }
+
+      if (!subtasks.length) {
+        sendJson(res, 200, { subtasks: [], message: 'LLM 不可用，请手动创建子任务' });
+        return true;
+      }
+
+      // djb2 hash inline（避免 import docsManager）
+      const djb2 = (str) => {
+        let h = 5381;
+        for (let i = 0; i < str.length; i++) h = (Math.imul(h, 33) ^ str.charCodeAt(i)) >>> 0;
+        return `task_${h.toString(36).padStart(7, '0')}`;
+      };
+
+      const created = subtasks.map((s) => normalizeTask({
+        id: djb2(`${taskId}|${s.title}`),
+        title: String(s.title || '').slice(0, 60),
+        acceptance: String(s.acceptance || ''),
+        priority: ['P0', 'P1', 'P2'].includes(s.priority) ? s.priority : task.priority,
+        owner: s.owner || task.owner,
+        parentId: taskId,
+        projectId: task.projectId,
+        milestoneId: task.milestoneId,
+        tenantId: task.tenantId || 'default',
+        status: 'pending',
+        type: 'subtask',
+        dependencies: [taskId],
+      }));
+
+      const nextStore = await updateStore((draft) => {
+        const existing = new Set((draft.tasks || []).map((t) => t.id));
+        const toAdd = created.filter((t) => !existing.has(t.id));
+        draft.tasks = [...toAdd, ...(draft.tasks || [])];
+        return draft;
+      }, getTenantId(req));
+
+      sendJson(res, 201, {
+        subtasks: created,
+        parentId: taskId,
+        tasks: nextStore.tasks.filter((t) => t.parentId === taskId)
+      });
+      return true;
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/plans/apply') {
       const { json } = await readBody(req);
       const plannedTasks = Array.isArray(json?.tasks) ? json.tasks : [];
