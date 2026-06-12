@@ -52,8 +52,8 @@ export function buildPrdCardHtml(prd) {
     : '<span class="l1-muted">—</span>';
   return `
     <div class="l1-prd-card">
-      <div class="l1-prd-row"><span class="l1-prd-k">标题</span><span class="l1-prd-v">${escapeHtml(p.title) || '<span class="l1-muted">—</span>'}</span></div>
-      <div class="l1-prd-row"><span class="l1-prd-k">目标</span><span class="l1-prd-v">${escapeHtml(p.goal) || '<span class="l1-muted">—</span>'}</span></div>
+      <div class="l1-prd-row"><span class="l1-prd-k">标题</span><span class="l1-prd-v">${escapeHtml(p.title) || '—'}</span></div>
+      <div class="l1-prd-row"><span class="l1-prd-k">目标</span><span class="l1-prd-v">${escapeHtml(p.goal) || '—'}</span></div>
       <div class="l1-prd-row"><span class="l1-prd-k">验收条件</span><span class="l1-prd-v">${list(p.acceptance)}</span></div>
       <div class="l1-prd-row"><span class="l1-prd-k">范围</span><span class="l1-prd-v">${list(p.scope)}</span></div>
       <div class="l1-prd-row"><span class="l1-prd-k">不做</span><span class="l1-prd-v">${list(p.nonGoals)}</span></div>
