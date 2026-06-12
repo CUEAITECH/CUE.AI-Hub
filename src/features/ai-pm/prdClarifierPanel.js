@@ -79,7 +79,8 @@ async function onGenerate() {
 async function onRefine() {
   showErr(3, '');
   const feedback = ($('l1Feedback')?.value || '').trim();
-  if (!feedback || !_prd?.id) return;
+  if (!_prd?.id) return;
+  if (!feedback) { showErr(3, '请先填写修改意见'); return; }
   try {
     _prd = await withBusy($('l1RefineBtn'), '修改中…', () => prdApi.refinePrd(_prd.id, feedback));
     $('l1PrdCard').innerHTML = buildPrdCardHtml(_prd);
