@@ -64,6 +64,7 @@ test('listPrds 解包 { prds } 数组', async () => {
   const api = createPrdApi(client);
   const r = await api.listPrds();
   assert.equal(client.calls.at(-1).path, '/api/prds');
+  assert.equal(client.calls.at(-1).method, 'GET');
   assert.equal(r.length, 1);
 });
 

@@ -7,7 +7,7 @@ import { httpClient } from './httpClient.js';
  */
 export function createPrdApi(client = httpClient) {
   return {
-    clarify(input) {
+    async clarify(input) {
       return client.request('/api/ai/clarify', {
         method: 'POST',
         body: JSON.stringify({ input: String(input || '') }),
@@ -16,7 +16,7 @@ export function createPrdApi(client = httpClient) {
     async generatePrd(input, answers = {}) {
       const r = await client.request('/api/ai/generate-prd', {
         method: 'POST',
-        body: JSON.stringify({ input: String(input || ''), answers: answers || {} }),
+        body: JSON.stringify({ input: String(input || ''), answers }),
       });
       return r.prd;
     },
