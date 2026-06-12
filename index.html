@@ -409,6 +409,12 @@
               </div>
             </div>
 
+            <div class="ai-pm-tabs" id="aipmTabs">
+              <button type="button" class="ai-pm-tab active" data-aipm-tab="planning">规划调整</button>
+              <button type="button" class="ai-pm-tab" data-aipm-tab="clarifier">需求澄清</button>
+            </div>
+            <div id="aipmTabPlanning">
+
             <div class="ai-pm-summary" id="aiPmSummary">
               <div><span>待审批大调整</span><b>0</b></div>
               <div><span>自动小调整</span><b>0</b></div>
@@ -453,6 +459,65 @@
                 </div>
               </article>
             </div>
+            </div><!-- /#aipmTabPlanning -->
+
+            <div id="aipmTabClarifier" hidden>
+              <div class="l1-intro">
+                <p>描述一个产品想法，AI 先反问澄清，再生成结构化 PRD。</p>
+              </div>
+
+              <!-- Step 1：描述想法 -->
+              <div class="l1-step l1-step-active" id="l1Step1" data-step="1">
+                <div class="l1-step-head">
+                  <span class="l1-step-num">1</span>
+                  <span class="l1-step-title">描述想法</span>
+                  <span class="l1-step-status" id="l1Step1Status">当前步骤</span>
+                </div>
+                <div class="l1-step-body" id="l1Step1Body">
+                  <textarea id="l1Input" class="l1-input" rows="3" placeholder="例：做一个让用户能给视频打标签的功能"></textarea>
+                  <div class="l1-step-actions">
+                    <button type="button" class="l1-btn" id="l1ClarifyBtn" disabled>开始澄清 →</button>
+                  </div>
+                  <div class="l1-err" id="l1Step1Err" hidden></div>
+                </div>
+              </div>
+
+              <!-- Step 2：回答澄清问题 -->
+              <div class="l1-step l1-step-locked" id="l1Step2" data-step="2">
+                <div class="l1-step-head">
+                  <span class="l1-step-num">2</span>
+                  <span class="l1-step-title">回答澄清问题</span>
+                  <span class="l1-step-status" id="l1Step2Status">等待 Step 1</span>
+                </div>
+                <div class="l1-step-body" id="l1Step2Body" hidden>
+                  <div id="l1Questions"></div>
+                  <div class="l1-step-actions">
+                    <button type="button" class="l1-btn" id="l1GenerateBtn">生成 PRD →</button>
+                  </div>
+                  <div class="l1-err" id="l1Step2Err" hidden></div>
+                </div>
+              </div>
+
+              <!-- Step 3：PRD 预览 + 修改 -->
+              <div class="l1-step l1-step-locked" id="l1Step3" data-step="3">
+                <div class="l1-step-head">
+                  <span class="l1-step-num">3</span>
+                  <span class="l1-step-title">PRD 预览 + 修改</span>
+                  <span class="l1-step-status" id="l1Step3Status">等待 Step 2</span>
+                </div>
+                <div class="l1-step-body" id="l1Step3Body" hidden>
+                  <div id="l1PrdCard"></div>
+                  <div class="l1-refine">
+                    <label class="l1-q-label">修改意见（可选）</label>
+                    <textarea id="l1Feedback" class="l1-input" rows="2" placeholder="例：把范围扩大到也支持给图片打标签"></textarea>
+                    <div class="l1-step-actions">
+                      <button type="button" class="l1-btn" id="l1RefineBtn">提交修改</button>
+                    </div>
+                  </div>
+                  <div class="l1-err" id="l1Step3Err" hidden></div>
+                </div>
+              </div>
+            </div><!-- /#aipmTabClarifier -->
           </section>
         </section>
 
