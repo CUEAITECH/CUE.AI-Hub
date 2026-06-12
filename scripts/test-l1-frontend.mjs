@@ -4,6 +4,7 @@
  */
 import { strict as assert } from 'assert';
 import { createPrdApi } from '../src/api/prdApi.js';
+import { escapeHtml, collectAnswers, buildQuestionsHtml, buildPrdCardHtml } from '../src/features/ai-pm/prdView.js';
 
 let passed = 0, failed = 0;
 const results = [];
@@ -66,6 +67,54 @@ test('listPrds 解包 { prds } 数组', async () => {
   assert.equal(client.calls.at(-1).path, '/api/prds');
   assert.equal(client.calls.at(-1).method, 'GET');
   assert.equal(r.length, 1);
+});
+
+// ── escapeHtml：转义 HTML 特殊字符 ───────────────────────────────
+test('escapeHtml 转义尖括号与引号', () => {
+  assert.equal(escapeHtml('<b>"&'), '&lt;b&gt;&quot;&amp;');
+});
+
+// ── collectAnswers：问题与回答按序配成字典 ───────────────────────
+test('collectAnswers 把问题数组 + 回答数组配成 { 问题: 回答 }', () => {
+  const r = collectAnswers(['目标用户?', '成功指标?'], ['审核员', '覆盖率>80%']);
+  assert.deepEqual(r, { '目标用户?': '审核员', '成功指标?': '覆盖率>80%' });
+});
+
+test('collectAnswers 跳过空白回答', () => {
+  const r = collectAnswers(['Q1', 'Q2'], ['A1', '   ']);
+  assert.deepEqual(r, { Q1: 'A1' });
+});
+
+// ── buildQuestionsHtml：每题一个带 data-qi 的 textarea ───────────
+test('buildQuestionsHtml 为每个问题生成一个 textarea', () => {
+  const html = buildQuestionsHtml({ clarificationQuestions: ['Q1', 'Q2'], initialUnderstanding: '理解X' });
+  assert.equal((html.match(/data-qi=/g) || []).length, 2);
+  assert.ok(html.includes('理解X'));
+});
+
+test('buildQuestionsHtml 转义问题中的 HTML', () => {
+  const html = buildQuestionsHtml({ clarificationQuestions: ['<script>'], initialUnderstanding: '' });
+  assert.ok(!html.includes('<script>'));
+  assert.ok(html.includes('&lt;script&gt;'));
+});
+
+// ── buildPrdCardHtml：渲染全部字段，缺失补占位 ───────────────────
+test('buildPrdCardHtml 渲染 title/goal/acceptance', () => {
+  const html = buildPrdCardHtml({
+    title: '视频标签', goal: '让审核员分类',
+    acceptance: ['覆盖率>80%', '准确率>90%'],
+    scope: ['手动打标'], nonGoals: ['AI 自动'], risks: ['滥用'],
+    userStories: [{ id: 'US-001', as: '审核员', want: '打标', so: '检索', acceptance: '可搜' }],
+  });
+  assert.ok(html.includes('视频标签'));
+  assert.ok(html.includes('让审核员分类'));
+  assert.ok(html.includes('覆盖率&gt;80%')); // 已转义
+  assert.ok(html.includes('US-001'));
+});
+
+test('buildPrdCardHtml 字段缺失时用占位不报错', () => {
+  const html = buildPrdCardHtml({ title: '', goal: '', acceptance: [], scope: [], nonGoals: [], risks: [], userStories: [] });
+  assert.ok(html.includes('—'));
 });
 
 async function run() {
