@@ -66,6 +66,7 @@ import { callClaude, parseJsonOutput } from './services/claude.js';
 import {
   aggregateDeliverableProgress,
   buildStageChecklist,
+  buildMilestoneMetrics,
   normalizeStageName,
   normalizeStageShortName,
   defaultStageChecklist,
@@ -194,6 +195,7 @@ const routeModules = [
     buildMetrics,
     buildStageChecklist,
     aggregateDeliverableProgress,
+    buildMilestoneMetrics,
     buildOpenApiSpec,
     sendJson,
     port,
