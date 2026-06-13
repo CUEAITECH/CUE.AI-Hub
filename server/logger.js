@@ -16,6 +16,10 @@ import pino from 'pino';
 
 const isTest = process.env.NODE_ENV === 'test';
 const isDev = process.env.NODE_ENV !== 'production' && !isTest;
+// pino-pretty 走 worker thread，在部分环境（Node 24 / macOS）下 worker 启动会
+// 挂起数十秒甚至卡死，导致服务 boot 在第一行日志前就卡住。默认直接写 stdout
+// （与生产一致、同步、无 worker）；需要彩色美化时显式 LOG_PRETTY=1 开启。
+const usePretty = isDev && process.env.LOG_PRETTY === '1';
 
 const noop = () => {};
 const noopLogger = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop, child: () => noopLogger };
@@ -35,7 +39,7 @@ const logger = isTest
           error: pino.stdSerializers.err,
         },
       },
-      isDev
+      usePretty
         ? pino.transport({
             target: 'pino-pretty',
             options: {
