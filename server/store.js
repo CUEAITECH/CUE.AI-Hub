@@ -205,9 +205,10 @@ export function migrateStore(store) {
     pulls: [],
     bypasses: [],
     currentStage: defaultCurrentStage,
-    // Task v2 / Agentic SDLC Phase 1 新增集合
+    // Task v2 / Agentic SDLC Phase 1/2 新增集合
     milestones: [],
     prds: [],
+    clarifications: {},
     testRuns: [],
     gapAnalysis: {},
     manualTestQueue: [],

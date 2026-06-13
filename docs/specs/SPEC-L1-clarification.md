@@ -127,4 +127,8 @@ phase: 2
 
 ## 7. 实现笔记
 
-> 待实现后更新。
+**后端**（已实现）：`server/services/prdClarifier.js` + `server/routes/planningRoutes.js` 4 个路由；通过 `scripts/test-l1-business.mjs`（AC）+ `scripts/mock-exam-l1.mjs`（真实 LLM 端到端）验证。
+
+**前端**（已实现，待真机端到端验证）：`#ai-pm` 页 Tab + 手风琴三步流程，`src/api/prdApi.js` + `src/features/ai-pm/prdView.js` + `prdClarifierPanel.js`，接入 `src/app.js` 的 ai-pm 路由。`scripts/test-l1-frontend.mjs` 11 条单测全绿（数据层信封解包 + 纯渲染/转义）。设计见 [2026-06-12-l1-prd-clarifier-frontend-design.md](../superpowers/specs/2026-06-12-l1-prd-clarifier-frontend-design.md)，实现计划见 [2026-06-12-l1-prd-clarifier-frontend.md](../superpowers/plans/2026-06-12-l1-prd-clarifier-frontend.md)。浏览器端到端手测因本地服务启动挂起（boot 期未超时网络调用，与本前端改动无关）暂未完成。
+
+> 本节是 L1 的权威入口；上面链接的 dated 文档为某次具体施工的设计细节，落地后退为历史档案。

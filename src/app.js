@@ -16,6 +16,7 @@ import { renderObservatory as _renderObservatory, loadAndRenderSpacePanel as _lo
 import { renderSettings as _renderSettings } from './features/settings/index.js';
 import { configApi } from './api/configApi.js';
 import { gatewayApi } from './api/gatewayApi.js';
+import { initPrdClarifierPanel } from './features/ai-pm/prdClarifierPanel.js';
 
 const state = {
   tasks: [],
@@ -3521,6 +3522,9 @@ function setRoute(route) {
   // 系统设置
   if (route === 'sys-config') {
     renderSettingsPage().catch((e) => toast(`系统设置加载失败: ${e.message}`));
+  }
+  if (route === 'ai-pm') {
+    initPrdClarifierPanel();
   }
 }
 
