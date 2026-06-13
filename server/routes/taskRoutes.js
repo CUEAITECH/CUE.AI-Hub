@@ -1,4 +1,5 @@
 import { getTenantId } from '../services/auth.js';
+import { buildTaskContractMarkdown, taskContractPath } from '../services/taskContract.js';
 // ── PR 模板生成 ──────────────────────────────────────────────────────────────
 function buildPrBody(task, projectName = '') {
   const acceptance = (task.acceptance || '').trim();
@@ -205,47 +206,16 @@ export function createTaskRoutes({
         // 2. 在分支上写入任务上下文文件（初始 commit，供 Cursor/Copilot 读取）
         // 不论分支是否新建都尝试写入；若文件已存在（需 SHA）则忽略，说明该分支已有 commit
         if (createFileOnBranch) {
-          const hubUrl = process.env.HUB_URL || 'https://hub.cueai.top';
-          const acceptance = (task.acceptance || '').trim();
-          const acLines = acceptance
-            ? acceptance.split('\n').filter(Boolean)
-              .map((l) => `- ${l.replace(/^[-*\d.)\s]+/, '').trim()}`).join('\n')
-            : '（验收标准待填写）';
-
-          const contextContent = `# 任务上下文 · ${task.title}
-
-> 本文件由 CUE Project Hub 自动生成，供开发者和 AI 编码助手（Cursor / Copilot）参考。
-
-## 基本信息
-
-| 字段 | 值 |
-|------|-----|
-| 任务 ID | \`${taskId}\` |
-| 负责人 | ${task.owner || '待认领'} |
-| 截止日期 | ${task.due || task.dueDate || '未设置'} |
-| 风险等级 | ${task.risk || '未评估'} |
-| Hub 任务链接 | [查看任务](${hubUrl}) |
-
-## 任务描述
-
-${task.description || task.signal || '暂无描述。'}
-
-## 验收标准
-
-${acLines}
-
-## 开发说明
-
-1. 在此分支（\`${branchName}\`）上进行开发
-2. 完成验收标准中的每一项后，在 PR 的 checklist 中勾选对应项
-3. 代码推送后 Hub 会自动触发 AI 代码审阅
-4. 所有 AC 达标后 Hub 会提示可以合并
-`;
+          const contextContent = buildTaskContractMarkdown(task, {
+            branchName,
+            projectName: project.name,
+            hubUrl: process.env.HUB_URL || 'https://hub.cueai.top'
+          });
 
           try {
             await createFileOnBranch(
               owner, repo, branchName,
-              `.hub/${taskId}.md`,
+              taskContractPath(taskId),
               contextContent,
               `chore(${taskId}): 初始化任务上下文文件`
             );
@@ -284,6 +254,79 @@ ${acLines}
       } catch (err) {
         sendError(res, 500, `创建 PR 失败：${err.message}`);
       }
+      return true;
+    }
+
+    // ── POST /api/tasks/:id/expand ────────────────────────────────────────────
+    // REQ-L2-008: 复杂任务展开为 2-5 个子任务（Taskmaster expand 借鉴）
+    if (req.method === 'POST' && /^\/api\/tasks\/[^/]+\/expand$/.test(url.pathname)) {
+      const taskId = decodeURIComponent(url.pathname.split('/')[3]);
+      const store = await loadStore(getTenantId(req));
+      const task = (store.tasks || []).find((t) => t.id === taskId);
+      if (!task) { sendError(res, 404, 'task not found'); return true; }
+
+      const { json: body } = await readBody(req);
+      const maxSubtasks = Math.max(2, Math.min(5, Number(body?.count) || 3));
+
+      const EXPAND_SYSTEM = `你是任务分解助手。把一个复杂任务分解为 ${maxSubtasks} 个可独立执行的子任务。
+每个子任务必须有：title（15字内）、acceptance（验收标准，一句话）、priority（P0/P1/P2）、owner（继承父任务）。
+输出 JSON 数组，只返回数组，不要其他文字。`;
+      const userPrompt = `任务：${task.title}
+描述：${task.description || '（无）'}
+验收：${task.acceptance || '（无）'}
+业务注释：${task.businessNote || '（无）'}
+
+请分解为 ${maxSubtasks} 个子任务：`;
+
+      let subtasks = [];
+      try {
+        const { callClaude } = await import('../services/claude.js');
+        const raw = await callClaude(EXPAND_SYSTEM, userPrompt);
+        if (raw) {
+          const parsed = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] || '[]');
+          subtasks = Array.isArray(parsed) ? parsed : [];
+        }
+      } catch (_) { /* LLM 降级：返回空列表，让前端提示用户手动填 */ }
+
+      if (!subtasks.length) {
+        sendJson(res, 200, { subtasks: [], message: 'LLM 不可用，请手动创建子任务' });
+        return true;
+      }
+
+      // djb2 hash inline（避免 import docsManager）
+      const djb2 = (str) => {
+        let h = 5381;
+        for (let i = 0; i < str.length; i++) h = (Math.imul(h, 33) ^ str.charCodeAt(i)) >>> 0;
+        return `task_${h.toString(36).padStart(7, '0')}`;
+      };
+
+      const created = subtasks.map((s) => normalizeTask({
+        id: djb2(`${taskId}|${s.title}`),
+        title: String(s.title || '').slice(0, 60),
+        acceptance: String(s.acceptance || ''),
+        priority: ['P0', 'P1', 'P2'].includes(s.priority) ? s.priority : task.priority,
+        owner: s.owner || task.owner,
+        parentId: taskId,
+        projectId: task.projectId,
+        milestoneId: task.milestoneId,
+        tenantId: task.tenantId || 'default',
+        status: 'pending',
+        type: 'subtask',
+        dependencies: [taskId],
+      }));
+
+      const nextStore = await updateStore((draft) => {
+        const existing = new Set((draft.tasks || []).map((t) => t.id));
+        const toAdd = created.filter((t) => !existing.has(t.id));
+        draft.tasks = [...toAdd, ...(draft.tasks || [])];
+        return draft;
+      }, getTenantId(req));
+
+      sendJson(res, 201, {
+        subtasks: created,
+        parentId: taskId,
+        tasks: nextStore.tasks.filter((t) => t.parentId === taskId)
+      });
       return true;
     }
 

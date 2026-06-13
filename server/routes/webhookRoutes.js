@@ -116,6 +116,16 @@ export function createWebhookRoutes({
       }
     }
 
+    // E1: PR merged → 触发语义分析 + 任务状态自动翻转（SPEC-E1）
+    // fire-and-forget，不阻塞 webhook 响应；动态 import 避免循环依赖
+    if (eventName === 'pull_request'
+      && json.action === 'closed'
+      && json.pull_request?.merged === true) {
+      import('../services/semanticLinker.js')
+        .then(({ refreshAnalysisIntoStore }) => refreshAnalysisIntoStore())
+        .catch((err) => logger.error('[E1] PR merged 触发 refreshAnalysis 失败:', err.message));
+    }
+
     // PR 事件的审阅已由 upsertPullFromWebhook（上方）通过真实 diff 处理，
     // 不再在此用伪 diff 创建 Pass 级审阅（Pass 会被队列过滤，徒增噪声）。
     const currentStore = loadStore ? await loadStore('default') : null;

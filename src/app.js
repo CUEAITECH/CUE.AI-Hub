@@ -16,6 +16,7 @@ import { renderObservatory as _renderObservatory, loadAndRenderSpacePanel as _lo
 import { renderSettings as _renderSettings } from './features/settings/index.js';
 import { configApi } from './api/configApi.js';
 import { gatewayApi } from './api/gatewayApi.js';
+import { initPrdClarifierPanel } from './features/ai-pm/prdClarifierPanel.js';
 
 const state = {
   tasks: [],
@@ -3522,6 +3523,9 @@ function setRoute(route) {
   if (route === 'sys-config') {
     renderSettingsPage().catch((e) => toast(`系统设置加载失败: ${e.message}`));
   }
+  if (route === 'ai-pm') {
+    initPrdClarifierPanel();
+  }
 }
 
 let _briefPollTimer = null;
@@ -4255,6 +4259,70 @@ document.addEventListener('DOMContentLoaded', () => {
   renderSidebarUser();
   updateSidebarAuthItems();
 });
+
+function renderMeeting() {
+  renderMeetingForms();
+  renderMeetingReport();
+  renderMeetingReconciliation();
+}
+
+function renderAll() {
+  renderTasks();
+  renderActivities();
+  renderRisks();
+  renderMembers();
+  renderReviews();
+  renderStage();
+  renderMetrics();
+  renderAssignments();
+  renderAiPm();
+  renderRoadmap();
+  renderPlanAdjustments();
+  renderMeeting();
+}
+
+async function loadState() {
+  const projectId = getCurrentProjectId();
+  const payload = await api(`/api/state${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''}`);
+  state.tasks             = payload.tasks             || [];
+  state.members           = payload.members           || [];
+  state.reviews           = payload.reviews           || [];
+  state.alerts            = payload.alerts            || [];
+  state.projects          = payload.projects          || state.projects;
+  state.deliverables      = payload.deliverables      || [];
+  state.phases            = payload.phases            || [];
+  state.activities        = payload.activities        || [];
+  state.assignments       = payload.assignments       || [];
+  state.standups          = payload.standups          || [];
+  state.eveningReports    = payload.eveningReports    || {};
+  state.currentStage      = payload.currentStage      || {};
+  state.metrics           = payload.metrics           || {};
+  state.planAdjustments   = payload.planAdjustments   || state.planAdjustments;
+  state.stageChecklist    = payload.stageChecklist    || state.stageChecklist;
+  state.deliverableProgress = payload.deliverableProgress || state.deliverableProgress;
+  state.pulls             = payload.pulls             || [];
+  renderAll();
+}
+
+async function fetchAndRenderPulls() {
+  const container = document.getElementById('pullList');
+  if (!container) return;
+  const projectId = getCurrentProjectId();
+  const stateFilter   = document.getElementById('pullStateFilter')?.value   || '';
+  const authorFilter  = document.getElementById('pullAuthorFilter')?.value  || '';
+  const projectFilter = document.getElementById('pullProjectFilter')?.value || '';
+  try {
+    const params = {};
+    if (projectFilter || projectId) params.projectId = projectFilter || projectId;
+    if (stateFilter)  params.state  = stateFilter;
+    if (authorFilter) params.author = authorFilter;
+    const result = await pullsApi.listPulls(params);
+    state.pulls = Array.isArray(result) ? result : (result.pulls || []);
+    _renderPullList(state, { escapeHtml });
+  } catch (err) {
+    container.innerHTML = `<div class="empty-hint error">PR 加载失败：${escapeHtml(err.message)}</div>`;
+  }
+}
 
 async function initApp() {
   setAuthVisible(state.isAuthenticated);

@@ -56,6 +56,33 @@ export function createAssignmentRoutes({
 
       const task = (store.tasks || []).find((item) => item.id === assignment.taskId) || null;
       refreshAssignmentBrief(assignment, task, store);
+
+      // L3: 认领任务 → 自动建 branch + draft PR（SPEC-L3，fire-and-forget）
+      // 需要 GITHUB_TOKEN；失败时 warn 不影响认领流程
+      if (task && task.id) {
+        const project = (store.projects || []).find(
+          (p) => p.id === task.projectId || p.id === assignment.projectId
+        ) || (store.projects || [])[0];
+
+        if (project?.githubOwner && project?.repository) {
+          const tenantId = getTenantId(req);
+          import('../services/githubApi.js')
+            .then(({ createTaskBranchAndPR }) => createTaskBranchAndPR(task, project))
+            .then(({ branchName, prNumber, prUrl }) => {
+              logger.info(`[L3] task ${task.id} → branch ${branchName}, PR #${prNumber}`);
+              return updateStore((draft) => {
+                const t = (draft.tasks || []).find((item) => item.id === task.id);
+                if (t) {
+                  t.evidenceRefs = [...new Set([...(t.evidenceRefs || []), prUrl])];
+                  t.updatedAt = new Date().toISOString();
+                }
+                return draft;
+              }, tenantId);
+            })
+            .catch((err) => logger.warn(`[L3] createTaskBranchAndPR 失败 (task ${task.id}): ${err.message}`));
+        }
+      }
+
       return true;
     }
 

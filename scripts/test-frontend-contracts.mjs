@@ -80,3 +80,4 @@ for (const featureFile of [
   assert(!hasApiEndpoint, `${featureFile} must not hardcode /api/ endpoint paths`);
 }
 console.log('Command Center contract tests OK');
+process.exit(0);

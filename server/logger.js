@@ -14,38 +14,43 @@
 
 import pino from 'pino';
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isTest = process.env.NODE_ENV === 'test';
+const isDev = process.env.NODE_ENV !== 'production' && !isTest;
+// pino-pretty 走 worker thread，在部分环境（Node 24 / macOS）下 worker 启动会
+// 挂起数十秒甚至卡死，导致服务 boot 在第一行日志前就卡住。默认直接写 stdout
+// （与生产一致、同步、无 worker）；需要彩色美化时显式 LOG_PRETTY=1 开启。
+const usePretty = isDev && process.env.LOG_PRETTY === '1';
 
-const logger = pino(
-  {
-    level: process.env.LOG_LEVEL || 'info',
-    // 生产环境输出 JSON，开发环境 pino-pretty 美化
-    ...(isDev ? {} : {}),
-    // 时间戳格式
-    timestamp: pino.stdTimeFunctions.isoTime,
-    // 基础字段
-    base: {
-      pid: process.pid,
-      env: process.env.NODE_ENV || 'development',
-    },
-    // 将 err 对象序列化为可读格式
-    serializers: {
-      err: pino.stdSerializers.err,
-      error: pino.stdSerializers.err,
-    },
-  },
-  isDev
-    ? pino.transport({
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'SYS:HH:MM:ss',
-          ignore: 'pid,hostname,env',
-          messageFormat: '{msg}',
+const noop = () => {};
+const noopLogger = { trace: noop, debug: noop, info: noop, warn: noop, error: noop, fatal: noop, child: () => noopLogger };
+
+const logger = isTest
+  ? noopLogger
+  : pino(
+      {
+        level: process.env.LOG_LEVEL || 'info',
+        timestamp: pino.stdTimeFunctions.isoTime,
+        base: {
+          pid: process.pid,
+          env: process.env.NODE_ENV || 'development',
         },
-      })
-    : process.stdout
-);
+        serializers: {
+          err: pino.stdSerializers.err,
+          error: pino.stdSerializers.err,
+        },
+      },
+      usePretty
+        ? pino.transport({
+            target: 'pino-pretty',
+            options: {
+              colorize: true,
+              translateTime: 'SYS:HH:MM:ss',
+              ignore: 'pid,hostname,env',
+              messageFormat: '{msg}',
+            },
+          })
+        : process.stdout
+    );
 
 export default logger;
 

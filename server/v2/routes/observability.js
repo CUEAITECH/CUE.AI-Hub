@@ -267,5 +267,12 @@ export async function handle(ctx) {
     return true;
   }
 
+  // GET /v2/observability/http — APM HTTP 请求指标
+  if (method === 'GET' && path === '/v2/observability/http') {
+    const { getMetrics } = await import('../../services/apm.js');
+    sendV2Json(200, getMetrics());
+    return true;
+  }
+
   return false;
 }

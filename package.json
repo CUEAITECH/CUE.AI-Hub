@@ -21,7 +21,7 @@
     "seed:memory:dry": "node scripts/seed-project-memory.mjs --dry-run"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18 <25"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

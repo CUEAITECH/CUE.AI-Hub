@@ -11,7 +11,8 @@ open-source-basis:
 cue-seed:
   - server/services/reviewer.js
   - server/services/riskEngine.js
-  - server/routes/reviewRoutes.js (182 reviews already working)
+  - server/services/pullPipeline.js (PR-Agent 主路，hubReview 镜像进 store.reviews 在此处)
+  - server/routes/reviewRoutes.js (手动 review 次路，作兜底)
 dependencies:
   - SPEC-L3
 effort-weeks: 2
@@ -24,7 +25,9 @@ phase: 1
 
 > PR diff 经 AI review 产出风险等级后，把结果**回流到任务板**：Block/Escalate 等级自动建修复任务，同时阻断该 PR 的里程碑进度计入，直到修复任务完成。
 
-**当前状态**：`reviewer.js` 已产出 182 条 review（Pass76/Warning61/Block29/Escalate16），工作正常。问题是：review 结果停留在 reviews 表，**没有回流到任务和里程碑**。本 Spec 主要是"接线"，不是造新轮子。
+**当前状态**：Phase 7/8 已切换到 PR-Agent 驱动的 review 流。真实 PR review 经由 `pullPipeline.js → buildHubReview → 镜像 store.reviews`（带 level 字段），Block 29/Escalate 16 条已记录。结果停留在 reviews 表，**没有回流到任务和里程碑**。本 Spec 主要是"接线"，不是造新轮子。
+
+**重要**：生产主路是 `pullPipeline.js`（PR-Agent webhook → upsertPullIntoStore），`reviewRoutes.js` 只是手动触发的次路。E3 的接线点必须在 `pullPipeline.js`，否则真实 PR 的 Block review 不会触发建修复任务。
 
 ## 2. 需求
 
@@ -46,37 +49,48 @@ phase: 1
 ### 接线点（最小改动）
 
 ```
-现有流程:
-  PR webhook → reviewer.js → reviews 表（stop）
+现有生产流程（Phase 7/8 后）:
+  GitHub PR → PR-Agent (GitHub Actions)
+    → webhook sink → pullPipeline.upsertPullIntoStore
+    → buildHubReview（level 在此确定）
+    → 镜像 store.reviews（pullPipeline.js:271-306）← E3 挂这里
+    → [stop，没有下游]
 
 改为:
-  PR webhook → reviewer.js → reviews 表
-                           → [if Block/Escalate] createFixTask()
-                                 ↓
-                           → updateStore: fixTask 关联 originalTaskId
-                           → [if Block] set originalTask.blocked = true
-                           → [if Escalate] wecom.push(负责人)
+  ... 同上 ...
+    → 镜像 store.reviews（pullPipeline.js:306 后）
+    → [if level === Block/Escalate] reviewTaskLinker.handleReviewOutcome()
+          ↓
+      updateStore: 建 fixTask（关联 originalTaskId）
+      [if Block] set originalTask.blocked = true
+      [if Escalate] wecom.push(负责人)
+
+次路兜底（手动 review）:
+  POST /v2/reviews → reviews.js:84 → 同样调 handleReviewOutcome
 
 fixTask schema:
   {
-    title: "修复：{review.summary}",
-    description: review.details,
+    title: "修复：{review.suggestion.slice(0,40)}",
     priority: "P0",
     owner: originalTask.owner,
     dependencies: [originalTask.id],
     sourceReview: review.id,
-    type: "fix"   // 新增字段，区分 AI 建的修复任务
+    type: "fix"
   }
 ```
 
 ### CUE 接入点
 
 ```
-改动: server/routes/reviewRoutes.js
-  - PATCH /api/reviews/:id（更新 review 等级后）→ 触发 E3 处理
+主路改动: server/services/pullPipeline.js（约第 306 行）
+  - hubReview 镜像进 store.reviews 后，fire-and-forget 调 handleReviewOutcome
+  - 防重：reviewTaskLinker 用 stableTaskId('review_'+reviewId, fixTitle) 保证幂等
 
-新增: server/services/reviewTaskLinker.js（轻量，<50行）
-  - handleReviewOutcome(review, store): 建修复任务 / 推送通知
+次路兜底: server/routes/reviewRoutes.js（原有 reviews.js:84）
+  - 覆盖手动 POST /v2/reviews 触发的 Block/Escalate（不是生产主路）
+
+新增: server/services/reviewTaskLinker.js（轻量，<60行）
+  - handleReviewOutcome(review, updateStore): 建修复任务 / 推送通知
 ```
 
 ## 5. 差距分析

@@ -32,7 +32,7 @@ Each spec maps to one Layer or Edge of the Agentic SDLC closed loop.
 
 ```mermaid
 flowchart TD
-    V[vision/product-vision.md] --> P[PRD — REQ-xxx]
+    V[vision/feasibility-spec-agentic-sdlc.md] --> P[PRD — REQ-xxx]
     P --> S[SPEC-Lx / SPEC-Ex — AC-xxx]
     S --> T[Hub task — task_id]
     T --> C[commit message contains task_id]

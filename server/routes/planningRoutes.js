@@ -436,6 +436,73 @@ export function createPlanningRoutes({
       return true;
     }
 
+    // ── L1：POST /api/ai/clarify ──────────────────────────────────────
+    // 接受任意格式想法输入，返回 3-5 个澄清问题（SPEC-L1 REQ-L1-001/002）
+    if (req.method === 'POST' && url.pathname === '/api/ai/clarify') {
+      const { json } = await readBody(req);
+      const input = String(json?.input || '').trim();
+      if (!input) { sendError(res, 400, 'input 不能为空'); return true; }
+
+      const { clarify } = await import('../services/prdClarifier.js');
+      const result = await clarify(input);
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    // ── L1：POST /api/ai/generate-prd ────────────────────────────────
+    // 根据原始输入 + 澄清回答生成结构化 PRD，写入 store.prds（SPEC-L1 REQ-L1-003/004）
+    if (req.method === 'POST' && url.pathname === '/api/ai/generate-prd') {
+      const { json } = await readBody(req);
+      const input   = String(json?.input   || '').trim();
+      const answers = json?.answers || {};
+      if (!input) { sendError(res, 400, 'input 不能为空'); return true; }
+
+      const { generatePrd } = await import('../services/prdClarifier.js');
+      const prd = await generatePrd(input, answers);
+
+      await updateStore((draft) => {
+        draft.prds = Array.isArray(draft.prds) ? draft.prds : [];
+        const idx = draft.prds.findIndex((p) => p.id === prd.id);
+        if (idx >= 0) draft.prds[idx] = prd; else draft.prds.unshift(prd);
+        return draft;
+      }, getTenantId(req));
+
+      sendJson(res, 201, { prd });
+      return true;
+    }
+
+    // ── L1：PATCH /api/prd/:id ────────────────────────────────────────
+    // 局部更新 PRD（用户反馈 → 修改意见）（SPEC-L1 REQ-L1-005）
+    if (req.method === 'PATCH' && /^\/api\/prd\/[^/]+$/.test(url.pathname)) {
+      const prdId = decodeURIComponent(url.pathname.split('/')[3]);
+      const store = await loadStore(getTenantId(req));
+      const existing = (store.prds || []).find((p) => p.id === prdId);
+      if (!existing) { sendError(res, 404, 'PRD not found'); return true; }
+
+      const { json } = await readBody(req);
+      const feedback = String(json?.feedback || '').trim();
+      if (!feedback) { sendError(res, 400, 'feedback 不能为空'); return true; }
+
+      const { refinePrd } = await import('../services/prdClarifier.js');
+      const updated = await refinePrd(existing, feedback);
+
+      await updateStore((draft) => {
+        const idx = (draft.prds || []).findIndex((p) => p.id === prdId);
+        if (idx >= 0) draft.prds[idx] = updated;
+        return draft;
+      }, getTenantId(req));
+
+      sendJson(res, 200, { prd: updated });
+      return true;
+    }
+
+    // ── L1：GET /api/prds ─────────────────────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/prds') {
+      const store = await loadStore(getTenantId(req));
+      sendJson(res, 200, { prds: store.prds || [] });
+      return true;
+    }
+
     return false;
   };
 }

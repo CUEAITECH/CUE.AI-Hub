@@ -177,3 +177,4 @@ assert.ok(afterBeautify.includes('var(--blue)'), 'primary-action should use var(
 console.log('✓ primary-action 使用设计系统 --blue 变量 OK');
 
 console.log('\nAll UI contract tests passed ✓');
+process.exit(0);

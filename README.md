@@ -110,7 +110,10 @@ CUE项目中枢：保留项目查询、任务、风险和指挥类能力。
 
 | 变量 | 说明 |
 |------|------|
-| `ANTHROPIC_API_KEY` | Claude API Key，缺失时降级为规则引擎 |
+| `OPENAI_API_KEY` | OpenAI API Key，缺失时 LLM 功能降级为规则引擎 |
+| `OPENAI_BASE_URL` | 代理地址（可选，如 Azure / LiteLLM） |
+| `OPENAI_MODEL` | 主力模型（默认 `gpt-5.5`，规划/解释/生成类） |
+| `OPENAI_MINI_MODEL` | 轻量模型（默认 `gpt-5.4-mini`，review map-chunk 高频场景） |
 | `GITHUB_TOKEN` | GitHub PAT，缺失时匿名限速 60次/小时 |
 | `WECOM_WEBHOOK_URL` | 企业微信群机器人 Webhook，建议用于每日晚报/通用提醒 |
 | `WECOM_ATTENDANCE_WEBHOOK_URL` | 团队考勤机器人 Webhook，任务完成和晚会出席提醒优先走这里 |

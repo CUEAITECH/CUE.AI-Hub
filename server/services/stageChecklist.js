@@ -443,6 +443,7 @@ export function buildStageChecklist(store) {
   const storedProgress = Number.isFinite(Number(stage.progress)) ? Math.round(Number(stage.progress)) : checklistProgress;
   const progress = Math.max(0, Math.min(100, Math.max(checklistProgress, storedProgress)));
   const blockedCount = checklist.filter((item) => item.status === '阻塞' || item.status === '高风险').length;
+  const taskBlockedCount = tasks.filter((t) => t.blocked === true && t.status !== 'completed').length;
   const missingEvidenceCount = checklist.filter((item) => item.gaps.length > 0).length;
 
   const rawPhases = Array.isArray(stage.phases) && stage.phases.length ? stage.phases : defaultPhases;
@@ -475,6 +476,7 @@ export function buildStageChecklist(store) {
       done: checklist.filter((item) => item.status === '已完成').length,
       inProgress: checklist.filter((item) => item.status === '推进中').length,
       blocked: blockedCount,
+      taskBlocked: taskBlockedCount,
       missingEvidence: missingEvidenceCount
     }
   };
@@ -557,4 +559,38 @@ export function aggregateDeliverableProgress(store) {
       progress
     }
   };
+}
+
+/**
+ * E1/E3 里程碑进度指标（SPEC-L2 data-models.md Milestone interface）。
+ * 从 store.tasks 动态计算，不依赖 store.milestones 静态列表。
+ * @returns {Object} milestoneId → { completionPct, e1CompletedCount, blockedCount, total, done }
+ */
+export function buildMilestoneMetrics(store) {
+  const tasks = store.tasks || [];
+  const byMilestone = {};
+
+  for (const task of tasks) {
+    const mid = task.milestoneId || '__none__';
+    if (!byMilestone[mid]) {
+      byMilestone[mid] = { total: 0, done: 0, blocked: 0 };
+    }
+    const bucket = byMilestone[mid];
+    bucket.total++;
+    if (task.status === 'completed') bucket.done++;
+    if (task.blocked === true && task.status !== 'completed') bucket.blocked++;
+  }
+
+  const result = {};
+  for (const [mid, counts] of Object.entries(byMilestone)) {
+    if (mid === '__none__') continue;
+    result[mid] = {
+      completionPct: counts.total ? Math.round((counts.done / counts.total) * 100) : 0,
+      e1CompletedCount: 0,  // populated when E1 sets task.completedBy = 'e1' in future
+      blockedCount: counts.blocked,
+      total: counts.total,
+      done: counts.done,
+    };
+  }
+  return result;
 }

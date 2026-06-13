@@ -66,6 +66,7 @@ import { callClaude, parseJsonOutput } from './services/claude.js';
 import {
   aggregateDeliverableProgress,
   buildStageChecklist,
+  buildMilestoneMetrics,
   normalizeStageName,
   normalizeStageShortName,
   defaultStageChecklist,
@@ -121,6 +122,7 @@ import { startScheduler, runStartupPhaseCorrection } from './scheduler.js';
 import { startCron } from './cron/index.js';
 import { createPullRoutes } from './routes/pullRoutes.js';
 import { handlePrAgentSink, upsertPullFromWebhook } from './services/pullPipeline.js';
+import { recordRequest } from './services/apm.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = dirname(__dirname);
@@ -194,6 +196,7 @@ const routeModules = [
     buildMetrics,
     buildStageChecklist,
     aggregateDeliverableProgress,
+    buildMilestoneMetrics,
     buildOpenApiSpec,
     sendJson,
     port,
@@ -390,6 +393,12 @@ async function serveStatic(res, pathname) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const _apmStart = Date.now();
+  res.on('finish', () => {
+    if (!url.pathname.startsWith('/v2/health')) {
+      recordRequest(req.method, url.pathname, res.statusCode, Date.now() - _apmStart);
+    }
+  });
 
   try {
     // ── V2 App facade：主前端走 /v2/app/*，内部复用现有业务路由 ───────

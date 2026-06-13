@@ -8,8 +8,7 @@
 
 | 文档 | 内容 | 更新频率 |
 |---|---|---|
-| [product-vision.md](product-vision.md) | 产品定位、北极星、我们不做什么 | 低（定位变才改） |
-| [feasibility-spec-agentic-sdlc.md](feasibility-spec-agentic-sdlc.md) | Agentic SDLC 愿景 vs 当前可实现度（62%）| 季度评估 |
+| [feasibility-spec-agentic-sdlc.md](feasibility-spec-agentic-sdlc.md) | Agentic SDLC 愿景、可实现度（62%）、构建序列 | 季度评估 |
 
 ## 核心定位（一句话）
 

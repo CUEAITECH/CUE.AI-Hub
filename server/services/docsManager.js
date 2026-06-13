@@ -14,6 +14,8 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';   // GFM: task list [x], tables, strikethrough
 import { toString } from 'mdast-util-to-string';
 import { callClaude, parseJsonOutput } from './claude.js';
+import { healDependenciesByTitle } from './dependencyGraph.js';
+import { getSystemPrompt } from './promptLoader.js';
 import { createId, loadStore, updateStore } from '../store.js';
 import { defaultStageChecklist, reassignChecklistPhaseIds } from './stageChecklist.js';
 import logger from '../logger.js';
@@ -178,32 +180,7 @@ export async function fetchProjectDocs(owner, repo) {
   return docs.filter(Boolean);
 }
 
-const PARSE_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理助手，负责从开发计划文档中解析结构化任务。
-
-输出严格遵循以下 JSON 数组格式，不要输出其他内容：
-[
-  {
-    "title": "任务标题（简洁，20字以内）",
-    "owner": "负责人，必须从团队成员中选：田家铭/胡佳涛/罗子宽/林世棋，文档未明确则写 '待认领'，禁止使用'成员A/B/C'等占位符",
-    "priority": "P0|P1|P2",
-    "sourceDoc": "来源文档路径",
-    "deliverableTitle": "所属交付项标题（从文档章节/模块/里程碑推断，20字以内）",
-    "description": "任务描述（50字以内）",
-    "dueDate": "截止日期（YYYY-MM-DD 格式，无则留空）",
-    "status": "pending|in_progress|completed"
-  }
-]
-
-判断状态的规则：
-- 文档中有 ✅、[x]、"已完成"、"完成" → completed
-- 文档中有 🔶、"进行中"、"开发中" → in_progress
-- 其余 → pending
-
-注意：
-- 每个文档可解析多条任务
-- 跳过纯描述性内容（如功能说明、背景），只提取可执行的任务条目
-- 如无明确截止日期，dueDate 留空字符串
-- **JSON 字符串值中绝对禁止内嵌英文双引号 "**：如需引述名称/术语，使用中文「」或省略引号；任何字段的值里出现未转义的 " 都会导致整个输出解析失败`;
+const PARSE_SYSTEM_PROMPT = getSystemPrompt('parse-docs');
 
 /**
  * 用 LLM 从文档内容解析结构化任务
@@ -340,53 +317,7 @@ export function parseProgressDoc(markdownContent = '') {
   return items;
 }
 
-const PHASES_SYSTEM_PROMPT = `你是 CUE 项目中枢的 AI 产品经理，负责从开发计划文档中提炼完整的开发阶段路线图，并为每个阶段分配路径图检查节点。
-
-输出严格遵循以下 JSON 对象格式，不输出其他内容：
-{
-  "phases": [
-    {
-      "id": "phase_<英文标识>",
-      "title": "阶段名（中文，10字以内）",
-      "status": "待开始|进行中|已完成",
-      "productKeywords": ["从文档中识别出来的该阶段关注的产品域关键词（如客户端骨架阶段可能是 iPad/iPhone/iOS/前端/App；后端阶段可能是 API/Session/服务/后端）。3-8 个，要求能让后续根据 deliverable 标题判断它属于该阶段。"]
-    }
-  ],
-  "nodes": [
-    {
-      "id": "保留已有节点id或新生成的stage_node_xxx",
-      "title": "节点短标题（20字以内）",
-      "owner": "负责人，必须从团队成员中选：田家铭/胡佳涛/罗子宽/林世棋，文档未明确则写 '待认领'，禁止使用'成员A/B/C'等占位符",
-      "acceptance": "验收口径（80字以内）",
-      "phaseId": "所属阶段id（必须是上面phases中的id之一）",
-      "keywords": ["关键词1", "关键词2"]
-    }
-  ],
-  "nodeAssignments": { "nodeId": "phaseId" },
-  "deliverableAssignments": { "交付项标题（与用户提供的 deliverableTitles 完全一致）": "phaseId" }
-}
-
-规则：
-- phases 数量 3-8 个，覆盖从当前进行中到最终交付的完整路线图
-- 近期阶段（已开始/即将开始）：3-5 个节点，描述具体可交付物
-- 远期阶段（计划中/未开始）：1-3 个节点，可以相对模糊，以里程碑为主
-- 如果某一段计划任务过多（>5个），优先拆分为多个子阶段，而不是把任务堆在同一阶段
-- 节点总数不设上限，完整覆盖文档中所有阶段的交付物
-- id 用英文下划线格式（如 phase_backend, phase_launch），不能有重复
-- nodes 中的 phaseId 必须从 phases 数组中选取，不能创建新 phaseId
-- nodeAssignments 覆盖所有 nodes 的 nodeId→phaseId 映射
-- 优先复用用户提供的"当前路径图节点"的 id（通过标题语义匹配），未匹配则用新 id
-- 从文档的里程碑、阶段划分、进度标注中推断 phases 的 status
-- **deliverableAssignments 必须覆盖用户提供的【交付项标题】列表中的每一个标题（一个不能少）**：
-  - key 是原始的 deliverableTitle 字符串（一字不差地复用，含空格、标点、英文大小写）
-  - value 是 phases 中的 phaseId
-  - 输出前自己核对：deliverableAssignments 的 key 数量必须等于列表长度，遗漏任何一个视为失败
-  - 归类原则（项目无关，全靠语义匹配）：
-    * 先看 deliverable 标题里出现了什么产品域名词（任何产品的客户端/服务端/特定模块名等），再找该 phase 的 productKeywords 中最匹配的
-    * "里程碑/MVP/验收/交付物" 这类修饰词不影响归类——只看 deliverable 标题中真实指向的产品端或模块
-    * 不要把某个产品端的 MVP 当成其他端的子目标。比如"客户端 MVP"不归后端 phase，"后端 MVP"不归客户端 phase
-    * 若 deliverable 标题不属于任何已规划的 phase，挑文档语义最贴近的，绝不能默认丢到第一个 phase
-  - **重要**：每个 phase 的 productKeywords 必须能让上面这个归类原则跑通——即 productKeywords 至少要包含该 phase 涉及的产品端、模块或功能层名词，覆盖到该 phase 下所有 deliverable 标题中可能出现的关键名词`;
+const PHASES_SYSTEM_PROMPT = getSystemPrompt('parse-phases');
 
 /**
  * 从文档内容用 LLM 提炼开发阶段划分和路径图节点；LLM 失败时按 sourceDoc 文档名兜底归组
@@ -543,9 +474,18 @@ export function selectDailyDocTasks(tasks, limit = 8, selectionContext = {}) {
       .map((t) => String(t.title || '').trim())
   );
 
-  // 有 semanticLink commit 覆盖的 hub 任务标题 → 降权（可能已在进行中）
+  // E1：高置信度 commit 覆盖的任务也视为完成，加入 completedTitles（SPEC-E1 防重导入）
+  // confidence ≥ 0.75 才算高置信度（TraceLLM benchmark 对标）
   const commitLinks = selectionContext.semanticLinks?.commitTaskLinks || [];
   const hubById = new Map(hubTasks.map((t) => [t.id, t]));
+  commitLinks
+    .filter((link) => Number(link.confidence || 0) >= 0.75)
+    .forEach((link) => {
+      const task = hubById.get(link.taskId);
+      if (task) completedTitles.add(String(task.title || '').trim());
+    });
+
+  // 有 semanticLink commit 覆盖的 hub 任务标题（含低置信度）→ 降权（可能已在进行中）
   const titlesWithCommit = new Set(
     commitLinks.map((link) => hubById.get(link.taskId)?.title).filter(Boolean)
   );
@@ -779,6 +719,22 @@ export function makeSlugId(createId) {
       .slice(0, 40);
     return `${prefix}_${normalized || createId('node').replace(/^node_/, '')}`;
   };
+}
+
+/**
+ * 按 (sourceDoc + title) 生成稳定、幂等的 task ID（djb2 hash → base36）。
+ * 重解析同一文档的同名任务产生相同 ID，不再用随机 nanoid，保证 E1 的任务追溯不归零。
+ * @param {string} sourceDoc - 来源文档路径
+ * @param {string} title     - 任务标题
+ * @returns {string}         - 如 "task_3f2a8c1"
+ */
+export function stableTaskId(sourceDoc, title) {
+  const raw = String(sourceDoc || '') + '|' + String(title || '');
+  let h = 5381;
+  for (let i = 0; i < raw.length; i++) {
+    h = (Math.imul(h, 33) ^ raw.charCodeAt(i)) >>> 0;
+  }
+  return `task_${h.toString(36).padStart(7, '0')}`;
 }
 
 export function normalizeTitle(value) {
@@ -1019,10 +975,11 @@ export async function importDocsForProject(project, projectId, importLimit) {
     return { imported: 0, message: 'docs/ 目录无计划文档' };
   }
 
-  const parsedTasks = await parseDocsForTasks(docs);
-  if (!parsedTasks.length) {
+  const rawParsedTasks = await parseDocsForTasks(docs);
+  if (!rawParsedTasks.length) {
     return { imported: 0, message: 'LLM 未解析出任务（无 API key 或文档无可执行任务）' };
   }
+  const parsedTasks = healDependenciesByTitle(rawParsedTasks);
 
   const storeSnap = await loadStore();
   const planDocs = docs.filter((doc) => !String(doc.name || doc.path || '').includes('阶段进度追踪'));
@@ -1091,7 +1048,7 @@ export async function importDocsForProject(project, projectId, importLimit) {
           phaseId: findPhaseForDeliverable(task.deliverableTitle || task.title, parsedPhasesResult),
           title: task.deliverableTitle || task.title,
           owner: task.owner || '',
-          acceptance: task.description || '',
+          acceptance: (task.acceptance && task.acceptance !== task.description) ? task.acceptance : '',
           keywords: [task.title, task.deliverableTitle, task.sourceDoc].filter(Boolean),
           status: task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '推进中' : '待补证据',
           progress: task.status === 'completed' ? 100 : 0,  // 进度由子任务聚合，不在此硬编码
@@ -1121,7 +1078,7 @@ export async function importDocsForProject(project, projectId, importLimit) {
           phaseId: findPhaseForDeliverable(fallbackTitle, parsedPhasesResult),
           title: fallbackTitle,
           owner: task.owner || '',
-          acceptance: task.acceptance || task.description || '',
+          acceptance: (task.acceptance && task.acceptance !== task.description) ? task.acceptance : '',
           keywords: [task.title, task.deliverableTitle, task.sourceDoc].filter(Boolean),
           status: task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '推进中' : '待补证据',
           progress: 0,
@@ -1137,7 +1094,13 @@ export async function importDocsForProject(project, projectId, importLimit) {
       }
 
       if (!duplicate) {
-        const taskId = createId('task');
+        // stableTaskId：按 (sourceDoc + title) hash 生成稳定 ID，重解析不归零（SPEC-L2 REQ-L2-005）
+        const taskId = stableTaskId(task.sourceDoc, task.title);
+        const safeAcceptance = (task.acceptance && task.acceptance !== task.description)
+          ? task.acceptance
+          : (deliverable?.acceptance && deliverable.acceptance !== task.description)
+            ? deliverable.acceptance
+            : '';
         existing.unshift({
           id: taskId,
           title: task.title,
@@ -1148,11 +1111,17 @@ export async function importDocsForProject(project, projectId, importLimit) {
           priority: task.priority || 'P1',
           status: task.status || 'pending',
           description: task.description || '',
+          businessNote: task.businessNote || '',
+          dependencies: Array.isArray(task.dependencies) ? task.dependencies : [],
+          requirementRefs: Array.isArray(task.requirementRefs) ? task.requirementRefs : [],
+          evidenceRefs: [],
+          milestoneId: task.milestoneId || null,
+          e2Status: 'not-tested',
           dueDate: task.dueDate || '',
           sourceDoc: task.sourceDoc || '',
           projectId,
           deliverableId: deliverable?.id || null,
-          acceptance: task.acceptance || deliverable?.acceptance || task.description || '',
+          acceptance: safeAcceptance,
           createdAt: new Date().toISOString()
         });
         if (deliverable && !deliverable.taskIds?.includes(taskId)) {
@@ -1171,7 +1140,11 @@ export async function importDocsForProject(project, projectId, importLimit) {
         if (deliverable && isBindingPlausible(duplicate.title, deliverable, parsedPhasesResult)) {
           duplicate.deliverableId = deliverable.id;
           if (isPlaceholderAcceptance(duplicate.acceptance)) {
-            duplicate.acceptance = task.acceptance || deliverable.acceptance || task.description || duplicate.acceptance || '';
+            // 只用独立的 acceptance（非 description 复制）；description 不作兜底
+            const candidateAcceptance = (task.acceptance && task.acceptance !== task.description) ? task.acceptance
+              : (deliverable.acceptance && deliverable.acceptance !== task.description) ? deliverable.acceptance
+              : null;
+            duplicate.acceptance = candidateAcceptance || duplicate.acceptance || '';
           }
           if (!deliverable.taskIds?.includes(duplicate.id)) {
             deliverable.taskIds = [...(deliverable.taskIds || []), duplicate.id];

@@ -90,6 +90,14 @@ export async function handle(ctx) {
         `共 ${result.stats.critical} critical / ${result.stats.major} major issue`,
         { urgency: 'high' }
       ).catch(() => {});
+
+      // E3 次路：建修复任务 + 设 task.blocked（SPEC-E3）
+      const { handleReviewOutcome } = await import('../../services/reviewTaskLinker.js');
+      const { updateStore } = await import('../../store.js');
+      await handleReviewOutcome(
+        { id: `rev_${body.pullId}_${result.level}`, level: result.level, suggestion: result.suggestion, taskId: body.taskId },
+        updateStore
+      ).catch((err) => import('../../logger.js').then(({ default: log }) => log.warn('[E3] reviews.js handleReviewOutcome 失败:', err.message)).catch(() => {}));
     }
 
     sendV2Json(200, { ok: true, ...result });
