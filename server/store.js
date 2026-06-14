@@ -198,6 +198,7 @@ export function migrateStore(store) {
     checklistOverrides: {},
     semanticLinks: {},
     riskAnalyses: [],
+    gapAnalyses: {},
     healthAnalysis: null,
     users: [],
     dailyTaskSuggestions: {},
@@ -342,6 +343,7 @@ export function migrateStore(store) {
   next.planAdjustments = next.planAdjustments || [];
   next.semanticLinks = next.semanticLinks || {};
   next.riskAnalyses = next.riskAnalyses || [];
+  next.gapAnalyses = next.gapAnalyses || {};
   next.healthAnalysis = next.healthAnalysis || null;
   if (!Array.isArray(next.users) || !next.users.length) {
     next.users = [defaultAdminUser(now), ...defaultTeamUsers(now)];

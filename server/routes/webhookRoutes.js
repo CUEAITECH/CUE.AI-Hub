@@ -124,6 +124,17 @@ export function createWebhookRoutes({
       import('../services/semanticLinker.js')
         .then(({ refreshAnalysisIntoStore }) => refreshAnalysisIntoStore())
         .catch((err) => logger.error('[E1] PR merged 触发 refreshAnalysis 失败:', err.message));
+
+      // L4-c: PR merged → acceptance ↔ diff 业务缺口分析（SPEC-L4c）
+      // fire-and-forget，与 E1 并排，不阻塞 webhook 响应
+      const repoFull = json.repository?.full_name || '';
+      const prNumber = json.pull_request?.number;
+      if (repoFull && prNumber && loadStore) {
+        import('../services/gapAnalyzer.js')
+          .then(({ analyzeGapForMergedPR }) =>
+            analyzeGapForMergedPR({ repoFull, prNumber }, loadStore, updateStore))
+          .catch((err) => logger.error('[L4c] PR merged 触发缺口分析失败:', err.message));
+      }
     }
 
     // PR 事件的审阅已由 upsertPullFromWebhook（上方）通过真实 diff 处理，
