@@ -1,0 +1,26 @@
+# CUE L1 clarify — golden 回归 eval
+# 跑: npm run eval:llm   （会跑本目录所有 config.*.yaml）
+description: "L1 clarify golden regression"
+
+prompts:
+  - "cue-regression-eval" # provider 忽略渲染 prompt，按 config.surface + vars 调真实服务
+
+providers:
+  - id: file://providers/cue-provider.mjs
+    label: clarify
+    config:
+      surface: clarify
+      # model: gpt-5.5   # 取消注释可钉死/对比某模型（P2 版本钉死）
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://asserts/invariants.mjs:clarifyValid
+
+tests:
+  - description: 模糊想法
+    vars: { input: "我想做一个给销售团队用的客户跟进提醒工具" }
+  - description: 用户反馈
+    vars: { input: "用户反馈说导出报表太慢，想优化一下体验" }
+  - description: 一句话需求
+    vars: { input: "做个 AI 帮我自动写周报" }

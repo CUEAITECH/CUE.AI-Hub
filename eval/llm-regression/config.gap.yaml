@@ -1,0 +1,30 @@
+# CUE T13/L4c analyzeGap — golden 回归 eval
+description: "T13 gap-analysis golden regression"
+
+prompts:
+  - "cue-regression-eval"
+
+providers:
+  - id: file://providers/cue-provider.mjs
+    label: gap
+    config:
+      surface: gap
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://asserts/invariants.mjs:gapValid
+
+tests:
+  - description: diff 覆盖了验收点
+    vars:
+      acceptance: "连续登录失败 5 次后锁定账号 15 分钟，锁定期间返回 429"
+      diff: "@@ login.js @@\n+ if (fails >= 5) { lock(user, '15min'); return res.status(429); }"
+  - description: diff 漏了单测验收点
+    vars:
+      acceptance: "1. 失败5次锁定15分钟；2. 返回429；3. 有单元测试覆盖该逻辑"
+      diff: "@@ login.js @@\n+ if (fails >= 5) { lock(user, '15min'); return res.status(429); }"
+  - description: 无 acceptance 应跳过
+    vars:
+      acceptance: ""
+      diff: "@@ login.js @@\n+ some change"
