@@ -2,8 +2,6 @@ name: 自动分配负责人
 on:
   issues:
     types: [opened]
-  pull_request:
-    types: [opened]
 jobs:
   run:
     runs-on: ubuntu-latest

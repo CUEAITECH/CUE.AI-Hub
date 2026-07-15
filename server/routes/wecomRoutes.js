@@ -280,6 +280,14 @@ function collectProjectMembers(store, projectId) {
   return [...members].sort((a, b) => a.localeCompare(b, 'zh-CN'));
 }
 
+function resolveAttendanceOwner(store, projectId, owner = '') {
+  const candidate = String(owner || '').trim();
+  const members = collectProjectMembers(store, projectId);
+  const matched = members.find((member) => member === candidate)
+    || members.find((member) => member.toLowerCase() === candidate.toLowerCase());
+  return { owner: matched || '', members };
+}
+
 function buildAttendanceCommandHelp() {
   return [
     '# CUE项目中枢指令菜单',
@@ -301,9 +309,12 @@ function buildAttendanceCommandHelp() {
 
 function buildAttendanceStats(store, { projectId, date, kind = '' }) {
   const targetDate = date;
+  const members = collectProjectMembers(store, projectId);
+  const memberSet = new Set(members);
   const scopedRecords = (store.attendanceRecords || [])
     .filter((record) => (!record.projectId || record.projectId === projectId) && record.date === targetDate)
-    .filter((record) => !kind || record.kind === kind);
+    .filter((record) => !kind || record.kind === kind)
+    .filter((record) => memberSet.has(record.owner));
   const latestByKey = new Map();
   for (const record of scopedRecords) {
     latestByKey.set(`${record.owner}|${record.kind}`, record);
@@ -311,7 +322,6 @@ function buildAttendanceStats(store, { projectId, date, kind = '' }) {
   const records = [...latestByKey.values()].sort((a, b) =>
     a.kind.localeCompare(b.kind) || a.owner.localeCompare(b.owner, 'zh-CN')
   );
-  const members = collectProjectMembers(store, projectId);
   const kinds = kind ? [kind] : ['task_completion', 'meeting'];
   const expectedKeys = members.flatMap((owner) => kinds.map((itemKind) => `${owner}|${itemKind}`));
   const missing = expectedKeys
@@ -399,8 +409,17 @@ export function createWeComRoutes({
         result: '未记录：检测到占位姓名。请使用成员真实姓名，不要使用张三/李四/姓名等示例值。'
       };
     }
+    const scopedOwner = resolveAttendanceOwner(store, projectId, parsed.owner);
+    if (!scopedOwner.owner) {
+      const memberList = scopedOwner.members.slice(0, 20).join('、') || '未配置';
+      return {
+        error: `未记录：${parsed.owner} 不在当前项目考勤范围。当前可记录成员：${memberList}。`,
+        result: `未记录：${parsed.owner} 不在当前项目考勤范围。当前可记录成员：${memberList}。`
+      };
+    }
     const record = normalizeAttendanceRecord({
       ...parsed,
+      owner: scopedOwner.owner,
       projectId,
       date: String(json?.date || url.searchParams.get('date') || todayText()).trim(),
       source: 'wecom'
