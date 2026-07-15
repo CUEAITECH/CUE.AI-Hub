@@ -1,3 +1,6 @@
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 const target = process.argv[2];
 
 if (!target) {
@@ -6,7 +9,7 @@ if (!target) {
 }
 
 try {
-  await import(new URL(target, `file://${process.cwd()}/`).href);
+  await import(pathToFileURL(resolve(target)).href);
   process.exit(0);
 } catch (error) {
   console.error(error?.stack || error?.message || String(error));
