@@ -32,6 +32,20 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no" \
             ./ ${SERVER_USER}@${SERVER_HOST}:${DEPLOY_PATH}/
 
+      - name: Configure WeCom env
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
+          WECOM_ATTENDANCE_WEBHOOK_URL: ${{ secrets.WECOM_ATTENDANCE_WEBHOOK_URL }}
+        run: |
+          WECOM_WEBHOOK_URL_B64="$(printf '%s' "$WECOM_WEBHOOK_URL" | base64 | tr -d '\n')"
+          WECOM_ATTENDANCE_WEBHOOK_URL_B64="$(printf '%s' "$WECOM_ATTENDANCE_WEBHOOK_URL" | base64 | tr -d '\n')"
+          ssh -o StrictHostKeyChecking=no \
+            ${SERVER_USER}@${SERVER_HOST} \
+            "cd ${DEPLOY_PATH} && WECOM_WEBHOOK_URL_B64=${WECOM_WEBHOOK_URL_B64} WECOM_ATTENDANCE_WEBHOOK_URL_B64=${WECOM_ATTENDANCE_WEBHOOK_URL_B64} node -e 'const fs=require(\"fs\"); const decode=(value)=>Buffer.from(value||\"\",\"base64\").toString(\"utf8\"); const updates={WECOM_WEBHOOK_URL:decode(process.env.WECOM_WEBHOOK_URL_B64),WECOM_ATTENDANCE_WEBHOOK_URL:decode(process.env.WECOM_ATTENDANCE_WEBHOOK_URL_B64)}; const path=\".env\"; const existing=fs.existsSync(path)?fs.readFileSync(path,\"utf8\").split(/\r?\n/):[]; const next=existing.filter((line)=>{ const match=line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/); return !match || !Object.prototype.hasOwnProperty.call(updates, match[1]); }); for (const key of Object.keys(updates)) if (updates[key]) next.push(key+\"=\"+updates[key]); fs.writeFileSync(path,next.filter(Boolean).join(\"\\n\")+\"\\n\"); console.log(\"updated WeCom env keys\");'"
+
       - name: Restart PM2
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
