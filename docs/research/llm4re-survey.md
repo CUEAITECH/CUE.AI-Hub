@@ -2,6 +2,17 @@
 
 > 摘要自：arXiv 2509.11446（LLM4RE 系统综述，2025）和 arXiv 2602.01253（TraceLLM，2026）
 
+> **⚠️ 2026-06-14 更正（精读 TraceLLM 原文后）**：本文早期版本对 TraceLLM 有三处错误，已在下文修正：
+> 1. TraceLLM 的任务是**文档制品↔文档制品配对**（需求↔设计、用例↔测试、需求↔法规），判断「(2) 是否 directly fulfill (1)，只答 Yes/No」。**它不碰代码，更不碰 PR diff**。早期写的「需求 R ↔ 代码 C」是错的。
+> 2. 「④-c 代码文件树→PRD」「④-d PR diff→acceptance criteria」**不是 TraceLLM 的场景**，是 CUE 自己的外推，曾被误当成论文原话（并写进了 SPEC-L4c 的依据，已更正）。
+> 3. 「8 个 benchmark」应为 **8 个 LLM + 4 个数据集（CM1/EasyClinic×2/CCHIT）**。
+>
+> **更贴 CUE「代码↔验收」场景的论文（精读/搜索于 2026-06-14）**：
+> - **Are LLMs Reliable Code Reviewers? Systematic Overcorrection（arXiv:2603.00539, 2026）** — 任务即「不跑测试，判代码是否满足 NL 需求」=T13 同款。开源 github.com/HollinJ3177/...。关键警告：LLM 系统性把已满足判成缺失（假阴性高），且**越要求解释/纠正的详细 prompt 错得越狠**（GPT-4o FNR 35.9%→87.9%）。
+> - **Enhancing PR Reviews: Issue↔PR Inconsistencies（FORGE 2025, ACM）** — exact/missing/tangling/both 分类法；实测 missing 16.5%、tangling 13.4%。
+> - **执行/Agent 验证线（T14/E2 依据）**：AgentForge(2604.13120)、Verify-Before-You-Fix(2604.10800)、Agentic Rubrics as Contextual Verifiers(2601.04171)、You-Name-It-I-Run-It(2412.10133)、DCE-LLM(2506.11076)、Semgrep+LLM。核心原理 execution grounding：把判断锚定到测试红绿/调用图等客观信号，旁路 LLM 偏差。**警告**：无约束 Agent 会篡改测试「骗过」验证，验证器需防篡改。
+> 三级谱系（静态文本判断 → 静态工具 Agent → 执行/浏览器 Agent）详见 SPEC-L4c §6。
+
 ---
 
 ## 什么是 Requirements Engineering（需求工程）
@@ -29,31 +40,35 @@ CUE 的 AI PM 做的是第 1-2 步，但缺第 3-4 步。这正是"代码有了�
 
 ---
 
-## TraceLLM 核心机制（可直接借鉴）
+## TraceLLM 核心机制（范式可借鉴，任务不同）
 
-TraceLLM 把需求追溯问题定义为：
+TraceLLM 把需求追溯定义为**两个文档制品之间的配对二分类**：
 
-> 给定一条需求 R 和一段代码 C，判断 C 是否实现了 R。
+> 给定制品 (1) 和制品 (2)（如：高层需求 ↔ 设计元素），判断「(2) 是否 directly fulfill (1)？只答 Yes / No」。
 
-**Prompt 结构**:
+注意：**两端都是文档/文本制品，不含代码或 diff**。它实测的制品对是 需求↔设计、用例↔测试、用例↔交互图、需求↔法规。
+
+**最优 Prompt（论文 P6）**:
 ```
-你是软件需求追溯专家。
-需求: [REQ-L2-001] 解析 PRD 产出三层结构 Milestone→Task→Subtask
-代码摘要: [commit message / 函数签名 / 文件路径]
-请判断这段代码是否实现了该需求，给出 0-1 的置信度和理由。
+You are an expert in software traceability. You are given two artifacts
+from [DOMAIN]. (1) is [ARTIFACT_1] and (2) is [ARTIFACT_2].
+Does [RELATION]? Answer with only 'Yes' or 'No'.
 ```
+关键发现：角色提示有效；加「directly」把精确率 0.38→0.49；输出约束到 Yes/No 单 token、温度 0；2-shot + diversity + label-aware 选样优于零样本。
 
-**在 CUE 中的用途**:
-- SPEC-E1：commit message → task（是否完成）
-- ④-c：代码文件树 → PRD 需求（gap analysis）
-- ④-d：PR diff → acceptance criteria（还差什么）
+**可借鉴到 CUE 的是「范式」而非「任务」**：
+- LLM-as-judge（不训练、不做向量检索，直接让通用模型当裁判）
+- prompt 三件套：角色 + 显式关系 + 结构化输出
+- 半自动定位：只做召回/初筛，结论需人工复核（recall 60–70%，不足以全自动）
+
+**SPEC-E1（commit→task）** 的判断思路与此范式同源；而 **SPEC-L4c（PR diff↔acceptance）** 是把范式外推到「代码↔验收」新场景，TraceLLM 未验证过该场景（更贴的依据见顶部更正框）。
 
 ---
 
 ## 关键数据
 
 - 到 2026 年，LLM4RE 论文数量预计等于过去 40 年 NLP4RE 的总和（综述预测）
-- TraceLLM F2 分数超过所有传统 IR 方法和微调模型（8 个 benchmark 验证）
+- TraceLLM F2 分数超过传统 IR（VSM/LSI/LDA）和 BERT 基线（4 个数据集 × 8 个 LLM 验证；F2 约 0.68–0.83，仍属半自动水平）
 - 62% 的 LLM4RE 研究组合多种策略（Zero-shot + template + task decomposition）
 
 ---

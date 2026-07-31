@@ -11,6 +11,7 @@
 //   routes/recommend.js      ← /v2/recommend/*
 //   routes/sync.js           ← /v2/sync/*
 //   routes/outcomes.js       ← /v2/outcomes/*
+//   routes/gapAnalyses.js    ← /v2/gap-analyses/*
 //   routes/learning.js       ← /v2/learning/*
 //   routes/observability.js  ← /v2/space, /v2/risks, /v2/runbooks, /v2/alerts, /v2/observability/*
 //   routes/gateway.js        ← /v2/openapi.json, /v2/gateway/*
@@ -37,6 +38,7 @@ const ROUTE_MODULES = [
   ['/v2/recommend',    () => import('./routes/recommend.js')],
   ['/v2/sync',         () => import('./routes/sync.js')],
   ['/v2/outcomes',     () => import('./routes/outcomes.js')],
+  ['/v2/gap-analyses', () => import('./routes/gapAnalyses.js')],
   ['/v2/learning',     () => import('./routes/learning.js')],
   ['/v2/autonomy',     () => import('./routes/autonomy.js')],
   ['/v2/space',        () => import('./routes/observability.js')],

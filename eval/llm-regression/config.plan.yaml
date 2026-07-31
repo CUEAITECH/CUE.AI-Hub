@@ -1,0 +1,22 @@
+# CUE L2 generatePlan — golden 回归 eval
+description: "L2 plan golden regression"
+
+prompts:
+  - "cue-regression-eval"
+
+providers:
+  - id: file://providers/cue-provider.mjs
+    label: plan
+    config:
+      surface: plan
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://asserts/invariants.mjs:planValid
+
+tests:
+  - description: 阶段目标-登录
+    vars: { goal: "实现用户登录与注册，含失败限流和找回密码" }
+  - description: 阶段目标-报表
+    vars: { goal: "做一个销售数据报表导出功能，支持筛选和定时推送" }
