@@ -21,6 +21,7 @@ for (const path of [
   '/api/webhooks/github',
   '/api/webhooks/pr-agent',
   '/api/webhooks/bypass',
+  '/api/integrations/wecom/',
   '/api/wecom/',
 ]) {
   assert.ok(allowBlock.includes(path), `${path} must remain available for external integrations`);

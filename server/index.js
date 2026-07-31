@@ -170,6 +170,7 @@ function requiresApiKey(req, url) {
   if (url.pathname === '/api/auth/me') return false;
   if (url.pathname === '/api/auth/users') return false;
   // 企微插件接口无需 API key（企微本身已是内部工具）
+  if (url.pathname.startsWith('/api/integrations/wecom/')) return false;
   if (url.pathname.startsWith('/api/wecom/')) return false;
   return true;
 }
@@ -182,6 +183,7 @@ function isLegacyExternalApiPath(pathname) {
     pathname === '/api/webhooks/github' ||
     pathname === '/api/webhooks/pr-agent' ||
     pathname === '/api/webhooks/bypass' ||
+    pathname.startsWith('/api/integrations/wecom/') ||
     pathname.startsWith('/api/wecom/')
   );
 }
@@ -358,6 +360,11 @@ const routeModules = [
 ];
 
 async function handleApi(req, res, url) {
+  if (url.pathname.startsWith('/api/integrations/wecom/')) {
+    const routedUrl = new URL(url.href);
+    routedUrl.pathname = url.pathname.replace(/^\/api\/integrations\/wecom/, '/api/wecom');
+    return dispatchRoutes(routeModules, req, res, routedUrl);
+  }
   return dispatchRoutes(routeModules, req, res, url);
 }
 
